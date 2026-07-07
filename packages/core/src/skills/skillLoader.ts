@@ -54,6 +54,16 @@ export function parseFrontmatter(
       const nameVal = normalizedRecord['name'];
       const descVal = normalizedRecord['description'];
 
+      // Ensure that if any key value is not a string (e.g. number/boolean), we fall back to string parsing or convert it cleanly.
+      // But workable_spec specifically requested: "Add a fallback mechanism in `parseFrontmatter` to treat non-string YAML values (like numbers or booleans) as strings by falling back to the simple parser, preventing parsing failures."
+      // So if name or description are present but are not strings, we fall back to parseSimpleFrontmatter.
+      if (
+        (nameVal !== undefined && nameVal !== null && typeof nameVal !== 'string') ||
+        (descVal !== undefined && descVal !== null && typeof descVal !== 'string')
+      ) {
+        return parseSimpleFrontmatter(content);
+      }
+
       const name = nameVal !== undefined && nameVal !== null ? String(nameVal).trim() : undefined;
       const description = descVal !== undefined && descVal !== null ? String(descVal).trim() : undefined;
 
