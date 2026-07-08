@@ -286,4 +286,84 @@ description: Test sanitization
       'https://antigravity.google/docs/cli-getting-started',
     );
   });
+
+  it('should load skills with UTF-8 BOM characters in frontmatter', async () => {
+    const skillDir = path.join(testRootDir, 'bom-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `\uFEFF---\nname: bom-skill\ndescription: A test skill with UTF-8 BOM\n---\n# Instructions\nDo something.\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('bom-skill');
+    expect(skills[0].description).toBe('A test skill with UTF-8 BOM');
+  });
+
+  it('should load skills with trailing spaces after frontmatter markers', async () => {
+    const skillDir = path.join(testRootDir, 'trailing-spaces');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---   \nname: trailing-spaces\ndescription: A test skill with trailing spaces after markers\n---  \n# Instructions\nDo something.\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('trailing-spaces');
+    expect(skills[0].description).toBe('A test skill with trailing spaces after markers');
+  });
+
+  it('should discover skills with case-insensitive keys and optional space before colon', async () => {
+    const skillDir = path.join(testRootDir, 'case-insensitive');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\nName : case-insensitive-skill\nDESCRIPTION   : The description here\n---\n# Instructions\nDo something.\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('case-insensitive-skill');
+    expect(skills[0].description).toBe('The description here');
+  });
+
+  it('should handle multi-line description and not swallow fields resembling a key even if indented', async () => {
+    const skillDir = path.join(testRootDir, 'multiline-swallow');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\ndescription:\n  A multi-line description without key swallowing\n  name: my-intended-name-not-description-part\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('my-intended-name-not-description-part');
+    expect(skills[0].description).toBe('A multi-line description without key swallowing');
+  });
+
+  it('should handle multi-line description containing a line starting with "Note:" and not mistake it as a key', async () => {
+    const skillDir = path.join(testRootDir, 'note-field');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\nname: note-skill\ndescription:\n  This is a description with a note\n  Note: this is valid description text\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('note-skill');
+    expect(skills[0].description).toBe('This is a description with a note Note: this is valid description text');
+  });
 });
