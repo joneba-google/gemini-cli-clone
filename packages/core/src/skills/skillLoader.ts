@@ -32,7 +32,7 @@ export interface SkillDefinition {
 }
 
 export const FRONTMATTER_REGEX =
-  /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?/;
+  /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n([\s\S]*))?/;
 
 /**
  * Parses frontmatter content using YAML with a fallback to simple key-value parsing.
@@ -75,14 +75,14 @@ function parseSimpleFrontmatter(
     const line = lines[i];
 
     // Match "name:" at the start of the line (optional whitespace)
-    const nameMatch = line.match(/^\s*name:\s*(.*)$/);
+    const nameMatch = line.match(/^\s*name\s*:\s*(.*)$/i);
     if (nameMatch) {
       name = nameMatch[1].trim();
       continue;
     }
 
     // Match "description:" at the start of the line (optional whitespace)
-    const descMatch = line.match(/^\s*description:\s*(.*)$/);
+    const descMatch = line.match(/^\s*description\s*:\s*(.*)$/i);
     if (descMatch) {
       const descLines = [descMatch[1].trim()];
 
@@ -90,7 +90,11 @@ function parseSimpleFrontmatter(
       while (i + 1 < lines.length) {
         const nextLine = lines[i + 1];
         // If next line is indented, it's a continuation of the description
-        if (nextLine.match(/^[ \t]+\S/)) {
+        // only if it does not resemble known keys (like 'name' or 'description')
+        if (
+          nextLine.match(/^[ \t]+\S/) &&
+          !nextLine.match(/^\s*(?:name|description)\s*:/i)
+        ) {
           descLines.push(nextLine.trim());
           i++;
         } else {
