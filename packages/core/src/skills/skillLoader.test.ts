@@ -286,4 +286,102 @@ description: Test sanitization
       'https://antigravity.google/docs/cli-getting-started',
     );
   });
+
+  it('should discover a skill with a UTF-8 BOM in its SKILL.md file', async () => {
+    const skillDir = path.join(testRootDir, 'bom-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `\uFEFF---\nname: bom-skill\ndescription: utf8 bom skill\n---\n# Instructions\nDo something.\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('bom-skill');
+    expect(skills[0].description).toBe('utf8 bom skill');
+  });
+
+  it('should discover a skill with trailing spaces after the --- frontmatter markers', async () => {
+    const skillDir = path.join(testRootDir, 'trailing-space-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `--- \t \nname: trailing-space-skill\ndescription: trailing spaces\n---   \n# Instructions\nDo something.\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('trailing-space-skill');
+    expect(skills[0].description).toBe('trailing spaces');
+  });
+
+  it('should discover a skill with case-insensitive keys and space before colons', async () => {
+    const skillDir = path.join(testRootDir, 'case-insensitive-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\nName : case-insensitive-skill\nDESCRIPTION : case and spaces before colon\n---\n# Instructions\nDo something.\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('case-insensitive-skill');
+    expect(skills[0].description).toBe('case and spaces before colon');
+  });
+
+  it('should parse multi-line description without swallowing subsequent keys if indented line resembles new key', async () => {
+    const skillDir = path.join(testRootDir, 'nested-key-mistake-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    // Description is parsed, and next indented line is "name: my-skill" (indented under description)
+    // Simple parser should break and not treat name: as part of description if it is a known key.
+    await fs.writeFile(
+      skillFile,
+      `---\ndescription:\n  This is description\n  name: nested-key-mistake-skill\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('nested-key-mistake-skill');
+    expect(skills[0].description).toBe('This is description');
+  });
+
+  it('should correctly include a line starting with Note: in multi-line description without misinterpreting it as a key', async () => {
+    const skillDir = path.join(testRootDir, 'note-indented-description');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\nname: note-skill\ndescription:\n  This is description\n  Note: this is a note details\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('note-skill');
+    expect(skills[0].description).toBe('This is description Note: this is a note details');
+  });
+
+  it('should fall back to simple parser when name/description are non-string YAML values (e.g. number/boolean)', async () => {
+    const skillDir = path.join(testRootDir, 'non-string-yaml');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\nname: 12345\ndescription: true\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('12345');
+    expect(skills[0].description).toBe('true');
+  });
 });
