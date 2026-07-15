@@ -32,7 +32,7 @@ export interface SkillDefinition {
 }
 
 export const FRONTMATTER_REGEX =
-  /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?/;
+  /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n([\s\S]*))?/;
 
 /**
  * Parses frontmatter content using YAML with a fallback to simple key-value parsing.
@@ -45,7 +45,23 @@ export function parseFrontmatter(
     const parsed = load(content);
     if (parsed && typeof parsed === 'object') {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-      const { name, description } = parsed as Record<string, unknown>;
+      const parsedRecord = parsed as Record<string, unknown>;
+      // Find keys case-insensitively
+      let nameKey: string | undefined;
+      let descriptionKey: string | undefined;
+
+      for (const k of Object.keys(parsedRecord)) {
+        const lowerK = k.toLowerCase();
+        if (lowerK === 'name') nameKey = k;
+        if (lowerK === 'description') descriptionKey = k;
+      }
+
+      const rawName = nameKey !== undefined ? parsedRecord[nameKey] : undefined;
+      const rawDescription = descriptionKey !== undefined ? parsedRecord[descriptionKey] : undefined;
+
+      const name = typeof rawName === 'string' ? rawName : (rawName !== undefined && rawName !== null ? String(rawName) : undefined);
+      const description = typeof rawDescription === 'string' ? rawDescription : (rawDescription !== undefined && rawDescription !== null ? String(rawDescription) : undefined);
+
       if (typeof name === 'string' && typeof description === 'string') {
         return { name, description };
       }
@@ -74,23 +90,27 @@ function parseSimpleFrontmatter(
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Match "name:" at the start of the line (optional whitespace)
-    const nameMatch = line.match(/^\s*name:\s*(.*)$/);
+    // Match "name:" at the start of the line (optional whitespace, case-insensitive, optional space before colon)
+    const nameMatch = line.match(/^\s*name\s*:\s*(.*)$/i);
     if (nameMatch) {
       name = nameMatch[1].trim();
       continue;
     }
 
-    // Match "description:" at the start of the line (optional whitespace)
-    const descMatch = line.match(/^\s*description:\s*(.*)$/);
+    // Match "description:" at the start of the line (optional whitespace, case-insensitive, optional space before colon)
+    const descMatch = line.match(/^\s*description\s*:\s*(.*)$/i);
     if (descMatch) {
       const descLines = [descMatch[1].trim()];
 
       // Check for multi-line description (indented continuation lines)
       while (i + 1 < lines.length) {
         const nextLine = lines[i + 1];
-        // If next line is indented, it's a continuation of the description
+        // If next line is indented
         if (nextLine.match(/^[ \t]+\S/)) {
+          // It's part of key description if and only if it doesn't look like another known key (name or description, e.g. "  name : value" or "  description:")
+          if (nextLine.match(/^\s*(?:name|description)\s*:/i)) {
+            break;
+          }
           descLines.push(nextLine.trim());
           i++;
         } else {
