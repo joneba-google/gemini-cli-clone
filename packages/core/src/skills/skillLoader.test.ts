@@ -286,4 +286,94 @@ description: Test sanitization
       'https://antigravity.google/docs/cli-getting-started',
     );
   });
+
+  it('should parse skill with UTF-8 BOM', async () => {
+    const skillDir = path.join(testRootDir, 'bom-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `\uFEFF---\nname: bom-skill\ndescription: UTF-8 BOM test\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('bom-skill');
+    expect(skills[0].description).toBe('UTF-8 BOM test');
+  });
+
+  it('should parse skill with trailing spaces after frontmatter markers', async () => {
+    const skillDir = path.join(testRootDir, 'trailing-spaces');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `--- \nname: trailing-spaces\ndescription: Trailing spaces test\n--- \t \n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('trailing-spaces');
+    expect(skills[0].description).toBe('Trailing spaces test');
+  });
+
+  it('should parse skill with case-insensitive keys and spaces before colons', async () => {
+    const skillDir = path.join(testRootDir, 'case-spacing');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\nName : case-spacing-name\nDESCRIPTION : case-spacing-desc\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('case-spacing-name');
+    expect(skills[0].description).toBe('case-spacing-desc');
+  });
+
+  it('should not parse indented known keys as part of multi-line description', async () => {
+    const skillDir = path.join(testRootDir, 'nested-keys');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\ndescription:\n  A description which might be considered multi-line\n  name: my-skill\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('my-skill');
+    expect(skills[0].description).toBe('A description which might be considered multi-line');
+  });
+
+  it('should parse multi-line description containing a line starting with Note:', async () => {
+    const skillDir = path.join(testRootDir, 'note-desc');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\nname: note-desc-name\ndescription:\n  An awesome skill description.\n  Note: Do not use this under high heat.\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('note-desc-name');
+    expect(skills[0].description).toBe('An awesome skill description. Note: Do not use this under high heat.');
+  });
+
+  it('should fall back to simple parser or stringify non-string YAML values like numbers/booleans', async () => {
+    const skillDir = path.join(testRootDir, 'non-string-yaml');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\nname: 12345\ndescription: true\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('12345');
+    expect(skills[0].description).toBe('true');
+  });
 });
