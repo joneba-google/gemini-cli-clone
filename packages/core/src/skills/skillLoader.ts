@@ -32,7 +32,7 @@ export interface SkillDefinition {
 }
 
 export const FRONTMATTER_REGEX =
-  /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?/;
+  /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n([\s\S]*))?/;
 
 /**
  * Parses frontmatter content using YAML with a fallback to simple key-value parsing.
@@ -74,23 +74,27 @@ function parseSimpleFrontmatter(
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Match "name:" at the start of the line (optional whitespace)
-    const nameMatch = line.match(/^\s*name:\s*(.*)$/);
+    // Match "name:" at the start of the line (optional whitespace and case-insensitive)
+    const nameMatch = line.match(/^\s*name\s*:\s*(.*)$/i);
     if (nameMatch) {
       name = nameMatch[1].trim();
       continue;
     }
 
-    // Match "description:" at the start of the line (optional whitespace)
-    const descMatch = line.match(/^\s*description:\s*(.*)$/);
+    // Match "description:" at the start of the line (optional whitespace and case-insensitive)
+    const descMatch = line.match(/^\s*description\s*:\s*(.*)$/i);
     if (descMatch) {
       const descLines = [descMatch[1].trim()];
 
       // Check for multi-line description (indented continuation lines)
       while (i + 1 < lines.length) {
         const nextLine = lines[i + 1];
-        // If next line is indented, it's a continuation of the description
+        // If next line is indented, check if it looks like a known key (name / description with colon)
         if (nextLine.match(/^[ \t]+\S/)) {
+          // If the indented line resembles a known key (case-insensitive with sub-spaces around colon is not allowed to be swallowed)
+          if (nextLine.match(/^\s*(?:name|description)\s*:/i)) {
+            break;
+          }
           descLines.push(nextLine.trim());
           i++;
         } else {
