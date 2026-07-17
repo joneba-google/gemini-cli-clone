@@ -32,7 +32,7 @@ export interface SkillDefinition {
 }
 
 export const FRONTMATTER_REGEX =
-  /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?/;
+  /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n([\s\S]*))?/;
 
 /**
  * Parses frontmatter content using YAML with a fallback to simple key-value parsing.
@@ -45,7 +45,17 @@ export function parseFrontmatter(
     const parsed = load(content);
     if (parsed && typeof parsed === 'object') {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-      const { name, description } = parsed as Record<string, unknown>;
+      const parsedRecord = parsed as Record<string, unknown>;
+      let name = parsedRecord.name;
+      let description = parsedRecord.description;
+
+      if (name !== undefined && name !== null && typeof name !== 'string') {
+        name = String(name);
+      }
+      if (description !== undefined && description !== null && typeof description !== 'string') {
+        description = String(description);
+      }
+
       if (typeof name === 'string' && typeof description === 'string') {
         return { name, description };
       }
@@ -74,15 +84,15 @@ function parseSimpleFrontmatter(
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Match "name:" at the start of the line (optional whitespace)
-    const nameMatch = line.match(/^\s*name:\s*(.*)$/);
+    // Match "name:" at the start of the line (optional whitespace, case-insensitive, optional spaces before colon)
+    const nameMatch = line.match(/^\s*name\s*:\s*(.*)$/i);
     if (nameMatch) {
       name = nameMatch[1].trim();
       continue;
     }
 
-    // Match "description:" at the start of the line (optional whitespace)
-    const descMatch = line.match(/^\s*description:\s*(.*)$/);
+    // Match "description:" at the start of the line (optional whitespace, case-insensitive, optional spaces before colon)
+    const descMatch = line.match(/^\s*description\s*:\s*(.*)$/i);
     if (descMatch) {
       const descLines = [descMatch[1].trim()];
 
@@ -90,8 +100,14 @@ function parseSimpleFrontmatter(
       while (i + 1 < lines.length) {
         const nextLine = lines[i + 1];
         // If next line is indented, it's a continuation of the description
+        // But ensure that subsequent indented lines are only treated as part of the description
+        // if they do not resemble known keys (like 'name:' or 'description:').
         if (nextLine.match(/^[ \t]+\S/)) {
-          descLines.push(nextLine.trim());
+          const trimmedNext = nextLine.trim();
+          if (trimmedNext.match(/^name\s*:/i) || trimmedNext.match(/^description\s*:/i)) {
+            break;
+          }
+          descLines.push(trimmedNext);
           i++;
         } else {
           break;
