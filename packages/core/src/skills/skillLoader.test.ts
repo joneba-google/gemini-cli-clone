@@ -286,4 +286,100 @@ description: Test sanitization
       'https://antigravity.google/docs/cli-getting-started',
     );
   });
+
+  it('should parse skill with a UTF-8 BOM in its SKILL.md file', async () => {
+    const skillDir = path.join(testRootDir, 'bom-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `\uFEFF---\nname: bom-skill\ndescription: Test BOM\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('bom-skill');
+    expect(skills[0].description).toBe('Test BOM');
+  });
+
+  it('should parse skill with trailing spaces after the --- frontmatter markers', async () => {
+    const skillDir = path.join(testRootDir, 'trailing-spaces-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `--- \t\nname: spaces-skill\ndescription: Testing trailing spaces after marker\n--- \n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('spaces-skill');
+    expect(skills[0].description).toBe('Testing trailing spaces after marker');
+  });
+
+  it('should parse skill with frontmatter using case-insensitive keys and spaces before colons', async () => {
+    const skillDir = path.join(testRootDir, 'case-insensitive-and-spaces');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\nName : insensitive-skill\nDESCRIPTION : case-insensitive-desc\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('insensitive-skill');
+    expect(skills[0].description).toBe('case-insensitive-desc');
+  });
+
+  it('should parse skill with multi-line description without swallowing name key when indented', async () => {
+    const skillDir = path.join(testRootDir, 'indented-name-key');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\ndescription:\n  A multi-line description that describes the skill.\n  name: my-skill\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('my-skill');
+    expect(skills[0].description).toBe('A multi-line description that describes the skill.');
+  });
+
+  it('should parse multi-line description containing a line starting with Note:', async () => {
+    const skillDir = path.join(testRootDir, 'note-starting-line');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\nname: note-skill\ndescription:\n  A multi-line description.\n  Note: This is very important.\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('note-skill');
+    expect(skills[0].description).toBe('A multi-line description. Note: This is very important.');
+  });
+
+  it('should fallback to simple parser to treat non-string YAML values as strings', async () => {
+    const skillDir = path.join(testRootDir, 'non-string-yaml-values');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\nname: 12345\ndescription: true\n---\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('12345');
+    expect(skills[0].description).toBe('true');
+  });
 });
