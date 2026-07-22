@@ -126,8 +126,8 @@ async function main() {
     process.argv[2] ||
     'gcli-intern-project-2026';
 
-  const databaseId = process.env.FIRESTORE_DATABASE || 'test-gcli-db-clone';
-  const collectionName = process.env.FIRESTORE_COLLECTION || 'test_issues';
+  const databaseId = process.env.FIRESTORE_DATABASE || 'gcli-db';
+  const collectionName = process.env.FIRESTORE_COLLECTION || 'issues';
   const topicId = process.env.PUBSUB_TOPIC || 'issue-ready-for-code';
 
   const inputPath =

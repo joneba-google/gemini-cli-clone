@@ -69,7 +69,7 @@ gcloud run jobs deploy "${JOB_NAME}" \
   --task-timeout=3600 \
   --max-retries=2 \
   --service-account="${EXEC_SA}" \
-  --set-env-vars="GOOGLE_CLOUD_LOCATION=global,MODEL_NAME=gemini-3.5-flash,FIRESTORE_DATABASE=test-gcli-db-clone,FIRESTORE_COLLECTION=test_issues" \
+  --set-env-vars="GOOGLE_CLOUD_LOCATION=global,MODEL_NAME=gemini-3.5-flash,FIRESTORE_DATABASE=gcli-db,FIRESTORE_COLLECTION=issues" \
   --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,GIT_TOKEN=PR_GEN_GITHUB_PUSH_KEY:latest" \
   --quiet
 
@@ -81,7 +81,7 @@ gcloud workflows deploy "${WORKFLOW_NAME}" \
   --location="${REGION}" \
   --project="${PROJECT_ID}" \
   --service-account="${WORKFLOW_SA}" \
-  --set-env-vars="FIRESTORE_DATABASE=test-gcli-db-clone,FIRESTORE_COLLECTION=test_issues" \
+  --set-env-vars="FIRESTORE_DATABASE=gcli-db,FIRESTORE_COLLECTION=issues" \
   --quiet
 
 echo ""

@@ -441,6 +441,8 @@ class Orchestrator:
             "Do NOT run the linter yourself; the linter has already been run and its results are "
             "saved in linter_output.txt. You MUST read linter_output.txt to determine if there are lint issues. "
             "You MUST output verdict.json to verdict.json in the format {\"verdict\": \"APPROVED\" | \"NEEDS_REVISION\"}. "
+            "If approved, create pr_details.md containing the recommended commit message and PR description details "
+            "(explicitly writing 'fixes #<issue_number>' and including the original issue URL https://github.com/<owner>/<repo>/issues/<issue_number>). "
             "If verification (linter or static inspection) fails or needs revision, output detailed feedback to pr_feedback.md."
         )
 
