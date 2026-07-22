@@ -81,6 +81,7 @@ gcloud workflows deploy "${WORKFLOW_NAME}" \
   --location="${REGION}" \
   --project="${PROJECT_ID}" \
   --service-account="${WORKFLOW_SA}" \
+  --set-env-vars="FIRESTORE_DATABASE=test-gcli-db-clone,FIRESTORE_COLLECTION=test_issues" \
   --quiet
 
 echo ""
