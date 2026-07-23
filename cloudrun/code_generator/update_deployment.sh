@@ -70,7 +70,7 @@ gcloud run jobs deploy "${JOB_NAME}" \
   --max-retries=2 \
   --service-account="${EXEC_SA}" \
   --set-env-vars="GOOGLE_CLOUD_LOCATION=global,MODEL_NAME=gemini-3.5-flash,FIRESTORE_DATABASE=gcli-db,FIRESTORE_COLLECTION=issues" \
-  --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,GIT_TOKEN=PR_GEN_GITHUB_PUSH_KEY:latest" \
+  --set-secrets="GIT_TOKEN=PR_GEN_GITHUB_PUSH_KEY:latest" \
   --quiet
 
 # 3. Deploy the latest local Cloud Workflow definition (workflow.yaml)
