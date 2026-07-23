@@ -272,6 +272,129 @@ description: Test sanitization
     expect(skills[0].name).toBe('gke-prs-troubleshooter');
   });
 
+  it('should discover a skill with a UTF-8 BOM in its SKILL.md file', async () => {
+    const skillDir = path.join(testRootDir, 'utf8-bom-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `\uFEFF---
+name: bom-skill
+description: Skill with BOM
+---
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('bom-skill');
+    expect(skills[0].description).toBe('Skill with BOM');
+  });
+
+  it('should discover a skill with trailing spaces after the --- frontmatter markers in SKILL.md', async () => {
+    const skillDir = path.join(testRootDir, 'trailing-spaces-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---   \r
+name: trailing-spaces-skill
+description: Trailing spaces test
+---  \r
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('trailing-spaces-skill');
+    expect(skills[0].description).toBe('Trailing spaces test');
+  });
+
+  it('should discover a skill with frontmatter using case-insensitive keys and spaces before colons', async () => {
+    const skillDir = path.join(testRootDir, 'case-insensitive-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---
+Name : case-insensitive-skill
+DESCRIPTION : Case insensitive and spaces test
+---
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('case-insensitive-skill');
+    expect(skills[0].description).toBe('Case insensitive and spaces test');
+  });
+
+  it('should correctly parse a multi-line description without swallowing the name key when an indented name is present', async () => {
+    const skillDir = path.join(testRootDir, 'smart-multiline-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---
+description:
+  Expertise in reviewing code.
+  name: smart-multiline-skill
+---
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('smart-multiline-skill');
+    expect(skills[0].description).toBe('Expertise in reviewing code.');
+  });
+
+  it('should correctly parse a multi-line description containing a line starting with Note:', async () => {
+    const skillDir = path.join(testRootDir, 'note-multiline-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---
+name: note-multiline-skill
+description:
+  This is a description.
+  Note: This note is important.
+---
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('note-multiline-skill');
+    expect(skills[0].description).toBe('This is a description. Note: This note is important.');
+  });
+
+  it('should treat non-string YAML values like numbers or booleans as strings using fallback parser', async () => {
+    const skillDir = path.join(testRootDir, 'yaml-non-string-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---
+name: 123
+description: true
+---
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('123');
+    expect(skills[0].description).toBe('true');
+  });
+
   it('should load real built-in antigravity-support skill successfully', async () => {
     const { fileURLToPath } = await import('node:url');
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
