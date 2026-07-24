@@ -69,7 +69,7 @@ gcloud run jobs deploy "${JOB_NAME}" \
   --task-timeout=3600 \
   --max-retries=2 \
   --service-account="${EXEC_SA}" \
-  --set-env-vars="GOOGLE_CLOUD_LOCATION=global,MODEL_NAME=gemini-3.5-flash,FIRESTORE_DATABASE=gcli-db,FIRESTORE_COLLECTION=issues" \
+  --set-env-vars="GOOGLE_CLOUD_LOCATION=global,MODEL_NAME=gemini-3.5-flash,FIRESTORE_DATABASE=gcli-db,FIRESTORE_COLLECTION=issues,PR_GEN_DEBUG_LOGS_BUCKET=pr_generation_debug_logs" \
   --set-secrets="GIT_TOKEN=PR_GEN_GITHUB_PUSH_KEY:latest" \
   --quiet
 

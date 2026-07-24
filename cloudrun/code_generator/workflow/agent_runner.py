@@ -9,7 +9,7 @@ import asyncio
 import contextlib
 import logging
 import os
-from typing import Iterator
+from typing import Any, Iterator
 
 
 @contextlib.contextmanager
@@ -126,7 +126,7 @@ class AgentRunner:
         prompt: str,
         repo_path: str,
         system_prompt_file: str | None = None,
-    ) -> str:
+    ) -> tuple[str, list[Any]]:
         """Launches and manages an asynchronous conversation with an Antigravity Agent.
 
         Args:
@@ -136,7 +136,7 @@ class AgentRunner:
             system_prompt_file: Optional filename of system prompt markdown.
 
         Returns:
-            A reconstructed single text block combining thoughts and outputs.
+            Tuple of (full_output_text, resolved_chunks_list).
 
         Raises:
             AgentRunnerError: If Agent fails to run or execution fails.
@@ -172,6 +172,7 @@ class AgentRunner:
             workspaces=[repo_path],
         )
 
+        resolved_chunks: list[Any] = []
         stdout_list: list[str] = []
         thinking_list: list[str] = []
 
@@ -190,61 +191,27 @@ class AgentRunner:
                             "[%s] Sending initial task prompt to conversation loop...",
                             role,
                         )
-                        await agent.conversation.send(prompt)
+                        response = await agent.chat(prompt)
+                        resolved_chunks = await response.resolve()
 
-                        step_contents: dict[int, str] = {}
-                        step_thoughts: dict[int, str] = {}
-                        printed_steps: set[tuple[int, str]] = set()
+                        for chunk in resolved_chunks:
+                            chunk_type = chunk.__class__.__name__
+                            chunk_text = getattr(chunk, "text", None)
+                            if chunk_type == "Text" and chunk_text:
+                                stdout_list.append(chunk_text)
+                            elif chunk_type == "Thought" and chunk_text:
+                                thinking_list.append(chunk_text)
+                            elif chunk_type == "ToolCall":
+                                tool_name = getattr(chunk, "name", "unknown")
+                                tool_args = getattr(chunk, "args", {})
+                                logging.info("[%s Tool Call]: %s with args %s", role, tool_name, tool_args)
 
-                        async for step in agent.conversation.receive_steps():
-                            if step.content:
-                                step_contents[step.step_index] = step.content
-
-                            # Retrieve thoughts if available via standard properties
-                            thinking = getattr(step, "thinking", None) or getattr(
-                                step, "thinking_delta", None
-                            )
-                            if thinking:
-                                step_thoughts[step.step_index] = str(thinking)
-
-                            step_key = (step.step_index, str(step.status))
-                            if step_key not in printed_steps:
-                                printed_steps.add(step_key)
-                                logging.info(
-                                    "[%s Step %s] Type: %s (Source: %s, Status: %s)",
-                                    role,
-                                    step.step_index,
-                                    step.type,
-                                    step.source,
-                                    step.status,
-                                )
-                                if step.content:
-                                    logging.info("[%s Content]: %s", role, step.content)
-                                if thinking:
-                                    logging.debug("[%s Thinking]: %s", role, thinking)
-                                if step.tool_calls:
-                                    for call in step.tool_calls:
-                                        logging.info(
-                                            "[%s Tool Call]: %s with args %s",
-                                            role,
-                                            call.name,
-                                            call.args,
-                                        )
-
-                        # Accumulate outputs
-                        for step_idx in sorted(step_contents.keys()):
-                            stdout_list.append(step_contents[step_idx])
-
-                        for step_idx in sorted(step_thoughts.keys()):
-                            thinking_list.append(step_thoughts[step_idx])
-
-            full_output = "\n".join(stdout_list)
-            if thinking_list:
-                joined_thoughts = "\n".join(thinking_list)
-                full_output += f"\nThoughts:\n{joined_thoughts}"
+            full_output = "".join(stdout_list).strip()
+            if not full_output and stdout_list:
+                full_output = "\n".join(stdout_list)
 
             logging.info("Agent '%s' execution completed successfully.", role)
-            return full_output
+            return full_output, resolved_chunks
 
         except Exception as e:
             logging.exception("Failed to execute agent loop for role: %s", role)

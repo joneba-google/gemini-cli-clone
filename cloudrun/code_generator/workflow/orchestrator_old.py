@@ -47,12 +47,6 @@ from db.db_interface import (
     IssueStatus,
 )
 from preflight_filter import PreflightFilter
-from gcs_logger import (
-    upload_agent_trajectory_log,
-    upload_git_diff,
-    upload_pr_details,
-    _get_utc_timestamp,
-)
 
 
 class OrchestrationError(Exception):
@@ -220,42 +214,22 @@ class Orchestrator:
             loop_count = 0
             verdict = "NEEDS_REVISION"
             commit_line_count = 0
-            run_timestamp = _get_utc_timestamp()
 
             while loop_count < self.config.max_attempts and not approved:
                 loop_count += 1
                 logging.info("=== Starting Iteration %s/%s ===", loop_count, self.config.max_attempts)
 
                 # --- PHASE 1: CODE GENERATION ---
-                await self._run_code_generation(
-                    iteration=loop_count,
-                    owner=owner,
-                    repo=repo,
-                    issue_num=issue_num,
-                    timestamp=run_timestamp,
-                )
+                await self._run_code_generation(loop_count)
 
                 # Consolidate edits and generate diff
-                diff_content = self._prepare_iteration_commit(
-                    issue_num=issue_num,
-                    iteration=loop_count,
-                    owner=owner,
-                    repo=repo,
-                    timestamp=run_timestamp,
-                )
+                diff_content = self._prepare_iteration_commit(issue_num, loop_count)
                 if not diff_content:
                     # No changes detected in code generation
                     continue
 
                 # --- PHASE 2: EVALUATION ---
-                verdict = await self._run_evaluation(
-                    diff_content=diff_content,
-                    firestore_doc=firestore_doc,
-                    owner=owner,
-                    repo=repo,
-                    issue_num=issue_num,
-                    timestamp=run_timestamp,
-                )
+                verdict = await self._run_evaluation(diff_content, firestore_doc)
 
                 if verdict in ["APPROVED", "PASS"]:
                     logging.info("Evaluator approved the patch. Launching deterministic regression pre-flights...")
@@ -351,14 +325,7 @@ class Orchestrator:
                 logging.error("Failed to release lock on error: %s", db_err)
             raise
 
-    async def _run_code_generation(
-        self,
-        iteration: int,
-        owner: str = "unknown_owner",
-        repo: str = "unknown_repo",
-        issue_num: int | str = "0",
-        timestamp: str | None = None,
-    ) -> None:
+    async def _run_code_generation(self, iteration: int) -> None:
         """Runs the Google Antigravity Coding Agent to fix the bug."""
         logging.info("Starting Code Generation Agent...")
         if iteration == 1:
@@ -383,31 +350,16 @@ class Orchestrator:
             prompt_file = "code_revision_prompt.md"
 
         try:
-            _, coding_chunks = await self.agent_runner.run_agent(
+            await self.agent_runner.run_agent(
                 role="Coding Agent",
                 prompt=prompt,
                 repo_path=self.config.pr_repo_path,
                 system_prompt_file=prompt_file,
             )
-            upload_agent_trajectory_log(
-                owner=owner,
-                repo=repo,
-                agent_role_folder="coding_agent",
-                issue_number=issue_num,
-                resolved_chunks=coding_chunks,
-                timestamp=timestamp,
-            )
         except AgentRunnerError as e:
             logging.error("Coding Agent run encountered an error: %s. Transitioning to evaluation...", e)
 
-    def _prepare_iteration_commit(
-        self,
-        issue_num: int | str,
-        iteration: int,
-        owner: str = "unknown_owner",
-        repo: str = "unknown_repo",
-        timestamp: str | None = None,
-    ) -> str | None:
+    def _prepare_iteration_commit(self, issue_num: int | str, iteration: int) -> str | None:
         """Consolidates all file edits and stages a soft commit.
 
         Returns:
@@ -429,29 +381,12 @@ class Orchestrator:
                     raise OrchestrationError("Failed to generate any code changes in the first iteration.")
                 return None
 
-            diff_content = CommandExecutor.run(["git", "diff", "origin/main"], self.config.pr_repo_path)
-            if diff_content:
-                upload_git_diff(
-                    owner=owner,
-                    repo=repo,
-                    issue_number=issue_num,
-                    diff_content=diff_content,
-                    timestamp=timestamp,
-                )
-            return diff_content
+            return CommandExecutor.run(["git", "diff", "origin/main"], self.config.pr_repo_path)
         except CommandExecutionError as e:
             logging.error("Failed to stage iteration commit or generate diff: %s", e)
             return None
 
-    async def _run_evaluation(
-        self,
-        diff_content: str,
-        firestore_doc: dict[str, Any],
-        owner: str = "unknown_owner",
-        repo: str = "unknown_repo",
-        issue_num: int | str = "0",
-        timestamp: str | None = None,
-    ) -> str:
+    async def _run_evaluation(self, diff_content: str, firestore_doc: dict[str, Any]) -> str:
         """Sets up the evaluation sandbox workspace and runs the Evaluator Agent."""
         logging.info("Starting Evaluation Agent phase...")
         self._clean_eval_dir()
@@ -512,38 +447,14 @@ class Orchestrator:
         )
 
         try:
-            _, eval_chunks = await self.agent_runner.run_agent(
+            await self.agent_runner.run_agent(
                 role="Evaluator Agent",
                 prompt=eval_prompt,
                 repo_path=self.config.eval_repo_path,
                 system_prompt_file="code_evaluator_prompt.md",
             )
-            upload_agent_trajectory_log(
-                owner=owner,
-                repo=repo,
-                agent_role_folder="eval_agent",
-                issue_number=issue_num,
-                resolved_chunks=eval_chunks,
-                timestamp=timestamp,
-            )
         except AgentRunnerError as e:
             logging.error("Evaluator Agent execution crashed: %s", e)
-
-        # Upload PR details if created by Evaluator Agent
-        pr_details_path = os.path.join(self.config.eval_repo_path, "pr_details.md")
-        if os.path.exists(pr_details_path):
-            try:
-                with open(pr_details_path, "r", encoding="utf-8") as f:
-                    pr_details_content = f.read()
-                upload_pr_details(
-                    owner=owner,
-                    repo=repo,
-                    issue_number=issue_num,
-                    pr_details_content=pr_details_content,
-                    timestamp=timestamp,
-                )
-            except IOError as e:
-                logging.warning("Failed to read pr_details.md: %s", e)
 
         # Parse verdict output
         verdict_file = os.path.join(self.config.eval_repo_path, "verdict.json")

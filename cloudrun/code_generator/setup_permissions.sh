@@ -51,6 +51,7 @@ EXEC_SA_ROLES=(
   "roles/aiplatform.user"
   "roles/logging.logWriter"
   "roles/storage.objectViewer"
+  "roles/storage.objectAdmin"         # Required for GCS debug log and artifact uploads
   "roles/developerconnect.readTokenAccessor"
   "roles/cloudaicompanion.user"       # Required for Gemini/Antigravity SDK companion tools
   "roles/datastore.user"              # Required for Firestore lock and status updates
