@@ -40,6 +40,30 @@ class EvalOrchestrator(Orchestrator):
         self.generated_diff: str | None = None
         self.pr_details_content: str | None = None
 
+    def _sync_or_clone_repository(self) -> None:
+        """Clones or syncs target repository and checks out target_version SHA if present."""
+        firestore_doc = self.config.load_and_validate_firestore_doc()
+        github_meta = firestore_doc.get("github_metadata", {})
+        target_version = github_meta.get("target_version")
+        issue_num = github_meta.get("issue_number", "0")
+        branch_name = f"eval-agent-issue-{issue_num}"
+
+        if not os.path.exists(self.config.pr_repo_path):
+            logging.info("Cloning repository %s to %s", self.config.repo_url, self.config.pr_repo_path)
+            CommandExecutor.run(f"git clone {self.config.repo_url} {self.config.pr_repo_path}")
+
+        if target_version:
+            logging.info("Checking out specified target_version commit SHA: %s", target_version)
+            try:
+                CommandExecutor.run("git fetch origin", self.config.pr_repo_path)
+                CommandExecutor.run(f"git checkout -B {branch_name} {target_version}", self.config.pr_repo_path)
+            except Exception as e:
+                logging.warning("Failed to checkout target_version SHA %s, falling back to main: %s", target_version, e)
+                CommandExecutor.run(f"git checkout -B {branch_name} origin/main", self.config.pr_repo_path)
+        else:
+            logging.info("No target_version commit SHA specified. Checking out origin/main baseline.")
+            CommandExecutor.run(f"git checkout -B {branch_name} origin/main", self.config.pr_repo_path)
+
     async def run(self) -> dict:
         """Executes orchestration pipeline locally without GCP or GitHub calls.
 
@@ -104,7 +128,8 @@ class EvalOrchestrator(Orchestrator):
 
                 if approved:
                     try:
-                        diff_stat = CommandExecutor.run("git diff --stat origin/main", self.config.pr_repo_path)
+                        target_sha = firestore_doc.get("github_metadata", {}).get("target_version") or "HEAD~1"
+                        diff_stat = CommandExecutor.run(f"git diff --stat {target_sha}", self.config.pr_repo_path)
                         logging.info("Diff Stat summary:\n%s", diff_stat)
                         lines = diff_stat.split("\n")
                         last_line = lines[-1] if lines else ""

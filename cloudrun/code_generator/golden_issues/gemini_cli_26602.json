@@ -1,16 +1,8 @@
 {
-  "owner": "google-gemini",
-  "repo": "gemini-cli",
-  "issue_number": 26602,
-  "issue_title": "ci: Issue Triage workflows fail with Argument list too long",
-  "issue_body": "### What happened?\n\nBoth the `Gemini Scheduled Issue Triage` and `Gemini Automated Issue Triage` workflows are failing with an `Argument list too long` error. This occurs because the workflows load potentially huge JSON arrays or text of untriaged issues (which include issue bodies) directly into bash environment variables during their respective issue fetching and preparation steps.\n\n### What did you expect to happen?\n\nThe workflows should be able to safely fetch and process untriaged issues without exceeding the operating system's maximum environment variable size limits, enabling the Gemini issue analysis steps to process them successfully.\n\n### Client information\n\n<details>\n<summary>Client Information</summary>\n\nAutomated GitHub Actions environment.\n\n</details>\n\n### Login information\n\nGitHub Actions using a GitHub App token and GCP Workload Identity Federation.\n\n### Anything else we need to know?\n\nThe workflows are also encountering an \"untrusted directory\" error due to changes in how `run-gemini-cli` evaluates workspaces in headless mode.",
-  "pr_number": 26603,
-  "target_version": "7fb5146c6b084888b38dea05af6a4e95ea48810a",
-  "expected_quality": "OK",
-  "expected_effort": "LARGE",
-  "notes": "Advanced LARGE effort CI/CD benchmark: tests if candidate workers can diagnose GitHub Actions runner ARG_MAX (E2BIG) limits, refactor workflow env vars into filesystem JSON/markdown outputs, enable read_file in coreTools, and set GEMINI_CLI_TRUST_WORKSPACE across multiple workflow files.",
-  "golden_spec_rationale": "No source files were pruned; all PR modifications directly address the reported issue.",
-  "expected_workable_spec": {
+  "status": "TRIAGED",
+  "triage_attempts": 0,
+  "generation_attempts": 0,
+  "workable_spec": {
     "issue_id": "google-gemini/gemini-cli#26602",
     "summary": {
       "problem": "Both the 'Gemini Scheduled Issue Triage' and 'Gemini Automated Issue Triage' GitHub Action workflows fail with an 'Argument list too long' error due to passing huge JSON arrays or text of untriaged issues directly into bash environment variables during their respective execution steps. They also hit an 'untrusted directory' workspace validation error in headless environments.",
@@ -43,5 +35,18 @@
       ],
       "framework": "N/A"
     }
-  }
+  },
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 26602,
+    "title": "ci: Issue Triage workflows fail with Argument list too long",
+    "target_version": "7fb5146c6b084888b38dea05af6a4e95ea48810a",
+    "pr_number": 26603
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
 }

@@ -1,16 +1,8 @@
 {
-  "owner": "google-gemini",
-  "repo": "gemini-cli",
-  "issue_number": 24337,
-  "issue_title": "fix(cli): make slash-command IDE status subscription cleanup-safe",
-  "issue_body": "## Summary\n`useSlashCommandProcessor` adds and removes its IDE status listener through separate async calls to `IdeClient.getInstance()`. If the hook unmounts before the instance resolves, cleanup can run before registration and the listener can remain attached.\n\n## Evidence\nIn `packages/cli/src/ui/hooks/slashCommandProcessor.ts`, the effect adds the listener inside an async IIFE and removes it in another async IIFE from the cleanup function. There is no shared resolved-client state or cancellation guard tying the registration and cleanup together.\n\n## Impact\nThis can leak IDE status listeners and trigger redundant `reloadCommands()` calls after the hook has unmounted or reinitialized, especially in flows where command processors are recreated.\n\n## Expected behavior\nListener registration and removal should be coordinated by the effect so that cleanup always removes the exact listener that was successfully attached, and no listener is added after unmount.\n\n## Suggested fix\nTrack the resolved `IdeClient` instance inside the effect and gate registration on a local cancelled flag, similar to other async React subscription patterns.\r\n",
-  "pr_number": 24397,
-  "target_version": "0179726222f62db8d2c495d73505768166646912",
-  "expected_quality": "OK",
-  "expected_effort": "SMALL",
-  "notes": "Created by automated script. Selected because it is a clean, localized hook bug fix testing the agent's ability to correct async race conditions and design mock-promise unmount unit tests.",
-  "golden_spec_rationale": "No source files were pruned; all PR modifications directly address the reported issue.",
-  "expected_workable_spec": {
+  "status": "TRIAGED",
+  "triage_attempts": 0,
+  "generation_attempts": 0,
+  "workable_spec": {
     "issue_id": "google-gemini/gemini-cli#24337",
     "summary": {
       "problem": "The useSlashCommandProcessor hook sets up its IDE status listener using separate async tasks for registration and cleanup. If unmounted before the async initialization resolves, the cleanup runs before registration, resulting in a leaked listener.",
@@ -38,5 +30,18 @@
       ],
       "framework": "Vitest"
     }
-  }
+  },
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 24337,
+    "title": "fix(cli): make slash-command IDE status subscription cleanup-safe",
+    "target_version": "0179726222f62db8d2c495d73505768166646912",
+    "pr_number": 24397
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
 }

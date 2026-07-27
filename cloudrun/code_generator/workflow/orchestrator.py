@@ -565,7 +565,7 @@ class Orchestrator:
         linter_output_path = os.path.join(self.config.eval_repo_path, "linter_output.txt")
         
         try:
-            git_diff_cmd = 'git diff origin/main... --name-only --diff-filter=d -- "*.ts" "*.tsx" "*.js" "*.jsx"'
+            git_diff_cmd = 'git diff --name-only --diff-filter=d HEAD~1 -- "*.ts" "*.tsx" "*.js" "*.jsx"'
             changed_files_out = CommandExecutor.run(git_diff_cmd, self.config.eval_repo_path).strip()
             changed_files = []
             for f in changed_files_out.split("\n"):

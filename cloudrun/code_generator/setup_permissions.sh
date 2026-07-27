@@ -18,7 +18,7 @@ ROLES=(
   "roles/logging.logWriter"          # Allowed to write logs (Workflow Runner)
   "roles/workflows.invoker"         # Allowed to start/invoke workflows (Eventarc Trigger)
   "roles/monitoring.metricWriter"   # Allowed to write metrics (Eventarc Trigger)
-  "roles/run.developer"             # Allowed to execute Cloud Run Jobs
+  "roles/run.developer"             # Required for run.jobs.runWithOverrides when workflow passes containerOverrides
   "roles/datastore.user"            # Allowed to read/write Firestore from Workflow
 )
 
@@ -51,7 +51,6 @@ EXEC_SA_ROLES=(
   "roles/aiplatform.user"
   "roles/logging.logWriter"
   "roles/storage.objectViewer"
-  "roles/storage.objectAdmin"         # Required for GCS debug log and artifact uploads
   "roles/developerconnect.readTokenAccessor"
   "roles/cloudaicompanion.user"       # Required for Gemini/Antigravity SDK companion tools
   "roles/datastore.user"              # Required for Firestore lock and status updates
@@ -64,6 +63,14 @@ for ROLE in "${EXEC_SA_ROLES[@]}"; do
     --role="${ROLE}" \
     --quiet
 done
+
+# Grant storage.objectUser strictly on the target debug log bucket instead of project-wide objectAdmin
+echo "Granting storage.objectUser on gs://pr_generation_debug_logs to ${EXEC_SA_EMAIL}..."
+gcloud storage buckets add-iam-policy-binding gs://pr_generation_debug_logs \
+  --member="serviceAccount:${EXEC_SA_EMAIL}" \
+  --role="roles/storage.objectUser" \
+  --project="${PROJECT_ID}" \
+  --quiet
 
 # Grant access to the PR_GEN_GITHUB_PUSH_KEY secret used directly by Cloud Run Job via secretKeyRef
 echo "Granting secretAccessor on PR_GEN_GITHUB_PUSH_KEY to ${EXEC_SA_EMAIL}..."

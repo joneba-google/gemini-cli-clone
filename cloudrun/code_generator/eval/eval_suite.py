@@ -79,8 +79,9 @@ def parse_args():
     parser.add_argument("--input-path", required=True, help="Path to JSON test file or directory of JSON files")
     parser.add_argument("--run-name", required=True, help="Run identifier (e.g. 'run_1')")
     parser.add_argument("--max-workers", type=int, default=1, help="Max parallel test execution processes")
-    parser.add_argument("--max-attempts", type=int, default=3, help="Max repair iterations per test case")
+    parser.add_argument("--max-attempts", type=int, default=5, help="Max repair iterations per test case")
     parser.add_argument("--keep-env", action="store_true", help="Keep agent_environments directory after run")
+    parser.add_argument("--judge", action="store_true", help="Automatically run LLM-as-a-Judge evaluation after completion")
     return parser.parse_args()
 
 
@@ -264,6 +265,16 @@ def main():
     print(f" Results: {passed_count}/{len(results)} Passed ({failed_count} Failed)")
     print(f" Summary: {results_txt_path}")
     print("==========================================================")
+
+    if args.judge:
+        print("\n[--judge] Auto-triggering LLM-as-a-Judge diff evaluation...")
+        from unittest.mock import patch
+        try:
+            from eval_diff_judge import main as run_judge
+            with patch("sys.argv", ["eval_diff_judge.py", "--run-name", args.run_name]):
+                run_judge()
+        except Exception as e:
+            logging.error("Failed to execute LLM diff judge evaluation: %s", e)
 
 
 if __name__ == "__main__":
