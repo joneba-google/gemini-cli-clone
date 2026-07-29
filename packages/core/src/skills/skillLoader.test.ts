@@ -286,4 +286,124 @@ description: Test sanitization
       'https://antigravity.google/docs/cli-getting-started',
     );
   });
+
+  it('should load a skill with a UTF-8 BOM in its SKILL.md file successfully', async () => {
+    const skillDir = path.join(testRootDir, 'bom-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `\uFEFF---\nname: bom-skill\ndescription: UTF-8 BOM test\n---\n# Instructions\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('bom-skill');
+    expect(skills[0].description).toBe('UTF-8 BOM test');
+  });
+
+  it('should load a skill with trailing spaces after markers successfully', async () => {
+    const skillDir = path.join(testRootDir, 'trailing-spaces-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `--- \t \nname: trailing-spaces\ndescription: trailing spaces test\n---  \n# Instructions\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('trailing-spaces');
+    expect(skills[0].description).toBe('trailing spaces test');
+  });
+
+  it('should load a skill with case-insensitive keys and spaces before colons successfully', async () => {
+    const skillDir = path.join(testRootDir, 'case-insensitive-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---
+Name : case-insensitive
+DESCRIPTION : Case and colon spacing test
+---
+# Instructions
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('case-insensitive');
+    expect(skills[0].description).toBe('Case and colon spacing test');
+  });
+
+  it('should correctly parse multi-line description without swallowing the name key', async () => {
+    const skillDir = path.join(testRootDir, 'multiline-nested-key');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---
+description:
+  Expertise in coding tasks.
+  Use when requested.
+name: multiline-nested-key
+---
+# Instructions
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('multiline-nested-key');
+    expect(skills[0].description).toBe('Expertise in coding tasks. Use when requested.');
+  });
+
+  it('should correctly include a line starting with Note: in the description and not treat it as a key', async () => {
+    const skillDir = path.join(testRootDir, 'note-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---
+name: note-skill
+description:
+  This is a description.
+  Note: This note is part of the description.
+---
+# Instructions
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('note-skill');
+    expect(skills[0].description).toBe('This is a description. Note: This note is part of the description.');
+  });
+
+  it('should fallback to simple parser to treat non-string YAML values as strings', async () => {
+    const skillDir = path.join(testRootDir, 'non-string-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---
+name: 12345
+description: true
+---
+# Instructions
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('12345');
+    expect(skills[0].description).toBe('true');
+  });
 });
