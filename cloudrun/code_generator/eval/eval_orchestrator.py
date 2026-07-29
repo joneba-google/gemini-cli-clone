@@ -57,12 +57,27 @@ class EvalOrchestrator(Orchestrator):
             try:
                 CommandExecutor.run("git fetch origin", self.config.pr_repo_path)
                 CommandExecutor.run(f"git checkout -B {branch_name} {target_version}", self.config.pr_repo_path)
+                self.base_ref = target_version
             except Exception as e:
                 logging.warning("Failed to checkout target_version SHA %s, falling back to main: %s", target_version, e)
                 CommandExecutor.run(f"git checkout -B {branch_name} origin/main", self.config.pr_repo_path)
+                self.base_ref = "origin/main"
         else:
             logging.info("No target_version commit SHA specified. Checking out origin/main baseline.")
             CommandExecutor.run(f"git checkout -B {branch_name} origin/main", self.config.pr_repo_path)
+            self.base_ref = "origin/main"
+
+        # Ignore agent/orch file writes to prevent pollution of git status in evaluation workspace
+        exclude_file = os.path.join(self.config.pr_repo_path, ".git", "info", "exclude")
+        try:
+            os.makedirs(os.path.dirname(exclude_file), exist_ok=True)
+            with open(exclude_file, "a", encoding="utf-8") as f:
+                f.write(
+                    "\nfirestore_doc.json\npr_feedback.md\nfeedback.md\n"
+                    "changes.diff\nverdict.json\npr_details.md\nlinter_output.txt\n"
+                )
+        except Exception as io_err:
+            logging.debug("Failed to configure git exclude file in eval repo: %s", io_err)
 
     async def run(self) -> dict:
         """Executes orchestration pipeline locally without GCP or GitHub calls.
@@ -128,8 +143,7 @@ class EvalOrchestrator(Orchestrator):
 
                 if approved:
                     try:
-                        target_sha = firestore_doc.get("github_metadata", {}).get("target_version") or "HEAD~1"
-                        diff_stat = CommandExecutor.run(f"git diff --stat {target_sha}", self.config.pr_repo_path)
+                        diff_stat = CommandExecutor.run(f"git diff --stat {self.base_ref}", self.config.pr_repo_path)
                         logging.info("Diff Stat summary:\n%s", diff_stat)
                         lines = diff_stat.split("\n")
                         last_line = lines[-1] if lines else ""
@@ -163,6 +177,8 @@ class EvalOrchestrator(Orchestrator):
                     "diff": self.generated_diff,
                     "pr_details": self.pr_details_content,
                     "error": f"Commit modifications ({commit_line_count} lines) exceed 500 lines limit.",
+                    "attempts": loop_count,
+                    "max_attempts": self.config.max_attempts,
                 }
             logging.info("=== [LOCAL EVAL] SUCCESS: Patch Approved and Verified ===")
             return {
@@ -171,6 +187,8 @@ class EvalOrchestrator(Orchestrator):
                 "diff": self.generated_diff,
                 "pr_details": self.pr_details_content,
                 "error": None,
+                "attempts": loop_count,
+                "max_attempts": self.config.max_attempts,
             }
         else:
             logging.error("=== [LOCAL EVAL] FAILED: Exceeded Max Attempts without Approval ===")
@@ -180,4 +198,6 @@ class EvalOrchestrator(Orchestrator):
                 "diff": self.generated_diff,
                 "pr_details": None,
                 "error": f"Failed to reach approval after {self.config.max_attempts} iterations.",
+                "attempts": loop_count,
+                "max_attempts": self.config.max_attempts,
             }

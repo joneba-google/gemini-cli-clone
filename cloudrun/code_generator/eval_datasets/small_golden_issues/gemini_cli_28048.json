@@ -1,0 +1,45 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 0,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28048",
+    "summary": {
+      "problem": "In the hooks reference documentation, LLMResponse.usageMetadata is documented as an object containing only totalTokenCount, missing promptTokenCount and candidatesTokenCount which the hook actually receives in practice.",
+      "root_cause": "The schema definition for LLMResponse under LLMResponse.usageMetadata in docs/hooks/reference.md was not updated to reflect promptTokenCount and candidatesTokenCount properties which are already populated in packages/core/src/hooks/hookTranslator.ts.",
+      "context": "The hooks Reference guarantees structure stability to prevent hooks breaking on SDK updates. Integrators rely on the reference schema and would miss out on prompt and candidate token metrics without correct documentation."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "docs/hooks/reference.md"
+      ],
+      "steps": [
+        "Open docs/hooks/reference.md and locate the **LLMResponse** schema definition block around line 325-333.",
+        "Replace the line `\"usageMetadata\": { \"totalTokenCount\": number }` with the expanded usageMetadata configuration containing promptTokenCount, candidatesTokenCount, and totalTokenCount.",
+        "Ensure the final format exactly defines promptTokenCount, candidatesTokenCount, and totalTokenCount properties in the JSON/TypeScript block style."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "The usageMetadata schema block documented in docs/hooks/reference.md accurately describes all three token field properties.",
+      "verification_steps": [
+        "Manually review the markdown file docs/hooks/reference.md to ensure structure correctness and matching field definitions.",
+        "Confirm that promptTokenCount, candidatesTokenCount, and totalTokenCount are spelled identically to hookTranslator.ts."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 28048,
+    "title": "docs(hooks): LLMResponse `usageMetadata` in the reference omits `promptTokenCount` and `candidatesTokenCount` (the hook receives all three)",
+    "target_version": "ae0a3aa7b928cc73bb09604bb9c2c020e6b647db",
+    "pr_number": 28057
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

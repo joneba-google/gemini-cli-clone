@@ -41,6 +41,7 @@ class EvalConfig(Config):
         """
         super().__init__()
         self.firestore_doc_dict = firestore_doc_dict
+        os.environ["DISABLE_GCS_LOGGING"] = "true"
 
         # Dynamically target the repository specified in the test file's github_metadata
         github_meta = firestore_doc_dict.get("github_metadata", {})

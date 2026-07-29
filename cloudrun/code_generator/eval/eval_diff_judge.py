@@ -29,13 +29,13 @@ from config import Config
 
 
 RUNS_BASE_DIR = os.path.join(BASE_DIR, "pr_gen_evals", "runs")
-GOLDEN_ISSUES_DIR = os.path.join(BASE_DIR, "golden_issues")
 JUDGE_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "judge_prompt.md")
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="LLM-as-a-Judge Diff Evaluator")
     parser.add_argument("--run-name", required=True, help="Run identifier (e.g. 'run_1')")
+    parser.add_argument("--input-path", "--input-dir", required=True, help="Input directory or file containing golden issue JSON specs")
     parser.add_argument("--model", default="gemini-3.5-flash", help="LLM model for judge evaluation")
     return parser.parse_args()
 
@@ -62,10 +62,22 @@ def fetch_true_diff(owner: str, repo: str, pr_number: int) -> str:
         return ""
 
 
-def find_golden_spec_for_test(test_id: str) -> dict | None:
-    """Finds matching reformatted golden issue JSON by test_id or issue number."""
-    # Attempt direct file match e.g. gemini_cli_25693.json
-    for filepath in glob.glob(os.path.join(GOLDEN_ISSUES_DIR, "*.json")):
+def find_golden_spec_for_test(test_id: str, input_path: str) -> dict | None:
+    """Finds matching reformatted golden issue JSON by test_id or issue number within input_path."""
+    if not input_path or not os.path.exists(input_path):
+        return None
+    if os.path.isfile(input_path):
+        try:
+            with open(input_path, "r", encoding="utf-8") as f:
+                doc = json.load(f)
+                base = os.path.splitext(os.path.basename(input_path))[0]
+                if base in test_id or test_id.startswith(base):
+                    return doc
+        except Exception:
+            return None
+        return None
+
+    for filepath in glob.glob(os.path.join(input_path, "*.json")):
         base = os.path.splitext(os.path.basename(filepath))[0]
         if base in test_id or test_id.startswith(base):
             try:
@@ -106,10 +118,18 @@ async def evaluate_single_diff(
 
     config = Config()
     config.model_name = model_name
-    agent_runner = AgentRunner(config)
+    agent_runner = AgentRunner(
+        project_id=config.project_id,
+        location=config.location,
+        model_name=model_name,
+    )
 
     try:
-        raw_output, _ = await agent_runner.run_agent(prompt)
+        raw_output, _ = await agent_runner.run_agent(
+            role="LLM Diff Judge",
+            prompt=prompt,
+            repo_path=config.tmp_dir,
+        )
         
         # Parse JSON payload from judge response
         json_match = re.search(r"\{.*\}", raw_output, re.DOTALL)
@@ -140,6 +160,39 @@ async def evaluate_single_diff(
         }
 
 
+def load_test_metrics_for_run(run_dir: str) -> tuple[dict[str, tuple[Any, Any]], dict[str, Any]]:
+    """Loads turn counts (attempts, max_attempts) and runtimes mapped by test_id from test_results.json or Results.txt."""
+    turn_map = {}
+    runtime_map = {}
+    json_path = os.path.join(run_dir, "test_results.json")
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                for item in json.load(f):
+                    tid = item.get("test_id")
+                    if tid:
+                        turn_map[tid] = (item.get("attempts", "?"), item.get("max_attempts", "?"))
+                        runtime_map[tid] = item.get("runtime_seconds")
+            return turn_map, runtime_map
+        except Exception as e:
+            logging.warning("Failed to read test_results.json: %s", e)
+
+    results_txt_path = os.path.join(run_dir, "Results.txt")
+    if os.path.exists(results_txt_path):
+        try:
+            with open(results_txt_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    match = re.search(r"\[.*?\]\s+(\S+)\s+\(Turns:\s+(\w+)(?:,\s+Runtime:\s+([\d.]+s))?\)", line)
+                    if match:
+                        turn_map[match.group(1)] = (match.group(2), "?")
+                        if match.group(3):
+                            runtime_map[match.group(1)] = float(match.group(3).rstrip("s"))
+        except Exception as e:
+            logging.warning("Failed to read Results.txt: %s", e)
+
+    return turn_map, runtime_map
+
+
 def main():
     args = parse_args()
     run_dir = os.path.join(RUNS_BASE_DIR, args.run_name)
@@ -156,11 +209,13 @@ def main():
 
     print("==========================================================")
     print(f" Starting LLM-as-a-Judge Evaluation: {args.run_name}")
+    print(f" Input Path:      {args.input_path}")
     print(f" Diff Files Found: {len(diff_files)}")
     print(f" Judge Model:     {args.model}")
     print("==========================================================\n")
 
     prompt_template = load_judge_prompt_template()
+    turn_map, runtime_map = load_test_metrics_for_run(run_dir)
     results = []
 
     import asyncio
@@ -170,15 +225,27 @@ def main():
         with open(diff_file, "r", encoding="utf-8") as f:
             proposed_diff = f.read()
 
-        doc_dict = find_golden_spec_for_test(test_id) or {}
+        doc_dict = find_golden_spec_for_test(test_id, args.input_path) or {}
         eval_res = asyncio.run(
             evaluate_single_diff(test_id, proposed_diff, doc_dict, prompt_template, args.model)
         )
+        attempts, max_att = turn_map.get(test_id, ("?", "?"))
+        eval_res["attempts"] = attempts
+        eval_res["max_attempts"] = max_att
+        eval_res["runtime_seconds"] = runtime_map.get(test_id)
         results.append(eval_res)
 
-    # Compute overall score average
+    # Compute overall score average, average turns, and average runtime
     total_score = sum(r["score"] for r in results)
     avg_score = total_score / len(results) if results else 0.0
+
+    valid_turns = [int(r["attempts"]) for r in results if str(r.get("attempts", "")).isdigit()]
+    avg_turns = sum(valid_turns) / len(valid_turns) if valid_turns else 0.0
+    avg_turns_str = f"{avg_turns:.2f}" if valid_turns else "?"
+
+    valid_runtimes = [float(r["runtime_seconds"]) for r in results if r.get("runtime_seconds") is not None]
+    avg_runtime = sum(valid_runtimes) / len(valid_runtimes) if valid_runtimes else 0.0
+    avg_runtime_str = f"{avg_runtime:.2f}s" if valid_runtimes else "?"
 
     # Output file path: runs/{run_name}/{run_name}_eval_score.txt
     eval_score_file = os.path.join(run_dir, f"{args.run_name}_eval_score.txt")
@@ -186,20 +253,31 @@ def main():
         f.write("==========================================================\n")
         f.write(f" DIFF EVALUATION SCORE REPORT: {args.run_name}\n")
         f.write("==========================================================\n")
-        f.write(f"Average Score: {avg_score:.2f} / 3.00\n")
-        f.write(f"Evaluated Test Cases: {len(results)}\n\n")
+        f.write(f"Average Score:   {avg_score:.2f} / 3.00\n")
+        f.write(f"Average Turns:   {avg_turns_str}\n")
+        f.write(f"Average Runtime: {avg_runtime_str}\n")
+        f.write(f"Evaluated Test Cases: {len(results)}\n")
+        max_att_str = next((str(r["max_attempts"]) for r in results if r.get("max_attempts") != "?"), "?")
+        if max_att_str != "?":
+            f.write(f"Max Attempts:         {max_att_str}\n")
+        f.write("\n")
 
         f.write("----------------------------------------------------------\n")
         f.write(" DETAILED TEST CASE SCORES & VERDICTS\n")
         f.write("----------------------------------------------------------\n")
         for r in results:
-            f.write(f"[Score: {r['score']}/3] {r['test_id']}\n")
+            attempts = r.get("attempts", "?")
+            runtime_val = r.get("runtime_seconds")
+            runtime_str = f"{runtime_val:.2f}s" if runtime_val is not None else "N/A"
+            f.write(f"[Score: {r['score']}/3] {r['test_id']} (Turns: {attempts}, Runtime: {runtime_str})\n")
             f.write(f"  Verdict: {r['verdict_description']}\n\n")
 
     print("\n==========================================================")
     print(f" Diff Evaluation Complete!")
-    print(f" Average Score: {avg_score:.2f} / 3.00 across {len(results)} test cases")
-    print(f" Score Report:  {eval_score_file}")
+    print(f" Average Score:   {avg_score:.2f} / 3.00 across {len(results)} test cases")
+    print(f" Average Turns:   {avg_turns_str}")
+    print(f" Average Runtime: {avg_runtime_str}")
+    print(f" Score Report:    {eval_score_file}")
     print("==========================================================")
 
 

@@ -1,0 +1,44 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 0,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27205",
+    "summary": {
+      "problem": "Gemini CLI automatically maps and shares the entire local `.venv` directory (and other ignored directories) inside custom skills regardless of `.gitignore` or `.geminiignore` rules.",
+      "root_cause": "In `activate-skill.ts`, `getFolderStructure(path.dirname(skillLocation))` was being invoked without passing a `fileService` option. Without a `fileService`, the utility does not apply `.gitignore` or `.geminiignore` filtering and only falls back to a minimal set of hardcodedignored folders.",
+      "context": "Other parts of the system, like the workspace folder structure builders in `environmentContext.ts`, properly pass `{ fileService: config.getFileService() }` to ensure ignored patterns are respected."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/activate-skill.ts"
+      ],
+      "steps": [
+        "Locate the invocation of `getFolderStructure(path.dirname(skillLocation))` inside the `ActivateSkillToolInvocation` class.",
+        "Pass `{ fileService: this.config.getFileService() }` as the second argument to the `getFolderStructure` function call to enable `.gitignore` and `.geminiignore` parsing."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/activate-skill.test.ts",
+      "expected_behavior": "When custom skills are activated, standard ignored paths such as `.venv` are not shared with the model.",
+      "verification_steps": [
+        "Add a unit test verifying that `ActivateSkillTool` calls `getFolderStructure` with the `fileService` retrieved from the config object.",
+        "Assert that `getFolderStructure` is called with the skill path and an options object containing `fileService: mockFileService`."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 27205,
+    "title": "GEMINI CLI aggressively scans .venv in custom skills (ignores .gitignore / .geminiignore)",
+    "target_version": "3fbf93e26fd3ed6f9273f4e87c02786b9c73690b",
+    "pr_number": 28149
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

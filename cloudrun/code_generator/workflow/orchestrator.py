@@ -69,6 +69,7 @@ class Orchestrator:
             config: Initialized Config instance.
         """
         self.config = config
+        self.base_ref = "origin/main"
         orchestrator_dir = os.path.dirname(os.path.abspath(__file__))
         prompts_dir = os.path.join(os.path.dirname(orchestrator_dir), "agent_prompts")
         self.agent_runner = AgentRunner(
@@ -196,7 +197,7 @@ class Orchestrator:
             self._sync_or_clone_repository()
             try:
                 # TODO: Add logic to fetch and checkout the existing branch if responding to user feedback
-                CommandExecutor.run(["git", "checkout", "-B", branch_name, "origin/main"], self.config.pr_repo_path)
+                CommandExecutor.run(["git", "checkout", "-B", branch_name, self.base_ref], self.config.pr_repo_path)
             except CommandExecutionError as e:
                 raise OrchestrationError(f"Failed to checkout feature branch {branch_name}: {e}") from e
 
@@ -263,7 +264,7 @@ class Orchestrator:
                     
                     if approved:
                         try:
-                            diff_stat = CommandExecutor.run("git diff --stat origin/main", self.config.pr_repo_path)
+                            diff_stat = CommandExecutor.run(f"git diff --stat {self.base_ref}", self.config.pr_repo_path)
                             logging.info("Diff Stat summary:\n%s", diff_stat)
                             lines = diff_stat.strip().split("\n")
                             last_line = lines[-1] if lines else ""
@@ -368,8 +369,9 @@ class Orchestrator:
                 "to apply the code modifications to the target files in implementation_plan.files_to_modify "
                 "and add the requested test assertions to testing_strategy.test_file. "
                 "Do NOT conclude your session after only viewing files or running baseline tests without making edits. "
-                "You are running in a headless sandbox environment. Execute any necessary test commands "
-                "using your run_command tool (e.g. npx vitest run <test_file>). Do NOT ask for permission in the chat."
+                "You are running in a headless sandbox environment. Execute targeted test commands only "
+                "using your run_command tool with WaitMsBeforeAsync: 10000 (e.g. npx vitest run <test_file>). "
+                "Do NOT run full package test suites. Do NOT ask for permission in the chat."
             )
             prompt_file = "bug_fixer_prompt.md"
         else:
@@ -377,8 +379,9 @@ class Orchestrator:
                 "Use the feedback in pr_feedback.md to address the remaining issues in the code and tests. "
                 "CRITICAL: You MUST apply file modifications to the codebase using replace_file_content or write_file. "
                 "Original spec is at firestore_doc.json. "
-                "You are running in a headless sandbox environment. Execute any necessary test or build commands "
-                "directly using your run_command tool. Do NOT ask for permission in the chat."
+                "You are running in a headless sandbox environment. Execute targeted test commands only "
+                "using your run_command tool with WaitMsBeforeAsync: 10000 (e.g. npx vitest run <test_file>). "
+                "Do NOT run full package test suites. Do NOT ask for permission in the chat."
             )
             prompt_file = "code_revision_prompt.md"
 
@@ -411,25 +414,34 @@ class Orchestrator:
         """Consolidates all file edits and stages a soft commit.
 
         Returns:
-            The raw diff comparison string to origin/main, or None if no changes.
+            The raw diff comparison string to base_ref, or None if no changes.
         """
         logging.info("Staging workspace modifications and soft-committing...")
         try:
             CommandExecutor.run(["git", "add", "."], self.config.pr_repo_path)
-            CommandExecutor.run(["git", "reset", "--soft", "origin/main"], self.config.pr_repo_path)
+            CommandExecutor.run(["git", "reset", "--soft", self.base_ref], self.config.pr_repo_path)
             
             git_status = CommandExecutor.run(["git", "status", "--porcelain"], self.config.pr_repo_path)
             if git_status:
                 commit_msg = f"[SSR Agent] Issue Fix: issues/{issue_num}"
                 CommandExecutor.run(["git", "commit", "-m", commit_msg, "--allow-empty", "--no-verify"], self.config.pr_repo_path)
             else:
-                logging.info("No modifications staged against origin/main in this iteration.")
-                if iteration == 1:
-                    logging.error("Failed to generate any code changes in the first iteration. Aborting.")
-                    raise OrchestrationError("Failed to generate any code changes in the first iteration.")
+                logging.info("No modifications staged against %s in iteration %s.", self.base_ref, iteration)
+                # Write feedback into pr_feedback.md so subsequent iterations guide the agent
+                feedback_msg = (
+                    "You concluded your previous session without modifying any files. "
+                    "You MUST apply the required code changes using replace_file_content or write_file."
+                )
+                try:
+                    feedback_file = os.path.join(self.config.pr_repo_path, "pr_feedback.md")
+                    with open(feedback_file, "w", encoding="utf-8") as f:
+                        f.write(feedback_msg)
+                    logging.info("Wrote no-modifications feedback to %s", feedback_file)
+                except IOError as io_err:
+                    logging.warning("Failed to write no-modifications feedback to pr_feedback.md: %s", io_err)
                 return None
 
-            diff_content = CommandExecutor.run(["git", "diff", "origin/main"], self.config.pr_repo_path)
+            diff_content = CommandExecutor.run(["git", "diff", self.base_ref], self.config.pr_repo_path)
             if diff_content:
                 upload_git_diff(
                     owner=owner,
@@ -565,7 +577,7 @@ class Orchestrator:
         linter_output_path = os.path.join(self.config.eval_repo_path, "linter_output.txt")
         
         try:
-            git_diff_cmd = 'git diff --name-only --diff-filter=d HEAD~1 -- "*.ts" "*.tsx" "*.js" "*.jsx"'
+            git_diff_cmd = f'git diff --name-only --diff-filter=d {self.base_ref} -- "*.ts" "*.tsx" "*.js" "*.jsx"'
             changed_files_out = CommandExecutor.run(git_diff_cmd, self.config.eval_repo_path).strip()
             changed_files = []
             for f in changed_files_out.split("\n"):
@@ -696,7 +708,7 @@ class Orchestrator:
 
                 # Parse recommended Commit Message (case-insensitive)
                 commit_match = re.search(
-                    r"##\s*Commit\s*Message\r?\n\s*(.+?)(?=\r?\n##|$)",
+                    r"##\s*Commit\s*Message\r?\n\s*(.+?)(?=\r?\n##\s|$)",
                     details_content,
                     re.IGNORECASE | re.DOTALL,
                 )
@@ -706,7 +718,7 @@ class Orchestrator:
 
                 # Parse recommended PR Description (case-insensitive)
                 desc_match = re.search(
-                    r"##\s*PR\s*Description\r?\n\s*(.+?)(?=\r?\n##|$)",
+                    r"##\s*PR\s*Description\r?\n\s*(.+?)(?=\r?\n##\s|$)",
                     details_content,
                     re.IGNORECASE | re.DOTALL,
                 )

@@ -45,7 +45,8 @@ def test_fetch_true_diff_success(mock_urlopen):
 
 def test_find_golden_spec_for_test():
     """Tests locating matching golden issue spec by test_id."""
-    doc = find_golden_spec_for_test("gemini_cli_25693_25693")
+    input_path = os.path.join(os.path.dirname(__file__), "..", "eval_datasets", "golden_issues")
+    doc = find_golden_spec_for_test("gemini_cli_25693_25693", input_path)
     assert doc is not None
     assert doc.get("status") == "TRIAGED"
     assert doc.get("github_metadata", {}).get("issue_number") == 25693
@@ -112,12 +113,12 @@ async def test_evaluate_single_diff_score_0(mock_agent_runner_cls, mock_fetch_di
     assert "breaks build" in result["verdict_description"]
 
 
-@patch("sys.argv", ["eval_diff_judge.py", "--run-name", "test_run_1"])
+@patch("sys.argv", ["eval_diff_judge.py", "--run-name", "test_run_1", "--input-path", "eval_datasets/golden_issues"])
 @patch("eval_diff_judge.evaluate_single_diff")
 def test_main_report_generation(mock_eval_single, tmp_path):
     """Tests full main() evaluation run generating eval_score.txt report."""
     mock_eval_single.return_value = {
-        "test_id": "gemini_cli_25693_diff",
+        "test_id": "gemini_cli_25693",
         "score": 3,
         "verdict_description": "Full parity fix.",
         "success": True,
@@ -129,6 +130,9 @@ def test_main_report_generation(mock_eval_single, tmp_path):
 
     test_diff_file = diffs_dir / "gemini_cli_25693_diff.diff"
     test_diff_file.write_text("diff --git a/file.py b/file.py\n+added line")
+    (runs_dir / "test_results.json").write_text(
+        json.dumps([{"test_id": "gemini_cli_25693", "attempts": 2, "max_attempts": 5, "runtime_seconds": 45.2}])
+    )
 
     with patch("eval_diff_judge.RUNS_BASE_DIR", str(tmp_path / "pr_gen_evals" / "runs")):
         main()
@@ -137,8 +141,11 @@ def test_main_report_generation(mock_eval_single, tmp_path):
     assert score_file.exists()
     content = score_file.read_text()
     assert "DIFF EVALUATION SCORE REPORT: test_run_1" in content
-    assert "Average Score: 3.00 / 3.00" in content
-    assert "[Score: 3/3] gemini_cli_25693_diff" in content
+    assert "Average Score:   3.00 / 3.00" in content
+    assert "Average Turns:   2.00" in content
+    assert "Average Runtime: 45.20s" in content
+    assert "Max Attempts:         5" in content
+    assert "[Score: 3/3] gemini_cli_25693 (Turns: 2, Runtime: 45.20s)" in content
     assert "Full parity fix." in content
 
 

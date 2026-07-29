@@ -56,6 +56,8 @@ class JsonlLoggingHandler(logging.Handler):
         self.file = open(filepath, "a", encoding="utf-8")
 
     def emit(self, record: logging.LogRecord) -> None:
+        if not hasattr(self, "file") or self.file.closed:
+            return
         try:
             log_entry = {
                 "timestamp": datetime.datetime.fromtimestamp(record.created).isoformat(),
@@ -72,6 +74,19 @@ class JsonlLoggingHandler(logging.Handler):
         if hasattr(self, "file") and not self.file.closed:
             self.file.close()
         super().close()
+
+
+class TestProgressFilter(logging.Filter):
+    """Filter that only permits high-level test progress and status messages to stdout."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return (
+            "Starting local evaluation for test case:" in msg
+            or "completed:" in msg
+            or "[Cleanup]" in msg
+            or "=== [LOCAL EVAL]" in msg
+        )
 
 
 def parse_args():
@@ -150,6 +165,11 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
     jh = JsonlLoggingHandler(log_file_jsonl)
     logger.addHandler(jh)
 
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    sh.addFilter(TestProgressFilter())
+    logger.addHandler(sh)
+
     logging.info("Starting local evaluation for test case: %s", test_id)
 
     # Instantiate config (dynamically resolving repo from github_metadata) & orchestrator
@@ -157,12 +177,16 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
     config.max_attempts = max_attempts
     orchestrator = EvalOrchestrator(config)
 
+    test_start_time = time.time()
     # Execute async pipeline
     try:
         result = asyncio.run(orchestrator.run())
         result["test_id"] = test_id
         result["file_base"] = file_base
         result["issue_num"] = issue_num
+        result["attempts"] = result.get("attempts", max_attempts)
+        result["max_attempts"] = result.get("max_attempts", max_attempts)
+        result["runtime_seconds"] = round(time.time() - test_start_time, 2)
 
         # Save output artifacts on success
         if result.get("success"):
@@ -175,6 +199,9 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
                 with open(pr_path, "w", encoding="utf-8") as f:
                     f.write(result["pr_details"])
 
+        status_str = "PASSED" if result.get("success") else f"FAILED ({result.get('status', 'FAILED')})"
+        logging.info("Test case %s completed: %s (Turns: %s/%s, Runtime: %.2fs)", test_id, status_str, result.get("attempts", "?"), max_attempts, result["runtime_seconds"])
+
     except Exception as e:
         logging.exception("Unhandled exception during test execution: %s", e)
         result = {
@@ -184,18 +211,34 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
             "success": False,
             "status": "CRASHED",
             "error": str(e),
+            "attempts": 0,
+            "max_attempts": max_attempts,
+            "runtime_seconds": round(time.time() - test_start_time, 2),
         }
+        logging.error("Test case %s completed: FAILED (CRASHED: %s)", test_id, e)
     finally:
-        # Close logging handlers
-        jh.close()
-        fh.close()
-
         # Cleanup temporary environment folder unless keep_env is specified
         if not keep_env and os.path.exists(env_dir):
             try:
-                shutil.rmtree(env_dir)
+                logging.info("[Cleanup] Deleting temporary agent environment: %s", env_dir)
+                def _handle_remove_readonly(func, path, _):
+                    import stat
+                    try:
+                        os.chmod(path, stat.S_IRWXU | stat.S_IWRITE | stat.S_IWUSR)
+                        func(path)
+                    except Exception:
+                        pass
+                shutil.rmtree(env_dir, onerror=_handle_remove_readonly)
             except OSError as err:
                 logging.warning("Failed to clean up env dir %s: %s", env_dir, err)
+
+        # Remove and close logging handlers cleanly
+        logger.removeHandler(sh)
+        logger.removeHandler(jh)
+        logger.removeHandler(fh)
+        sh.close()
+        jh.close()
+        fh.close()
 
     return result
 
@@ -231,13 +274,25 @@ def main():
 
     if args.max_workers > 1:
         with ProcessPoolExecutor(max_workers=args.max_workers) as executor:
-            results = list(executor.map(run_single_test, tasks))
+            results = list(executor.map(run_single_test, tasks, chunksize=1))
     else:
         results = [run_single_test(t) for t in tasks]
 
     elapsed = time.time() - start_time
     passed_count = sum(1 for r in results if r.get("success"))
     failed_count = len(results) - passed_count
+
+    # Save test_results.json for downstream evaluation tools (like eval_diff_judge)
+    json_results_path = os.path.join(run_dir, "test_results.json")
+    try:
+        with open(json_results_path, "w", encoding="utf-8") as f:
+            json.dump(results, f, indent=2)
+    except Exception as e:
+        logging.warning("Failed to write test_results.json: %s", e)
+
+    valid_runtimes = [float(r["runtime_seconds"]) for r in results if r.get("runtime_seconds") is not None]
+    avg_runtime = sum(valid_runtimes) / len(valid_runtimes) if valid_runtimes else 0.0
+    avg_runtime_str = f"{avg_runtime:.2f}s" if valid_runtimes else "N/A"
 
     # Generate Results.txt summary
     results_txt_path = os.path.join(run_dir, "Results.txt")
@@ -248,14 +303,19 @@ def main():
         f.write(f"Total Test Cases: {len(results)}\n")
         f.write(f"Passed:           {passed_count}\n")
         f.write(f"Failed:           {failed_count}\n")
-        f.write(f"Execution Time:   {elapsed:.2f} seconds\n\n")
+        f.write(f"Execution Time:   {elapsed:.2f} seconds\n")
+        f.write(f"Max Attempts:     {args.max_attempts}\n")
+        f.write(f"Average Runtime:  {avg_runtime_str}\n\n")
 
         f.write("----------------------------------------------------------\n")
         f.write(" DETAILED TEST BREAKDOWN\n")
         f.write("----------------------------------------------------------\n")
         for r in results:
             status_symbol = "✅ PASS" if r.get("success") else "❌ FAIL"
-            f.write(f"[{status_symbol}] {r['test_id']}\n")
+            attempts = r.get("attempts", "?")
+            runtime_val = r.get("runtime_seconds")
+            runtime_str = f"{runtime_val:.2f}s" if runtime_val is not None else "N/A"
+            f.write(f"[{status_symbol}] {r['test_id']} (Turns: {attempts}, Runtime: {runtime_str})\n")
             if not r.get("success"):
                 f.write(f"    Error: {r.get('error', 'Unknown failure')}\n")
             f.write("\n")
@@ -271,7 +331,7 @@ def main():
         from unittest.mock import patch
         try:
             from eval_diff_judge import main as run_judge
-            with patch("sys.argv", ["eval_diff_judge.py", "--run-name", args.run_name]):
+            with patch("sys.argv", ["eval_diff_judge.py", "--run-name", args.run_name, "--input-path", args.input_path]):
                 run_judge()
         except Exception as e:
             logging.error("Failed to execute LLM diff judge evaluation: %s", e)

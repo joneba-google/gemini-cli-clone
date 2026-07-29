@@ -65,6 +65,9 @@ def upload_to_bucket(
     Returns:
         True if successfully uploaded, False otherwise.
     """
+    if os.environ.get("DISABLE_GCS_LOGGING", "").lower() in ("1", "true", "yes"):
+        return False
+
     if not BUCKET_NAME:
         logging.info(
             "[GCS Logger] PR_GEN_DEBUG_LOGS_BUCKET not set. Skipping GCS upload."

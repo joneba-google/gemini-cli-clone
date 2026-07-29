@@ -1,0 +1,47 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 0,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24337",
+    "summary": {
+      "problem": "The useSlashCommandProcessor hook sets up its IDE status listener using separate async tasks for registration and cleanup. If unmounted before the async initialization resolves, the cleanup runs before registration, resulting in a leaked listener.",
+      "root_cause": "Inside packages/cli/src/ui/hooks/slashCommandProcessor.ts, the registration and cleanup effects did not share state, making them prone to race conditions where the IDE listener is registered after the component unmounts.",
+      "context": "The IDE status change listener is registered under packages/cli/src/ui/hooks/slashCommandProcessor.ts by calling IdeClient.getInstance()."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/hooks/slashCommandProcessor.ts"
+      ],
+      "steps": [
+        "In the useEffect block of useSlashCommandProcessor, declare a local boolean variable isActive initialized to true and a local activeIdeClient variable of type IdeClient | undefined.",
+        "Update the async IIFE registering the listener: after awaiting IdeClient.getInstance(), check if !isActive. If true, return early.",
+        "Otherwise, assign the retrieved ideClient to activeIdeClient and register the listener using ideClient.addStatusChangeListener(listener).",
+        "Update the returned cleanup function to set isActive to false and synchronously call activeIdeClient?.removeStatusChangeListener(listener) instead of wrapping it in an async IIFE."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/slashCommandProcessor.test.tsx",
+      "expected_behavior": "During useSlashCommandProcessor hook unmount, if initialization has resolved, the exact listener should be removed. If unmounted before initialization resolves, no listener should be registered.",
+      "verification_steps": [
+        "Create a test 'removes the IDE status listener on unmount after async initialization' where mock IdeClient resolves and unmount is verified to call removeStatusChangeListener.",
+        "Create a test 'does not register an IDE status listener if unmounted before async initialization resolves' where unmount is called before mock promise resolves, verifying addStatusChangeListener is not called.",
+        "Run tests using Vitest framework command: npm test --workspace @google/gemini-cli -- slashCommandProcessor.test.tsx"
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 24337,
+    "title": "fix(cli): make slash-command IDE status subscription cleanup-safe",
+    "target_version": "0179726222f62db8d2c495d73505768166646912",
+    "pr_number": 24397
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}
