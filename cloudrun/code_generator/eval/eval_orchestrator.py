@@ -31,6 +31,8 @@ if WORKFLOW_DIR not in sys.path:
 from orchestrator import Orchestrator, OrchestrationError
 from command_executor import CommandExecutor
 
+logger = logging.getLogger("Orchestrator")
+
 
 class EvalOrchestrator(Orchestrator):
     """Subclass of Orchestrator adapted for offline evaluation runs."""
@@ -91,6 +93,11 @@ class EvalOrchestrator(Orchestrator):
         issue_id = firestore_doc.get("workable_spec", {}).get("issue_id", "unknown")
         github_metadata = firestore_doc.get("github_metadata", {})
         issue_num = github_metadata.get("issue_number", 0)
+        repo_slug = github_metadata.get("repository", "google-gemini/gemini-cli")
+        if "/" in repo_slug:
+            owner, repo = repo_slug.split("/", 1)
+        else:
+            owner, repo = "google-gemini", repo_slug
 
         branch_name = f"eval-agent-issue-{issue_num}"
 
@@ -125,17 +132,17 @@ class EvalOrchestrator(Orchestrator):
             logging.info("=== [LOCAL EVAL] Starting Iteration %s/%s ===", loop_count, self.config.max_attempts)
 
             # Phase 1: Code Generation
-            await self._run_code_generation(loop_count)
+            await self._run_code_generation(loop_count, owner=owner, repo=repo, issue_num=issue_num)
 
             # Stage edits and generate diff
-            diff_content = self._prepare_iteration_commit(issue_num, loop_count)
+            diff_content = self._prepare_iteration_commit(issue_num, loop_count, owner=owner, repo=repo)
             if not diff_content:
                 logging.info("[LOCAL EVAL] No code modifications detected in iteration %s.", loop_count)
                 continue
             self.generated_diff = diff_content
 
             # Phase 2: Evaluation
-            verdict = await self._run_evaluation(diff_content, firestore_doc)
+            verdict = await self._run_evaluation(diff_content, firestore_doc, owner=owner, repo=repo, issue_num=issue_num)
 
             if verdict in ["APPROVED", "PASS"]:
                 logging.info("[LOCAL EVAL] Patch approved by Evaluator. Running regression checks...")

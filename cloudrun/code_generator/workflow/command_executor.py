@@ -10,6 +10,8 @@ import re
 import shlex
 import subprocess
 
+logger = logging.getLogger("Orchestrator")
+
 
 def sanitize_relative_path(path: str | os.PathLike) -> str | None:
     """Sanitizes an untrusted relative file path to prevent Path Traversal.
@@ -111,7 +113,7 @@ class CommandExecutor:
             args = list(cmd)
 
         cmd_str = " ".join(args)
-        logging.info("Executing command: %s (CWD: %s)", cmd_str, active_cwd)
+        logger.info("Executing command: %s (CWD: %s)", cmd_str, active_cwd)
 
         try:
             result = subprocess.run(
@@ -128,15 +130,15 @@ class CommandExecutor:
             stderr_str = result.stderr.strip() if result.stderr else ""
 
             if result.returncode != 0:
-                logging.error(
+                logger.error(
                     "Command execution failed: %s (Exit Code: %s)",
                     cmd_str,
                     result.returncode,
                 )
                 if stdout_str:
-                    logging.error("Stdout:\n%s", stdout_str)
+                    logger.error("Stdout:\n%s", stdout_str)
                 if stderr_str:
-                    logging.error("Stderr:\n%s", stderr_str)
+                    logger.error("Stderr:\n%s", stderr_str)
                 raise CommandExecutionError(
                     cmd=args,
                     returncode=result.returncode,

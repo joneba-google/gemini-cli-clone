@@ -45,7 +45,7 @@ def test_fetch_true_diff_success(mock_urlopen):
 
 def test_find_golden_spec_for_test():
     """Tests locating matching golden issue spec by test_id."""
-    input_path = os.path.join(os.path.dirname(__file__), "..", "eval_datasets", "golden_issues")
+    input_path = os.path.join(os.path.dirname(__file__), "..", "eval", "datasets", "ground_truth_specs", "golden_issues")
     doc = find_golden_spec_for_test("gemini_cli_25693_25693", input_path)
     assert doc is not None
     assert doc.get("status") == "TRIAGED"
@@ -113,7 +113,7 @@ async def test_evaluate_single_diff_score_0(mock_agent_runner_cls, mock_fetch_di
     assert "breaks build" in result["verdict_description"]
 
 
-@patch("sys.argv", ["eval_diff_judge.py", "--run-name", "test_run_1", "--input-path", "eval_datasets/golden_issues"])
+@patch("sys.argv", ["eval_diff_judge.py", "--run-name", "test_run_1", "--input-path", "eval/datasets/ground_truth_specs/golden_issues"])
 @patch("eval_diff_judge.evaluate_single_diff")
 def test_main_report_generation(mock_eval_single, tmp_path):
     """Tests full main() evaluation run generating eval_score.txt report."""
@@ -124,7 +124,7 @@ def test_main_report_generation(mock_eval_single, tmp_path):
         "success": True,
     }
 
-    runs_dir = tmp_path / "pr_gen_evals" / "runs" / "test_run_1"
+    runs_dir = tmp_path / "eval" / "run_outputs" / "test_run_1"
     diffs_dir = runs_dir / "outputs" / "diffs"
     diffs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -134,18 +134,18 @@ def test_main_report_generation(mock_eval_single, tmp_path):
         json.dumps([{"test_id": "gemini_cli_25693", "attempts": 2, "max_attempts": 5, "runtime_seconds": 45.2}])
     )
 
-    with patch("eval_diff_judge.RUNS_BASE_DIR", str(tmp_path / "pr_gen_evals" / "runs")):
+    with patch("eval_diff_judge.RUNS_BASE_DIR", str(tmp_path / "eval" / "run_outputs")):
         main()
 
-    score_file = runs_dir / "test_run_1_eval_score.txt"
+    score_file = runs_dir / "test_run_1_eval_score.md"
     assert score_file.exists()
     content = score_file.read_text()
-    assert "DIFF EVALUATION SCORE REPORT: test_run_1" in content
-    assert "Average Score:   3.00 / 3.00" in content
-    assert "Average Turns:   2.00" in content
-    assert "Average Runtime: 45.20s" in content
-    assert "Max Attempts:         5" in content
-    assert "[Score: 3/3] gemini_cli_25693 (Turns: 2, Runtime: 45.20s)" in content
+    assert "# 📊 Diff Evaluation Score Report: test_run_1" in content
+    assert "| **Average Score** | **3.00 / 3.00** |" in content
+    assert "| **Average Turns** | **2.00** |" in content
+    assert "| **Average Runtime** | **45.20s** |" in content
+    assert "| **Max Attempts** | **5** |" in content
+    assert "| ✅ PASS | `#25693` | 2 | 45.20s | **3/3** | Full parity fix. |" in content
     assert "Full parity fix." in content
 
 

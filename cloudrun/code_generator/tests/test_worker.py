@@ -29,15 +29,14 @@ def test_ignore_raw_ws_msg_filter():
     assert msg_filter.filter(record_normal) is True
 
 
-@patch("logging.basicConfig")
-def test_setup_logging(mock_basic_config):
-    """Tests that setup_logging configures root logger handlers correctly."""
+def test_setup_logging():
+    """Tests that setup_logging configures root logger and ssr application logger correctly."""
     setup_logging()
-    mock_basic_config.assert_called_once()
-    kwargs = mock_basic_config.call_args[1]
-    assert kwargs["level"] == logging.INFO
-    assert len(kwargs["handlers"]) == 1
-    assert isinstance(kwargs["handlers"][0], logging.StreamHandler)
+    assert logging.getLogger().level == logging.WARNING
+    orchestrator_logger = logging.getLogger("Orchestrator")
+    assert orchestrator_logger.level == logging.INFO
+    assert len(orchestrator_logger.handlers) == 1
+    assert isinstance(orchestrator_logger.handlers[0], logging.StreamHandler)
 
 
 @pytest.mark.asyncio

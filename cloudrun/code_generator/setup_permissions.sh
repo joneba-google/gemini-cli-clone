@@ -64,9 +64,16 @@ for ROLE in "${EXEC_SA_ROLES[@]}"; do
     --quiet
 done
 
-# Grant storage.objectUser strictly on the target debug log bucket instead of project-wide objectAdmin
+# Grant storage.objectUser strictly on the target debug log bucket and eval results bucket
 echo "Granting storage.objectUser on gs://pr_generation_debug_logs to ${EXEC_SA_EMAIL}..."
 gcloud storage buckets add-iam-policy-binding gs://pr_generation_debug_logs \
+  --member="serviceAccount:${EXEC_SA_EMAIL}" \
+  --role="roles/storage.objectUser" \
+  --project="${PROJECT_ID}" \
+  --quiet
+
+echo "Granting storage.objectUser on gs://pr-generation-eval-results to ${EXEC_SA_EMAIL}..."
+gcloud storage buckets add-iam-policy-binding gs://pr-generation-eval-results \
   --member="serviceAccount:${EXEC_SA_EMAIL}" \
   --role="roles/storage.objectUser" \
   --project="${PROJECT_ID}" \

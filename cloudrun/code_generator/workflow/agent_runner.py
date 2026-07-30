@@ -7,6 +7,7 @@ and automatic local sandbox approvals.
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 from typing import Any, Iterator
@@ -63,6 +64,9 @@ if hooks is not None:
             return "PROCEED"
         logging.warning("Rejecting non-allowlisted tool call: %s", tool_call.name)
         return "REJECT"
+
+
+logger = logging.getLogger("Orchestrator")
 
 
 class AgentRunnerError(Exception):
@@ -144,7 +148,7 @@ class AgentRunner:
         if Agent is None:
             raise AgentRunnerError("Google Antigravity SDK is not installed.")
 
-        logging.info("Initializing Agent '%s' inside %s", role, repo_path)
+        logger.info("Initializing Agent '%s' inside %s", role, repo_path)
 
         # Build fallback / configured system instructions
         system_instructions = f"You are the {role}. You must complete the requested tasks in the workspace."
@@ -152,12 +156,12 @@ class AgentRunner:
             loaded_instructions = self._load_prompt_file(system_prompt_file)
             if loaded_instructions:
                 system_instructions = loaded_instructions
-                logging.info(
+                logger.info(
                     "System prompt successfully loaded from %s",
                     system_prompt_file
                 )
             else:
-                logging.warning(
+                logger.warning(
                     "Requested system prompt file '%s' not found. Reverting to default instructions.",
                     system_prompt_file,
                 )
@@ -187,7 +191,7 @@ class AgentRunner:
             async with AgentRunner._cwd_lock:
                 with working_directory(repo_path):
                     async with Agent(config) as agent:
-                        logging.info(
+                        logger.info(
                             "[%s] Sending initial task prompt to conversation loop...",
                             role,
                         )
@@ -196,21 +200,34 @@ class AgentRunner:
 
                         for chunk in resolved_chunks:
                             chunk_type = chunk.__class__.__name__
+                            try:
+                                chunk_dict = chunk.model_dump()
+                            except AttributeError:
+                                chunk_dict = getattr(chunk, "dict", lambda: {})()
+                            if isinstance(chunk_dict, dict):
+                                chunk_dict["chunk_type"] = chunk_type
+                            else:
+                                chunk_dict = {"chunk_type": chunk_type, "value": str(chunk)}
+
                             chunk_text = getattr(chunk, "text", None)
                             if chunk_type == "Text" and chunk_text:
                                 stdout_list.append(chunk_text)
                             elif chunk_type == "Thought" and chunk_text:
                                 thinking_list.append(chunk_text)
+                                logger.info("[%s Thought]:\n%s", role, chunk_text.strip())
                             elif chunk_type == "ToolCall":
                                 tool_name = getattr(chunk, "name", "unknown")
                                 tool_args = getattr(chunk, "args", {})
-                                logging.info("[%s Tool Call]: %s with args %s", role, tool_name, tool_args)
+                                logger.info("[%s Tool Call]: %s with args %s", role, tool_name, tool_args)
 
             full_output = "".join(stdout_list).strip()
             if not full_output and stdout_list:
                 full_output = "\n".join(stdout_list)
 
-            logging.info("Agent '%s' execution completed successfully.", role)
+            if full_output:
+                logger.info("[%s Response]:\n%s", role, full_output)
+
+            logger.info("Agent '%s' execution completed successfully.", role)
             return full_output, resolved_chunks
 
         except Exception as e:

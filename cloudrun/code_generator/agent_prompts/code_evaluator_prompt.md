@@ -154,10 +154,7 @@ Follow these guidelines to construct the content:
   headers (`### `) or lower. NEVER use Level 2 headers (`## `) inside the PR
   description body, as that will prematurely terminate the orchestrator's regex
   parser.
-- **Issue Number & URL**: You MUST explicitly write `fixes #<issue_number>` and
-  include the Original Issue URL constructed from `github_metadata` (e.g.,
-  `https://github.com/<owner>/<repo>/issues/<issue_number>`) at the top of the
-  PR description details.
+- **Issue Number**: You MUST explicitly write `fixes #<issue_number>` at the top of the PR description details. Do NOT include the full issue URL.
 - **Context & Problem**: Read the fields in `workable_spec.summary`
   (specifically `problem` and `root_cause`) to write a clear, 1-2 sentence
   description explaining the issue and its root cause.

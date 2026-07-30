@@ -47,33 +47,17 @@ from eval_orchestrator import EvalOrchestrator
 import datetime
 
 
-class JsonlLoggingHandler(logging.Handler):
-    """Logging handler that formats and writes records as JSON Lines."""
 
-    def __init__(self, filepath: str) -> None:
-        super().__init__()
-        self.filepath = filepath
-        self.file = open(filepath, "a", encoding="utf-8")
 
-    def emit(self, record: logging.LogRecord) -> None:
-        if not hasattr(self, "file") or self.file.closed:
-            return
-        try:
-            log_entry = {
-                "timestamp": datetime.datetime.fromtimestamp(record.created).isoformat(),
-                "level": record.levelname,
-                "logger": record.name,
-                "message": record.getMessage(),
-            }
-            self.file.write(json.dumps(log_entry) + "\n")
-            self.file.flush()
-        except Exception:
-            self.handleError(record)
 
-    def close(self) -> None:
-        if hasattr(self, "file") and not self.file.closed:
-            self.file.close()
-        super().close()
+class RootWarningFilter(logging.Filter):
+    """Filter to suppress SDK / Vertex retryable noise and System step warnings from root logger."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "System step error" in msg or "Task is overloaded" in msg or "extensible_stubs" in msg or "Servomatic" in msg:
+            return False
+        return True
 
 
 class TestProgressFilter(logging.Filter):
@@ -81,11 +65,13 @@ class TestProgressFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         msg = record.getMessage()
+        if "System step error" in msg or "Task is overloaded" in msg:
+            return False
         return (
             "Starting local evaluation for test case:" in msg
             or "completed:" in msg
             or "[Cleanup]" in msg
-            or "=== [LOCAL EVAL]" in msg
+            or ("=== [LOCAL EVAL]" in msg and "Starting Iteration" not in msg)
         )
 
 
@@ -97,6 +83,7 @@ def parse_args():
     parser.add_argument("--max-attempts", type=int, default=5, help="Max repair iterations per test case")
     parser.add_argument("--keep-env", action="store_true", help="Keep agent_environments directory after run")
     parser.add_argument("--judge", action="store_true", help="Automatically run LLM-as-a-Judge evaluation after completion")
+    parser.add_argument("--gcs", action="store_true", default=False, help="Upload evaluation logs and artifacts to GCS bucket (disabled by default)")
     return parser.parse_args()
 
 
@@ -136,25 +123,35 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
     issue_num = github_meta.get("issue_number", "0")
     test_id = f"{file_base}_{issue_num}"
 
-    # Setup distinct directories for this run under pr_gen_evals/runs/{run_name}/
+    # Setup distinct directories for this run under eval/run_outputs/{run_name}/
     env_dir = os.path.join(run_dir, "agent_environments", test_id)
     logs_dir = os.path.join(run_dir, "logs")
-    jsonl_dir = os.path.join(run_dir, "jsonl")
+    coding_json_dir = os.path.join(run_dir, "json", "coding_agent")
+    eval_json_dir = os.path.join(run_dir, "json", "eval_agent")
     diffs_dir = os.path.join(run_dir, "outputs", "diffs")
     pr_details_dir = os.path.join(run_dir, "outputs", "pr_details")
 
     os.makedirs(env_dir, exist_ok=True)
     os.makedirs(logs_dir, exist_ok=True)
-    os.makedirs(jsonl_dir, exist_ok=True)
+    os.makedirs(coding_json_dir, exist_ok=True)
+    os.makedirs(eval_json_dir, exist_ok=True)
     os.makedirs(diffs_dir, exist_ok=True)
     os.makedirs(pr_details_dir, exist_ok=True)
 
-    log_file_txt = os.path.join(logs_dir, f"{test_id}_logs.log")
-    log_file_jsonl = os.path.join(jsonl_dir, f"{test_id}_logs.jsonl")
+    os.environ["LOCAL_TRACE_DIR"] = os.path.join(run_dir, "json")
+    worker_ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
+    log_file_txt = os.path.join(logs_dir, f"issue_{issue_num}_{worker_ts}_logs.log")
 
-    # Configure per-process file logging
-    logger = logging.getLogger()
+    # Set root logger level to WARNING to drop SDK transport chatter (RAW WS MSG)
+    root = logging.getLogger()
+    root.setLevel(logging.WARNING)
+    for h in root.handlers:
+        h.addFilter(RootWarningFilter())
+
+    # Configure dedicated application logger for SSR workflow
+    logger = logging.getLogger("Orchestrator")
     logger.setLevel(logging.INFO)
+    logger.propagate = False
     for h in logger.handlers[:]:
         logger.removeHandler(h)
 
@@ -162,15 +159,12 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
     fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
     logger.addHandler(fh)
 
-    jh = JsonlLoggingHandler(log_file_jsonl)
-    logger.addHandler(jh)
-
     sh = logging.StreamHandler(sys.stdout)
     sh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
     sh.addFilter(TestProgressFilter())
     logger.addHandler(sh)
 
-    logging.info("Starting local evaluation for test case: %s", test_id)
+    logger.info("Starting local evaluation for test case: %s", test_id)
 
     # Instantiate config (dynamically resolving repo from github_metadata) & orchestrator
     config = EvalConfig(workspace_root=env_dir, firestore_doc_dict=doc_dict)
@@ -191,11 +185,11 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
         # Save output artifacts on success
         if result.get("success"):
             if result.get("diff"):
-                diff_path = os.path.join(diffs_dir, f"{test_id}_diff.diff")
+                diff_path = os.path.join(diffs_dir, f"issue_{issue_num}_{worker_ts}_diff.diff")
                 with open(diff_path, "w", encoding="utf-8") as f:
                     f.write(result["diff"])
             if result.get("pr_details"):
-                pr_path = os.path.join(pr_details_dir, f"{test_id}_pr_details.md")
+                pr_path = os.path.join(pr_details_dir, f"issue_{issue_num}_{worker_ts}_pr_details.md")
                 with open(pr_path, "w", encoding="utf-8") as f:
                     f.write(result["pr_details"])
 
@@ -234,10 +228,8 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
 
         # Remove and close logging handlers cleanly
         logger.removeHandler(sh)
-        logger.removeHandler(jh)
         logger.removeHandler(fh)
         sh.close()
-        jh.close()
         fh.close()
 
     return result
@@ -245,9 +237,19 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
 
 def main():
     args = parse_args()
+    # Configure GCS logging mode for local evaluation
+    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
+    if args.gcs:
+        os.environ["DISABLE_GCS_LOGGING"] = "false"
+        os.environ["EVAL_GCS_RUN_NAME"] = args.run_name
+        os.environ["EVAL_GCS_RUN_TIMESTAMP"] = timestamp
+    else:
+        os.environ["DISABLE_GCS_LOGGING"] = "true"
+        os.environ.pop("EVAL_GCS_RUN_NAME", None)
+        os.environ.pop("EVAL_GCS_RUN_TIMESTAMP", None)
 
-    # Create root run output directory under pr_gen_evals/runs/{run_name}/
-    runs_base_dir = os.path.abspath(os.path.join(BASE_DIR, "pr_gen_evals", "runs"))
+    # Create root run output directory under eval/run_outputs/{run_name}/
+    runs_base_dir = os.path.abspath(os.path.join(BASE_DIR, "eval", "run_outputs"))
     run_dir = os.path.join(runs_base_dir, args.run_name)
     os.makedirs(run_dir, exist_ok=True)
 
@@ -335,6 +337,13 @@ def main():
                 run_judge()
         except Exception as e:
             logging.error("Failed to execute LLM diff judge evaluation: %s", e)
+
+    if args.gcs:
+        try:
+            from gcs_logger import upload_eval_run_artifacts
+            upload_eval_run_artifacts(run_dir, args.run_name)
+        except Exception as e:
+            logging.warning("Failed to upload evaluation run artifacts to GCS: %s", e)
 
 
 if __name__ == "__main__":

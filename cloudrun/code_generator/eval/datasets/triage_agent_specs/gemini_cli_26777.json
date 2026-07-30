@@ -1,0 +1,46 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26777",
+    "summary": {
+      "problem": "getRipgrepPath() fails to find system-installed ripgrep on Windows when installed via Winget, Scoop, or user PATH directories.",
+      "root_cause": "isTrustedSystemPath() in packages/core/src/utils/paths.ts only includes SystemRoot, ProgramFiles, and ProgramFiles(x86) in trustedPrefixes on Windows, excluding common installation directories like LocalAppData, AppData, ProgramData, and USERPROFILE.",
+      "context": "When the bundled ripgrep binary is missing, resolveRipgrepPath() falls back to resolveExecutable('rg') and checks isTrustedSystemPath(). Because Winget and other package managers install binaries in LocalAppData or AppData directories, isTrustedSystemPath() rejects the binary as untrusted, causing Gemini CLI to fall back to GrepTool."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/paths.ts"
+      ],
+      "steps": [
+        "Update isTrustedSystemPath() in packages/core/src/utils/paths.ts to include environment variables for LocalAppData, AppData, ProgramData, and USERPROFILE in trustedPrefixes on Windows.",
+        "Ensure empty or undefined environment variables are filtered out before normalizing paths."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/paths.test.ts",
+      "expected_behavior": "isTrustedSystemPath() should return true for Windows executables located under LocalAppData, AppData, ProgramData, or USERPROFILE directories when those environment variables are defined.",
+      "verification_steps": [
+        "Add unit test cases in packages/core/src/utils/paths.test.ts under the isTrustedSystemPath Windows test suite that stub LocalAppData, AppData, ProgramData, and USERPROFILE environment variables.",
+        "Verify that paths such as C:\\Users\\User\\AppData\\Local\\Microsoft\\WinGet\\Links\\rg.exe return true for isTrustedSystemPath()."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 26777,
+    "title": "Title: getRipgrepPath() never falls back to system PATH \u2014 ripgrep unavailable despite being installed",
+    "target_version": "1a894c18eaaa7229159a5433c4350a1594b25bac",
+    "pr_number": 26868
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

@@ -9,6 +9,8 @@ import logging
 import urllib.error
 import urllib.request
 
+logger = logging.getLogger("Orchestrator")
+
 
 class GitHubClientError(Exception):
     """Raised when a GitHub API request fails or is rejected."""
@@ -70,14 +72,14 @@ class GitHubClient:
             method="POST",
         )
 
-        logging.info(
+        logger.info(
             "Sending Pull Request creation request for branch: %s", branch_name
         )
         try:
-            with urllib.request.urlopen(req,timeout=60) as response:
+            with urllib.request.urlopen(req, timeout=60) as response:
                 response_payload = json.loads(response.read().decode("utf-8"))
                 pr_number: str = str(response_payload.get("number", response_payload.get("html_url", "")))
-                logging.info(
+                logger.info(
                     "Pull Request created successfully! PR Number: %s", pr_number
                 )
                 return pr_number
@@ -88,10 +90,10 @@ class GitHubClient:
             else:
                 err_msg = f"Network Error: {getattr(e, 'reason', e)}"
 
-            logging.error("Failed to create Pull Request: %s", err_msg)
+            logger.error("Failed to create Pull Request: %s", err_msg)
             raise GitHubClientError(f"GitHub API Error: {err_msg}") from e
         except Exception as e:
-            logging.exception("Encountered unexpected error during PR creation.")
+            logger.exception("Encountered unexpected error during PR creation.")
             raise GitHubClientError(
                 f"Unexpected API client error: {e}"
             ) from e

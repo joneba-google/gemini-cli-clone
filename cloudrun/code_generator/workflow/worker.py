@@ -20,14 +20,19 @@ class IgnoreRawWsMsgFilter(logging.Filter):
 
 
 def setup_logging() -> None:
-    """Sets up the root logger with a standardized format."""
+    """Sets up the root logger with WARNING level and dedicated 'ssr' logger at INFO."""
+    logging.getLogger().setLevel(logging.WARNING)
+
+    app_logger = logging.getLogger("Orchestrator")
+    app_logger.setLevel(logging.INFO)
+    app_logger.propagate = False
+
+    for h in app_logger.handlers[:]:
+        app_logger.removeHandler(h)
+
     handler = logging.StreamHandler(sys.stdout)
-    handler.addFilter(IgnoreRawWsMsgFilter())
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=[handler],
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+    app_logger.addHandler(handler)
 
 
 async def main() -> None:

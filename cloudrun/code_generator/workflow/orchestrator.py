@@ -55,6 +55,23 @@ from gcs_logger import (
 )
 
 
+logger = logging.getLogger("Orchestrator")
+
+
+def _clean_error_message(e: Exception) -> str:
+    """Extracts a concise, single-line error summary from AgentRunnerError, stripping protobuf dumps."""
+    msg = str(e)
+    if "request failed" in msg:
+        for line in msg.splitlines():
+            if "request failed" in line:
+                return line.strip()
+    for line in msg.splitlines():
+        clean = line.strip()
+        if clean and not clean.startswith(":") and not clean.startswith("{") and "servomatic" not in clean and "rpc_idenitifer" not in clean:
+            return clean[:200]
+    return str(e)[:200]
+
+
 class OrchestrationError(Exception):
     """Raised when the orchestration loop encounters an unrecoverable failure."""
 
@@ -401,7 +418,8 @@ class Orchestrator:
                 timestamp=timestamp,
             )
         except AgentRunnerError as e:
-            logging.error("Coding Agent run encountered an error: %s. Transitioning to evaluation...", e)
+            clean_err = _clean_error_message(e)
+            logger.error("Coding Agent run encountered an error: %s. Transitioning to evaluation...", clean_err)
 
     def _prepare_iteration_commit(
         self,
@@ -539,7 +557,8 @@ class Orchestrator:
                 timestamp=timestamp,
             )
         except AgentRunnerError as e:
-            logging.error("Evaluator Agent execution crashed: %s", e)
+            clean_err = _clean_error_message(e)
+            logger.error("Evaluator Agent execution crashed: %s", clean_err)
 
         # Upload PR details if created by Evaluator Agent
         pr_details_path = os.path.join(self.config.eval_repo_path, "pr_details.md")
