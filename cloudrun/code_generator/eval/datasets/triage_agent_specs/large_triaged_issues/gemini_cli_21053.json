@@ -1,0 +1,47 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21053",
+    "summary": {
+      "problem": "MCP tool calls fail with error -32600 ('Tool has an output schema but did not return structured content') when a tool registered with an outputSchema returns flat JSON text inside content instead of structuredContent.",
+      "root_cause": "The @modelcontextprotocol/sdk client validates tool responses against outputSchema and expects structuredContent to be populated. The CLI previously only applied XcodeMcpBridgeFixTransport to parse JSON content into structuredContent specifically for xcrun mcpbridge, leaving all other MCP transports unhandled.",
+      "context": "Many MCP servers return flat JSON string content in content[0].text rather than structuredContent. Wrapping all MCP transports to automatically populate structuredContent when content contains valid JSON text resolves protocol error -32600 for any schema-backed MCP tool."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/mcp-client.ts",
+        "packages/core/src/tools/xcode-mcp-fix-transport.ts"
+      ],
+      "steps": [
+        "Update packages/core/src/tools/xcode-mcp-fix-transport.ts to export a generalized transport wrapper (e.g. McpStructuredContentFixTransport or maintaining XcodeMcpBridgeFixTransport as an alias) that parses JSON text from content and sets structuredContent if missing.",
+        "Update createTransport in packages/core/src/tools/mcp-client.ts so that all created MCP transports (stdio, SSE, HTTP) are wrapped with the structured content fix transport instead of applying it conditionally only for xcrun mcpbridge."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/xcode-mcp-fix-transport.test.ts",
+      "expected_behavior": "MCP tool results with valid JSON text in content will have structuredContent automatically populated for all MCP server connections, preventing error -32600 when outputSchema is defined.",
+      "verification_steps": [
+        "Run vitest on packages/core/src/tools/xcode-mcp-fix-transport.test.ts to verify transport interception.",
+        "Add unit test assertions verifying that general non-Xcode MCP tool responses with missing structuredContent are successfully augmented with structuredContent."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 21053,
+    "title": "MCP tool results with 'outputSchema' fail with error -32600",
+    "target_version": "fdfd626f28c3fb9a44d95b6aa997d55f012615f3",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

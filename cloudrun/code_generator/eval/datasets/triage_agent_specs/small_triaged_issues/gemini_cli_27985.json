@@ -1,0 +1,49 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#27985",
+    "summary": {
+      "problem": "When running in ACP server mode (gemini --acp), token usage reported in PromptResponse omits cached and thought tokens from Gemini usageMetadata, causing ACP clients to overestimate costs.",
+      "root_cause": "In packages/cli/src/acp/acpSession.ts, the GeminiEventType.Finished handler only extracts promptTokenCount and candidatesTokenCount from usageMetadata, ignoring cachedContentTokenCount and thoughtsTokenCount. Additionally, the standard ACP PromptResponse.usage field is not populated with these values.",
+      "context": "Gemini API returns cachedContentTokenCount and thoughtsTokenCount in usageMetadata. ACP standard usage schema supports inputTokens, outputTokens, cachedReadTokens, thoughtTokens, and totalTokens."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/acp/acpSession.ts"
+      ],
+      "steps": [
+        "In packages/cli/src/acp/acpSession.ts, initialize variables totalCachedReadTokens and totalThoughtTokens alongside totalInputTokens and totalOutputTokens in the prompt method.",
+        "In the turn loop of prompt, initialize turnCachedReadTokens and turnThoughtTokens alongside turnInputTokens and turnOutputTokens.",
+        "Update the GeminiEventType.Finished event handler in acpSession.ts to extract usage.cachedContentTokenCount into turnCachedReadTokens and usage.thoughtsTokenCount into turnThoughtTokens.",
+        "Accumulate turnCachedReadTokens and turnThoughtTokens into totalCachedReadTokens and totalThoughtTokens at the end of each turn.",
+        "Populate the standard ACP usage field in PromptResponse returns with inputTokens, outputTokens, cachedReadTokens, thoughtTokens, and totalTokens."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/acp/acpSession.test.ts",
+      "expected_behavior": "When a prompt turn completes, PromptResponse.usage includes cachedReadTokens and thoughtTokens populated from usageMetadata.cachedContentTokenCount and usageMetadata.thoughtsTokenCount.",
+      "verification_steps": [
+        "Update mock stream responses in packages/cli/src/acp/acpSession.test.ts to include cachedContentTokenCount and thoughtsTokenCount in usageMetadata.",
+        "Add test assertions verifying that calling session.prompt() returns a response containing usage with correct inputTokens, outputTokens, cachedReadTokens, thoughtTokens, and totalTokens values."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 27985,
+    "title": "ACP: PromptResponse usage omits cached/thought tokens, inflating client cost estimates",
+    "target_version": "f741d0328209b92a46571ba1d565e6c56fb4f32d",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

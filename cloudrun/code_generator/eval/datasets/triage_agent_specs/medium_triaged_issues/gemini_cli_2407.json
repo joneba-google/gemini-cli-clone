@@ -1,0 +1,48 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#2407",
+    "summary": {
+      "problem": "/privacy slash command fails with 'Error loading Opt-in settings: User does not have a current tier' when logged in with Google Account + GOOGLE_CLOUD_PROJECT.",
+      "root_cause": "In usePrivacySettings.ts, the getTier function throws an Error when loadCodeAssist response does not contain currentTier, instead of inspecting allowedTiers or treating missing tier as non-free tier.",
+      "context": "For licensed accounts using GOOGLE_CLOUD_PROJECT, loadCodeAssist response may leave currentTier undefined. When getTier throws an exception, usePrivacySettings sets the error state instead of setting isFreeTier to false to show the paid privacy notice."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/hooks/usePrivacySettings.ts"
+      ],
+      "steps": [
+        "Modify getTier in packages/cli/src/ui/hooks/usePrivacySettings.ts to safely resolve the user tier when res.currentTier is not defined.",
+        "In getTier, check if res.currentTier exists; if not, check res.allowedTiers for a default tier or fall back to UserTierId.LEGACY instead of throwing an error.",
+        "Ensure usePrivacySettings sets isFreeTier to false when the user tier is not UserTierId.FREE."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/usePrivacySettings.test.ts",
+      "expected_behavior": "When loadCodeAssist returns a response without currentTier, usePrivacySettings sets isFreeTier to false without error.",
+      "verification_steps": [
+        "Add unit tests in packages/cli/src/ui/hooks/usePrivacySettings.test.ts for usePrivacySettings.",
+        "Mock CodeAssistServer.loadCodeAssist to return a response with currentTier as undefined.",
+        "Verify that privacyState has isLoading: false, error: undefined, and isFreeTier: false."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 2407,
+    "title": "/privacy: Error loading Opt-in settings: User does not have a current tier",
+    "target_version": "25cdf9b762a13aa7bbfab363dc1c85bdf2c3fae1",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

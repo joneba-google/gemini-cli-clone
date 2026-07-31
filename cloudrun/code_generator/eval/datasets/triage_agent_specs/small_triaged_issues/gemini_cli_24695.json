@@ -1,0 +1,45 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#24695",
+    "summary": {
+      "problem": "Exiting plan mode via exit_plan_mode with auto-accept edits triggers a 400 Bad Request (INVALID_ARGUMENT: 'Request contains an invalid argument') error on the subsequent API request.",
+      "root_cause": "When plan mode is exited, setApprovalMode changes the active approval mode from PLAN to DEFAULT or AUTO_EDIT. This triggers setTools(), where ToolRegistry.isActiveTool excludes exit_plan_mode from functionDeclarations because isPlanMode is now false. However, the chat history sent to streamGenerateContent still contains the exit_plan_mode functionCall and functionResponse. The Gemini API rejects requests where history references tool calls not present in functionDeclarations.",
+      "context": "ToolRegistry dynamically toggles tool declarations based on the active ApprovalMode. Stripping exit_plan_mode immediately after execution causes an API schema mismatch with the recorded conversation history."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/tool-registry.ts"
+      ],
+      "steps": [
+        "Update isActiveTool or getFunctionDeclarations in packages/core/src/tools/tool-registry.ts so that exit_plan_mode declaration remains present or active during mode transitions when needed by session history."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/tool-registry.test.ts",
+      "expected_behavior": "Function declarations returned by ToolRegistry retain exit_plan_mode across plan mode exit transitions, ensuring streamGenerateContent requests succeed without INVALID_ARGUMENT errors.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/tools/tool-registry.test.ts verifying function declarations before and after transitioning out of plan mode.",
+        "Run `npx vitest packages/core/src/tools/tool-registry.test.ts` to confirm tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 24695,
+    "title": "Request contains an invalid argument",
+    "target_version": "15298b28c2753bab9e72b3f432ceb423a3ac981f",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

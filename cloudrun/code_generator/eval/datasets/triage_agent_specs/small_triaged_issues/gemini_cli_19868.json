@@ -1,0 +1,47 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#19868",
+    "summary": {
+      "problem": "Path completion using @ breaks and fails when context.fileFiltering.customIgnoreFilePaths contains directory paths or invalid file paths (e.g., node_modules/).",
+      "root_cause": "IgnoreFileParser.getIgnoreFilePaths() uses fs.existsSync(filePath) to verify ignore file paths, which returns true for existing directories. When loadIgnoreRules() calls fs.readFileSync() on these directory paths, Node.js throws an EISDIR error that causes file search initialization in useAtCompletion to fail and reject.",
+      "context": "customIgnoreFilePaths allows users to specify custom ignore files. If a directory path exists on disk matching an entry in customIgnoreFilePaths, getIgnoreFilePaths returns it as an ignore file, leading to EISDIR during read operations."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/ignoreFileParser.ts",
+        "packages/core/src/utils/filesearch/ignore.ts"
+      ],
+      "steps": [
+        "Update IgnoreFileParser.getIgnoreFilePaths in packages/core/src/utils/ignoreFileParser.ts to ensure that returned ignore file paths exist and are regular files (e.g., checking fs.statSync(filePath).isFile()) rather than relying solely on fs.existsSync.",
+        "Update loadIgnoreRules in packages/core/src/utils/filesearch/ignore.ts to safely verify that each ignore file path is a regular file before calling fs.readFileSync, or handle read errors gracefully."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/ignoreFileParser.test.ts",
+      "expected_behavior": "getIgnoreFilePaths filters out directories and non-file entries, and loadIgnoreRules safely handles non-file or directory paths without throwing EISDIR errors.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/utils/ignoreFileParser.test.ts passing directory paths (such as 'node_modules/') to IgnoreFileParser and asserting getIgnoreFilePaths returns only regular files.",
+        "Add a unit test verifying loadIgnoreRules does not throw EISDIR when given directory paths."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 19868,
+    "title": "\"context.fileFiltering.customIgnoreFilePaths\" setting breaks file completion when using @",
+    "target_version": "84666e1bbc35276eff31d8b83e9608f14ac8958a",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

@@ -1,0 +1,47 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26861",
+    "summary": {
+      "problem": "When closing a session, the resume message includes a command like gemini --resume 'session_id' which fails with 'Invalid session identifier' when copied and run, particularly on Windows.",
+      "root_cause": "SessionSelector.findSession does not strip surrounding single or double quotes from the session identifier passed via CLI arguments, causing session lookup to fail when shells (like Windows CMD) pass quotes literally in process.argv.",
+      "context": "Windows Command Prompt (cmd.exe) does not strip single quotes from command arguments, resulting in process.argv receiving the session ID enclosed in literal quote characters."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/utils/sessionUtils.ts",
+        "packages/cli/src/ui/components/SessionSummaryDisplay.tsx"
+      ],
+      "steps": [
+        "Update SessionSelector.findSession in packages/cli/src/utils/sessionUtils.ts to strip leading and trailing single or double quotes from the identifier argument before attempting lookup.",
+        "Update SessionSummaryDisplay.tsx to ensure session resume messages format session IDs cleanly without adding problematic surrounding quotes."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/SessionSummaryDisplay.test.tsx",
+      "expected_behavior": "SessionSelector successfully resolves session IDs regardless of whether they are enclosed in single or double quotes, and SessionSummaryDisplay outputs clean resume instructions.",
+      "verification_steps": [
+        "Add unit tests in SessionSummaryDisplay.test.tsx to verify the resume command string output across platforms.",
+        "Add unit tests in sessions.test.ts or sessionUtils tests to verify that SessionSelector.findSession handles quoted identifiers."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 26861,
+    "title": "When I close a session, I get the message...",
+    "target_version": "1a894c18eaaa7229159a5433c4350a1594b25bac",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

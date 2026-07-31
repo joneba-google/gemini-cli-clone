@@ -121,7 +121,7 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
     file_base = os.path.splitext(os.path.basename(file_path))[0]
     github_meta = doc_dict.get("github_metadata", {})
     issue_num = github_meta.get("issue_number", "0")
-    test_id = f"{file_base}_{issue_num}"
+    test_id = file_base if str(issue_num) in file_base else f"{file_base}_{issue_num}"
 
     # Setup distinct directories for this run under eval/run_outputs/{run_name}/
     env_dir = os.path.join(run_dir, "agent_environments", test_id)
@@ -185,11 +185,11 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
         # Save output artifacts on success
         if result.get("success"):
             if result.get("diff"):
-                diff_path = os.path.join(diffs_dir, f"issue_{issue_num}_{worker_ts}_diff.diff")
+                diff_path = os.path.join(diffs_dir, f"{test_id}_diff.diff")
                 with open(diff_path, "w", encoding="utf-8") as f:
                     f.write(result["diff"])
             if result.get("pr_details"):
-                pr_path = os.path.join(pr_details_dir, f"issue_{issue_num}_{worker_ts}_pr_details.md")
+                pr_path = os.path.join(pr_details_dir, f"{test_id}_pr_details.md")
                 with open(pr_path, "w", encoding="utf-8") as f:
                     f.write(result["pr_details"])
 

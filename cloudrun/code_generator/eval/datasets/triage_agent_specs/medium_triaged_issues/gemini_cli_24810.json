@@ -1,0 +1,48 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24810",
+    "summary": {
+      "problem": "Stable installations of Gemini CLI were automatically updated to nightly build versions.",
+      "root_cause": "In .github/actions/publish-release/action.yml, npm publish uses the invalid --no-tag flag. NPM defaults to tagging releases as 'latest' when no valid tag option is specified. As a result, daily nightly builds overwrite the 'latest' dist-tag on npm, causing stable installations to resolve and update to nightly releases.",
+      "context": "The release workflow runs daily for nightly builds and passes npm-tag='nightly' to the publish-release action. However, because publish-release invokes 'npm publish --no-tag', npm automatically assigns the 'latest' tag to the published nightly package before tag-npm-release runs."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        ".github/actions/publish-release/action.yml"
+      ],
+      "steps": [
+        "Open .github/actions/publish-release/action.yml.",
+        "Locate the npm publish execution steps for CORE, CLI, and A2A packages.",
+        "Replace the invalid --no-tag flag in npm publish with --tag=\"${{ inputs.npm-tag }}\".",
+        "Verify that npm publish correctly assigns the target distribution tag (such as nightly, preview, or latest) during package publication."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "When publishing nightly or preview builds, npm publish tags the packages with the specified npm-tag (e.g., nightly) instead of defaulting to latest, ensuring stable installations on the latest dist-tag are unaffected.",
+      "verification_steps": [
+        "Run a dry-run of the release action or inspect workflow steps to ensure 'npm publish --tag=${{ inputs.npm-tag }}' is invoked.",
+        "Verify npm dist-tag latest remains pointing to stable release versions and is not overwritten by nightly publications."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 24810,
+    "title": "Stable installation was automatically updated to a nightly build",
+    "target_version": "main",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

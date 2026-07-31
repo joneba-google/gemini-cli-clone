@@ -1,0 +1,47 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#20635",
+    "summary": {
+      "problem": "A typo in a policy rule property name (e.g., toolname instead of toolName) is silently stripped during parsing, causing the rule to match all tools and inadvertently allow all tools.",
+      "root_cause": "In packages/core/src/policy/toml-loader.ts, PolicyRuleSchema and SafetyCheckerRuleSchema use Zod z.object() without .strict(). Zod silently strips unrecognized keys by default, leaving toolName as undefined, which the policy engine interprets as matching all tools.",
+      "context": "Rejecting policy entries with unexpected or misspelled fields prevents silent configuration errors that could lead to unintended tool permission grants."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/policy/toml-loader.ts"
+      ],
+      "steps": [
+        "In packages/core/src/policy/toml-loader.ts, append .strict() to PolicyRuleSchema so that any unrecognized keys in policy rules trigger a Zod schema validation error.",
+        "In packages/core/src/policy/toml-loader.ts, append .strict() to SafetyCheckerRuleSchema so that any unrecognized keys in safety checker rules trigger a Zod schema validation error."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/policy/toml-loader.test.ts",
+      "expected_behavior": "Policy files containing unrecognized or misspelled keys (e.g., toolname) fail schema validation and result in a schema_validation error.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/policy/toml-loader.test.ts that attempts to load a policy TOML containing unknown keys like toolname.",
+        "Assert that loadPoliciesFromToml returns zero rules and records a schema_validation error.",
+        "Run the test suite using Vitest to verify all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 20635,
+    "title": "Typo in policy inadvertently allows all tools",
+    "target_version": "08ee13613243729c982cf8f512b3e33696b85809",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

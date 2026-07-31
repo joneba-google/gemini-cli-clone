@@ -113,7 +113,6 @@ async def test_evaluate_single_diff_score_0(mock_agent_runner_cls, mock_fetch_di
     assert "breaks build" in result["verdict_description"]
 
 
-@patch("sys.argv", ["eval_diff_judge.py", "--run-name", "test_run_1", "--input-path", "eval/datasets/ground_truth_specs/golden_issues"])
 @patch("eval_diff_judge.evaluate_single_diff")
 def test_main_report_generation(mock_eval_single, tmp_path):
     """Tests full main() evaluation run generating eval_score.txt report."""
@@ -123,6 +122,10 @@ def test_main_report_generation(mock_eval_single, tmp_path):
         "verdict_description": "Full parity fix.",
         "success": True,
     }
+
+    input_dir = tmp_path / "golden_issues"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    (input_dir / "gemini_cli_25693.json").write_text(json.dumps({"github_metadata": {"issue_number": 25693}}), encoding="utf-8")
 
     runs_dir = tmp_path / "eval" / "run_outputs" / "test_run_1"
     diffs_dir = runs_dir / "outputs" / "diffs"
@@ -134,7 +137,8 @@ def test_main_report_generation(mock_eval_single, tmp_path):
         json.dumps([{"test_id": "gemini_cli_25693", "attempts": 2, "max_attempts": 5, "runtime_seconds": 45.2}])
     )
 
-    with patch("eval_diff_judge.RUNS_BASE_DIR", str(tmp_path / "eval" / "run_outputs")):
+    with patch("eval_diff_judge.RUNS_BASE_DIR", str(tmp_path / "eval" / "run_outputs")), \
+         patch("sys.argv", ["eval_diff_judge.py", "--run-name", "test_run_1", "--input-path", str(input_dir)]):
         main()
 
     score_file = runs_dir / "test_run_1_eval_score.md"

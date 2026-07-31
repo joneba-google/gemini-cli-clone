@@ -1,0 +1,46 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#27000",
+    "summary": {
+      "problem": "Requests made using model 'gemini-3.1-pro-preview' fail with API error 400 INVALID_ARGUMENT ('Request contains an invalid argument.').",
+      "root_cause": "'gemini-3.1-pro-preview' and related 3.1 models are missing from DEFAULT_MODEL_CONFIGS.aliases in packages/core/src/config/defaultModelConfigs.ts. As a result, ModelConfigService fails to resolve a specific alias and falls back to 'chat-base', which sets 'includeThoughts: true' in thinkingConfig without setting 'thinkingLevel: ThinkingLevel.HIGH' as required for Gemini 3.1 models.",
+      "context": "Gemini 3.x models require thinkingLevel to be specified in thinkingConfig (configured via 'chat-base-3'). Without an alias definition extending 'chat-base-3', the API request configuration generated for 'gemini-3.1-pro-preview' is malformed."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/config/defaultModelConfigs.ts"
+      ],
+      "steps": [
+        "In packages/core/src/config/defaultModelConfigs.ts, add missing alias definitions for 'gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools', and 'gemini-3.1-flash-lite-preview' under DEFAULT_MODEL_CONFIGS.aliases extending 'chat-base-3'.",
+        "Ensure modelConfig for each alias sets the corresponding model identifier string."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/modelConfig.golden.test.ts",
+      "expected_behavior": "ModelConfigService resolves 'gemini-3.1-pro-preview' configuration with thinkingLevel set to HIGH from 'chat-base-3', ensuring valid API request generation.",
+      "verification_steps": [
+        "Run vitest on packages/core/src/services/modelConfig.golden.test.ts with UPDATE_GOLDENS=true to update the golden files with the new model aliases.",
+        "Run vitest packages/core/src/services/modelConfig.golden.test.ts to verify that golden tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 27000,
+    "title": "Request contains an invalid argument.",
+    "target_version": "297d3a30671226141ee0a94fd51d0cff7ff7501c",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

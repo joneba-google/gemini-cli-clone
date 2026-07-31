@@ -1,0 +1,46 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#25566",
+    "summary": {
+      "problem": "CLI crashes on startup with an unhandled promise rejection when planSettings.directory is configured to a directory outside the project root.",
+      "root_cause": "In Config._initialize(), this.storage.getPlansDir() is called outside the try block. When getPlansDir() throws an error because the custom plans directory is outside the project root, the rejection is unhandled.",
+      "context": "The storage layer enforces that custom plans directories reside within the project root to maintain sandbox boundaries. When configured incorrectly in user settings, attempting to access the plans directory during startup causes the CLI initialization process to throw an uncaught error."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/config/config.ts"
+      ],
+      "steps": [
+        "Move the call to this.storage.getPlansDir() inside the try block within Config._initialize() so that path validation errors are caught gracefully during startup.",
+        "Add try/catch blocks around storage.getPlansDir() calls in setSessionId and refreshSessionScopedPlansDirectory in packages/core/src/config/config.ts to prevent uncaught exceptions during session updates when an invalid custom plans directory is configured."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/config/config.test.ts",
+      "expected_behavior": "Config initialization succeeds without an unhandled promise rejection even when planSettings.directory is set to a path outside the project root.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/config/config.test.ts where planSettings.directory is set to a path outside the project root.",
+        "Verify that calling config.initialize() completes without throwing an unhandled rejection."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 25566,
+    "title": "bug report requested by app.",
+    "target_version": "22fb83320ec783f9925ace6a4f9dfc0fe8857f47",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

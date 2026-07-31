@@ -175,8 +175,11 @@ The table below documents every environment variable used across production exec
 | **[eval/eval_orchestrator.py](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/cloudrun/code_generator/eval/eval_orchestrator.py)** | `EvalOrchestrator(Orchestrator)` subclass. Uses `logger = logging.getLogger("Orchestrator")`. Extracts `owner` and `repo` from `github_metadata.repository` (defaulting to `google-gemini/gemini-cli`) and passes them to `_run_code_generation` and `_run_evaluation`. In `_sync_or_clone_repository()`, runs `git fetch origin` and checks out `eval-agent-issue-<num>` targeting `github_metadata.target_version` SHA (falling back to `origin/main` if missing/failed). Bypasses Firestore locking, writes out `firestore_doc.json` in repo root, configures `.git/info/exclude` in the PR repo workspace so `firestore_doc.json` and agent scratch files never leak into git diffs, automatically runs `npm ci --maxsockets 3` if needed, tracks repair loop iteration turns (`attempts` and `max_attempts`), and enforces the `< 500 lines` limit by computing `git diff --stat` directly against `target_version` (or `HEAD~1`) instead of floating `origin/main`. |
 | **[eval/eval_suite.py](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/cloudrun/code_generator/eval/eval_suite.py)** | Master parallel test harness (`--input-path`, `--run-name`, `--max-workers`, `--max-attempts` defaulting to 5, `--keep-env`, `--judge`, `--gcs` disabled by default). Directs application logging through `logger = logging.getLogger("Orchestrator")` with `FileHandler` and `StreamHandler(sys.stdout)` with `TestProgressFilter` and `RootWarningFilter`. Restricts terminal `StreamHandler` logs to high-level test status and progress milestones while preserving full un-truncated logs in file handlers (`logs/issue_<issue_number>_<timestamp>_logs.log`). Saves git diffs to `outputs/diffs/issue_<issue_number>_<timestamp>_diff.diff` and PR details to `outputs/pr_details/issue_<issue_number>_<timestamp>_pr_details.md`. When `--gcs` is supplied, sets `EVAL_GCS_RUN_NAME` and `EVAL_GCS_RUN_TIMESTAMP` and invokes `upload_eval_run_artifacts()` to upload `Results.txt`, `<run_name>_eval_score.md`, `logs/`, and `outputs/` directly to `pr-generation-eval-results/runs/<run_name>_<timestamp>/`. If `--judge` is set, automatically invokes `eval_diff_judge.main()`. |
 | **[eval/generate_golden_issue.py](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/cloudrun/code_generator/eval/generate_golden_issue.py)** | Dual golden issue generator CLI (`--issue`, `--pr`, `--owner`, `--repo`, `--mode`). Generates golden issue JSON files with dynamic filenames `{repo.replace('-', '_')}_{issue_number}.json` using (1) Ground-Truth method (backwards PR diff synthesis in `eval/datasets/ground_truth_specs/`) and (2) Triage Agent method (forward prediction via `triage_orchestrator` in `eval/datasets/triage_agent_specs/`). |
+| **[eval/triage_agent_runner.py](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/cloudrun/code_generator/eval/triage_agent_runner.py)** | Master parallel batch runner (`--issues`, `--owner`, `--repo`, `--concurrency` defaulting to 3, `--gcs`, `--keep-worktrees`). Fetches issue details via GitHub API, resolves `target_version` (`baseRefOid` for closed issues with PRs; `origin/main` for open issues), manages temporary Git worktrees with per-task cleanup, executes `process_issue_triage` concurrently via `ThreadPoolExecutor`, and formats outputs adhering to golden spec schemas in `eval/datasets/triage_agent_specs/triage_agent_issues/` and `logs/`. |
+| **[eval/cloud_triage_runner.py](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/cloudrun/code_generator/eval/cloud_triage_runner.py)** | Cloud Run Job wrapper executing `triage_agent_runner.py` with CLI arguments (`--issues`, `--concurrency 3`, `--gcs`) and syncing results to `gs://pr-gen-eval-results/triage_agent_specs/`. |
 | **[eval/judge_prompt.md](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/cloudrun/code_generator/eval/judge_prompt.md)** | LLM judge markdown rubric. Injects placeholders: `{{OWNER}}`, `{{REPO}}`, `{{ISSUE_ID}}`, `{{ISSUE_TITLE}}`, `{{ISSUE_SUMMARY}}`, `{{TRUE_DIFF}}`, `{{PROPOSED_DIFF}}`. Enforces 4-tier rubric (3 = Full Parity with adequate unit tests; 2 = Similar Functionality lacking edge cases/tests; 1 = Minimal/incomplete; 0 = Severe Defect/Security vulnerability like ReDoS or command injection). Requires strict raw JSON output: `{"score": <0-3>, "verdict_description": "..."}`. |
 | **[eval/reformat_golden_issues.py](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/cloudrun/code_generator/eval/reformat_golden_issues.py)** | Migration utility modifying JSON files in `golden_issues/` in-place. Maps `"issue_title"` to `github_metadata.title`, `"expected_workable_spec"` to `workable_spec`, generates `issue_id` if absent, and injects required DB fields (`status: "TRIAGED"`, `lock: {holder: null, expires_at: null}`, `triage_attempts: 0`, `error: ""`). |
+| **[eval/generate_diff_viewer.py](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/cloudrun/code_generator/eval/generate_diff_viewer.py)** | Interactive GitHub-Style HTML Diff Viewer Generator (`--run-name`, `--input-path`, `--output-html`). Generates interactive standalone GitHub-style HTML diff report comparing Ground-Truth PR diffs, Agent Proposed diffs, and original source file contents. Outputs to `eval/run_outputs/<run_name>/outputs/diff_viewers/index.html` (and `<run_name>_diff_viewer.html`). |
 
 ---
 
@@ -184,7 +187,7 @@ The table below documents every environment variable used across production exec
 | Folder / File | Architecture & Comprehensive Specifications |
 | :--- | :--- |
 | **`golden_issues/`** | Dataset of 28 real GitHub issue JSON specifications. Evaluates fixes against the real-world **`google-gemini/gemini-cli`** TypeScript repository (distinct from orchestrator workspace repo). See Section 5.3 for full problem domain taxonomy. |
-| **`tests/`** | Hermetic unit test suite containing **72 unit test functions** across 13 modules (`test_init.py`, `test_config.py`, `test_command_executor.py`, `test_worker.py`, `test_orchestrator.py`, `test_github_client.py`, `test_preflight_filter.py`, `test_eval_orchestrator.py`, `test_eval_diff_judge.py`, `test_generate_golden_issue.py`, `test_eval_suite_logging.py`, `conftest.py`, `__init__.py`). Features ZERO test classes (`Test*`), relying exclusively on standalone functions and standard library `unittest.mock` (`@patch`, `MagicMock`, `AsyncMock`). |
+| **`tests/`** | Hermetic unit test suite containing **83 unit test functions** across 14 modules (`test_init.py`, `test_config.py`, `test_command_executor.py`, `test_worker.py`, `test_orchestrator.py`, `test_github_client.py`, `test_preflight_filter.py`, `test_eval_orchestrator.py`, `test_eval_diff_judge.py`, `test_generate_golden_issue.py`, `test_triage_agent_runner.py`, `test_eval_suite_logging.py`, `conftest.py`, `__init__.py`). Features ZERO test classes (`Test*`), relying exclusively on standalone functions and standard library `unittest.mock` (`@patch`, `MagicMock`, `AsyncMock`). |
 | **`eval/run_outputs/`** | Local evaluation output directory containing per-run subdirectories (`<run_name>/`) with `agent_environments/`, `logs/` (`issue_<issue_number>_<timestamp>_logs.log`), `json/` (structured subfolders `coding_agent/` and `eval_agent/`), `outputs/diffs/` (`issue_<issue_number>_<timestamp>_diff.diff`), `outputs/pr_details/` (`issue_<issue_number>_<timestamp>_pr_details.md`), `Results.txt`, and score reports (`*_eval_score.md`). |
 
 ---
@@ -295,12 +298,27 @@ Evaluates generated diffs in `eval/run_outputs/<run_name>/` against ground-truth
 ```
 Outputs score report to: `eval/run_outputs/run_1/run_1_eval_score.md`.
 
-### 6. Restoring IAM Permissions (Reaper Fix)
+### 6. Generating and Serving Interactive HTML Diff Viewer Reports
+Generates interactive GitHub-style diff viewer HTML reports comparing Ground-Truth PR diffs, Agent Proposed diffs, and original source file contents:
+```bash
+.venv/bin/python3 eval/generate_diff_viewer.py --run-name <run_name> --input-path <input_path>
+python3 -m http.server 8080 --directory eval/run_outputs/<run_name>/
+```
+Outputs `<run_name>_diff_viewer.html` directly in `eval/run_outputs/<run_name>/`.
+
+### 7. Running the Batch Triage Agent Spec Generator Runner
+Generates `triage_agent_specs` across a batch of GitHub issue numbers in parallel:
+```bash
+.venv/bin/python3 eval/triage_agent_runner.py --issues 19868,21527,22198 --concurrency 3 --gcs
+```
+Outputs generated specs to `eval/datasets/triage_agent_specs/triage_agent_issues/` and logs errors to `eval/datasets/triage_agent_specs/logs/`.
+
+### 7. Restoring IAM Permissions (Reaper Fix)
 ```bash
 ./setup_permissions.sh gcli-intern-project-2026
 ```
 
-### 7. Redeploying the Cloud Run Pipeline & Workflow
+### 8. Redeploying the Cloud Run Pipeline & Workflow
 Submits Cloud Build, deploys Cloud Run Job `pr-gen-job`, and deploys Cloud Workflow `pr-gen-workflow`:
 ```bash
 ./update_deployment.sh gcli-intern-project-2026 us-central1

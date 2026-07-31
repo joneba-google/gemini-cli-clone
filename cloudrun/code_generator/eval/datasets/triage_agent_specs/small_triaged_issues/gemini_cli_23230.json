@@ -1,0 +1,44 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#23230",
+    "summary": {
+      "problem": "Exiting plan mode does not switch the active model to the configured flash model (e.g., gemini-3-flash-preview) immediately within the same interaction turn sequence.",
+      "root_cause": "When plan mode is exited, setApprovalMode fires the ApprovalModeChanged event. GeminiClient handles this event in handleApprovalModeChanged by updating system instructions, but fails to reset currentSequenceModel to null. Consequently, subsequent model calls in the same sequence keep using the sticky currentSequenceModel (the Pro model) instead of re-running ModelRouterService and ApprovalModeStrategy.",
+      "context": "ApprovalModeStrategy routes requests to the Pro model when approvalMode is PLAN, and to the Flash model when an approved plan exists and approvalMode is not PLAN. Clearing currentSequenceModel on approval mode change allows the router to re-evaluate and switch models immediately."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/client.ts"
+      ],
+      "steps": [
+        "In packages/core/src/core/client.ts, update handleApprovalModeChanged to set this.currentSequenceModel = null when handling ApprovalModeChanged events for the current session."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/client.test.ts",
+      "expected_behavior": "Emitting ApprovalModeChanged for the active session resets currentSequenceModel to null, forcing the client to re-evaluate model routing on the next request.",
+      "verification_steps": [
+        "In packages/core/src/core/client.test.ts, verify that emitting ApprovalModeChanged event resets currentSequenceModel on GeminiClient."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 23230,
+    "title": "exiting plan mode does not switch model",
+    "target_version": "52250c162d10f97cafc12f0fdd57cea88997b36d",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

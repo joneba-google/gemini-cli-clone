@@ -1,0 +1,48 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24413",
+    "summary": {
+      "problem": "IdeClient hardcodes the client version string to '1.0.0' when instantiating MCP Client instances for both HTTP and STDIO connections.",
+      "root_cause": "In packages/core/src/ide/ide-client.ts, new Client({ name: ..., version: '1.0.0' }) was implemented with a TODO comment '// TODO(#3487): use the CLI version here.' instead of retrieving the dynamic version.",
+      "context": "The dynamic CLI version is available asynchronously via getVersion() exported from packages/core/src/utils/version.ts."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/ide/ide-client.ts"
+      ],
+      "steps": [
+        "Import getVersion from '../utils/version.js' in packages/core/src/ide/ide-client.ts.",
+        "In establishHttpConnection, retrieve the version with await getVersion() and pass it to new Client().",
+        "In establishStdioConnection, retrieve the version with await getVersion() and pass it to new Client().",
+        "Remove the '// TODO(#3487): use the CLI version here.' comments."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/ide/ide-client.test.ts",
+      "expected_behavior": "IdeClient retrieves the dynamic version using getVersion() and passes it when creating Client instances for HTTP and STDIO connections.",
+      "verification_steps": [
+        "Mock getVersion in packages/core/src/ide/ide-client.test.ts.",
+        "Assert that Client is called with the version string returned by getVersion() during HTTP and STDIO connection establishment."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 24413,
+    "title": "fix(core): use dynamic CLI version for IDE client instead of hardcoded '1.0.0'",
+    "target_version": "9f76f34049ecc9c97b2cfbaf295a7a1fadfce1b6",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

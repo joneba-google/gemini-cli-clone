@@ -1,0 +1,48 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#18369",
+    "summary": {
+      "problem": "Executing /stats session after resuming a session displays a newly generated session ID rather than the resumed session's ID.",
+      "root_cause": "useSessionResume.ts does not call uiTelemetryService.hydrate() with the resumed conversation data when resuming a session. As a result, uiTelemetryService does not emit a clear/update event with the resumed session ID, causing SessionStatsProvider to retain its initial startup session ID.",
+      "context": "Session statistics in the CLI are managed by SessionStatsProvider in SessionContext.tsx, which subscribes to events from uiTelemetryService. While in-session browser resumption in useSessionBrowser.ts properly hydrates telemetry via uiTelemetryService.hydrate(), command-line session resumption handled by useSessionResume.ts was missing this call."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/hooks/useSessionResume.ts",
+        "packages/cli/src/ui/contexts/SessionContext.tsx"
+      ],
+      "steps": [
+        "Import uiTelemetryService from @google/gemini-cli-core in packages/cli/src/ui/hooks/useSessionResume.ts.",
+        "In loadHistoryForResume inside useSessionResume.ts, call uiTelemetryService.hydrate(resumedData.conversation) when restoring the session history.",
+        "In packages/cli/src/ui/contexts/SessionContext.tsx, update SessionStatsProvider's effect to update stats.sessionId whenever the sessionId prop changes."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useSessionResume.test.ts",
+      "expected_behavior": "When a session is resumed via useSessionResume, uiTelemetryService.hydrate() is called with the resumed conversation record, updating telemetry state and ensuring /stats session displays the correct resumed session ID.",
+      "verification_steps": [
+        "Add a test in packages/cli/src/ui/hooks/useSessionResume.test.ts verifying that uiTelemetryService.hydrate is called with resumedData.conversation during loadHistoryForResume.",
+        "Run unit tests for useSessionResume via vitest to confirm all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 18369,
+    "title": "Wrong session id shown after resuming a session",
+    "target_version": "d29383a1323f678ab3827e8f1eb05bf5c894a319",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

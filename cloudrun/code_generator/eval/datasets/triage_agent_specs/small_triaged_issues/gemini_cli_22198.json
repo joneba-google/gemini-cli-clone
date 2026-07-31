@@ -1,0 +1,47 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#22198",
+    "summary": {
+      "problem": "Tracker task files are stored directly under the project temp directory rather than within the session-specific directory.",
+      "root_cause": "Storage.getProjectTempTrackerDir() in packages/core/src/config/storage.ts does not check for this.sessionId, unlike getProjectTempPlansDir and getProjectTempTasksDir.",
+      "context": "Storing tracker tasks outside the session directory prevents session-level isolation and automatic cleanup when a session is deleted or expired."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/config/storage.ts"
+      ],
+      "steps": [
+        "In packages/core/src/config/storage.ts, update getProjectTempTrackerDir() to check if this.sessionId is present.",
+        "If this.sessionId exists, return path.join(this.getProjectTempDir(), this.sessionId, 'tracker').",
+        "Otherwise, fallback to path.join(this.getProjectTempDir(), 'tracker')."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/config/storage.test.ts",
+      "expected_behavior": "getProjectTempTrackerDir() returns path.join(tempDir, 'tracker') when no sessionId is set, and path.join(tempDir, sessionId, 'tracker') when sessionId is provided.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/config/storage.test.ts verifying getProjectTempTrackerDir without sessionId returns path.join(tempDir, 'tracker').",
+        "Add a unit test in packages/core/src/config/storage.test.ts verifying getProjectTempTrackerDir with sessionId returns path.join(tempDir, sessionId, 'tracker')."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 22198,
+    "title": "Fix path where tracker tasks are stored",
+    "target_version": "8a537d85e93e7a099171809a24ee9ab01b937d4f",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

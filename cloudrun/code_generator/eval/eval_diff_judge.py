@@ -204,37 +204,94 @@ def main():
         print(f"Error: Run directory does not exist: {run_dir}")
         sys.exit(1)
 
-    diff_files = glob.glob(os.path.join(diffs_dir, "*_diff.diff"))
-    if not diff_files:
-        print(f"Error: No diff output files found in '{diffs_dir}'.")
-        sys.exit(1)
-
-    print("==========================================================")
-    print(f" Starting LLM-as-a-Judge Evaluation: {args.run_name}")
-    print(f" Input Path:      {args.input_path}")
-    print(f" Diff Files Found: {len(diff_files)}")
-    print(f" Judge Model:     {args.model}")
-    print("==========================================================\n")
-
     prompt_template = load_judge_prompt_template()
     turn_map, runtime_map = load_test_metrics_for_run(run_dir)
     results = []
 
+    # Collect all golden test spec files directly from input_path
+    spec_files = []
+    if os.path.isdir(args.input_path):
+        spec_files = sorted(glob.glob(os.path.join(args.input_path, "*.json")))
+    elif os.path.isfile(args.input_path):
+        spec_files = [args.input_path]
+
+    if not spec_files:
+        print(f"Error: No test spec JSON files found in input_path '{args.input_path}'.")
+        sys.exit(1)
+
+    print("==========================================================")
+    print(f" Starting LLM-as-a-Judge Evaluation: {args.run_name}")
+    print(f" Input Path:          {args.input_path}")
+    print(f" Total Test Cases:    {len(spec_files)}")
+    print(f" Judge Model:         {args.model}")
+    print("==========================================================\n")
+
     import asyncio
 
-    for diff_file in sorted(diff_files):
-        test_id = os.path.basename(diff_file).replace("_diff.diff", "")
-        with open(diff_file, "r", encoding="utf-8") as f:
-            proposed_diff = f.read()
+    for spec_file in spec_files:
+        test_id = os.path.splitext(os.path.basename(spec_file))[0]
+        doc_dict = {}
+        try:
+            with open(spec_file, "r", encoding="utf-8") as f:
+                doc_dict = json.load(f)
+        except Exception as e:
+            logging.warning("Failed to read spec file %s: %s", spec_file, e)
 
-        doc_dict = find_golden_spec_for_test(test_id, args.input_path) or {}
-        eval_res = asyncio.run(
-            evaluate_single_diff(test_id, proposed_diff, doc_dict, prompt_template, args.model)
-        )
+        issue_num = doc_dict.get("github_metadata", {}).get("issue_number")
+
+        # Resolve diff file for this test_id / issue_num
+        candidate_diffs = [
+            os.path.join(diffs_dir, f"{test_id}_diff.diff"),
+            os.path.join(diffs_dir, f"{test_id}.diff"),
+        ]
+        if issue_num and os.path.exists(diffs_dir):
+            candidate_diffs.extend(glob.glob(os.path.join(diffs_dir, f"issue_{issue_num}_*_diff.diff")))
+            candidate_diffs.extend(glob.glob(os.path.join(diffs_dir, f"*{issue_num}*_diff.diff")))
+
+        found_diff_path = None
+        for cand in candidate_diffs:
+            if os.path.exists(cand) and os.path.getsize(cand) > 0:
+                found_diff_path = cand
+                break
+
+        # Resolve metrics from turn_map (checking test_id and issue_num keys)
         attempts, max_att = turn_map.get(test_id, ("?", "?"))
+        runtime_sec = runtime_map.get(test_id)
+        if attempts == "?" and issue_num:
+            for k, v in turn_map.items():
+                if str(issue_num) in k:
+                    attempts, max_att = v
+                    runtime_sec = runtime_map.get(k)
+                    break
+
+        if found_diff_path:
+            with open(found_diff_path, "r", encoding="utf-8") as f:
+                proposed_diff = f.read()
+
+            if proposed_diff.strip():
+                eval_res = asyncio.run(
+                    evaluate_single_diff(test_id, proposed_diff, doc_dict, prompt_template, args.model)
+                )
+            else:
+                eval_res = {
+                    "test_id": test_id,
+                    "score": 0,
+                    "verdict_description": "FAILED: Agent generated an empty diff file after max_attempts turns.",
+                    "success": False,
+                    "doc": doc_dict,
+                }
+        else:
+            eval_res = {
+                "test_id": test_id,
+                "score": 0,
+                "verdict_description": "FAILED: Agent failed to generate a response or diff within max_attempts turns.",
+                "success": False,
+                "doc": doc_dict,
+            }
+
         eval_res["attempts"] = attempts
         eval_res["max_attempts"] = max_att
-        eval_res["runtime_seconds"] = runtime_map.get(test_id)
+        eval_res["runtime_seconds"] = runtime_sec
         results.append(eval_res)
 
     # Compute overall score average, average turns, and average runtime

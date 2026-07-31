@@ -1,0 +1,47 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28052",
+    "summary": {
+      "problem": "When Google sign-in fails, the error message displays a URL with a trailing period ('https://antigravity.google.'), making the link invalid and unable to load in browsers.",
+      "root_cause": "The error message string returned during authentication failures contains a URL at the end of a sentence where the trailing period was appended directly to the URL.",
+      "context": "When authentication fails in Gemini CLI, error messages formatted via 'getErrorMessage' or auth error handlers include the raw error message string. Sanitizing URLs in error strings prevents trailing sentence punctuation from invalidating links."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/errors.ts",
+        "packages/cli/src/core/auth.ts",
+        "packages/cli/src/ui/auth/useAuth.ts"
+      ],
+      "steps": [
+        "Update error message processing in 'packages/core/src/utils/errors.ts' or auth error handlers in 'packages/cli/src/core/auth.ts' and 'packages/cli/src/ui/auth/useAuth.ts' to trim trailing sentence punctuation (such as trailing periods) from URLs.",
+        "Ensure URLs in error messages like 'https://antigravity.google.' are sanitized to 'https://antigravity.google'."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/auth/useAuth.test.tsx",
+      "expected_behavior": "Auth error messages containing URLs with trailing periods will have the trailing period removed so the URL remains valid.",
+      "verification_steps": [
+        "Add unit test cases in 'packages/cli/src/ui/auth/useAuth.test.tsx' and 'packages/cli/src/core/auth.test.ts' to verify that error messages with trailing periods after URLs are properly sanitized."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 28052,
+    "title": "Bug: Trailing '.' in antigravity.google URL in error message causes link to not load",
+    "target_version": "c22137ea0a7c9e588b79870fa1a40cba5b62099a",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

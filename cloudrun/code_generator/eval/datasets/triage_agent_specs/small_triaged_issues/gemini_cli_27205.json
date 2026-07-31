@@ -1,0 +1,47 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#27205",
+    "summary": {
+      "problem": "When activating custom skills, Gemini CLI aggressively scans .venv directories and fails to respect .gitignore or .geminiignore rules located within the skill directory.",
+      "root_cause": "ActivateSkillToolInvocation in packages/core/src/tools/activate-skill.ts calls getFolderStructure(path.dirname(skillLocation)) without passing a FileDiscoveryService initialized for the skill directory, causing local ignore rules to be bypassed. Furthermore, .venv is missing from DEFAULT_IGNORED_FOLDERS in packages/core/src/utils/getFolderStructure.ts.",
+      "context": "Custom skills located in ~/.gemini/skills/ or .gemini/skills/ that contain Python virtual environments (.venv) flood the LLM context with thousands of library files up to the 200-item limit, wasting tokens and obscuring real source files."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/getFolderStructure.ts",
+        "packages/core/src/tools/activate-skill.ts"
+      ],
+      "steps": [
+        "Add '.venv' to DEFAULT_IGNORED_FOLDERS in packages/core/src/utils/getFolderStructure.ts to ensure virtual environment directories are ignored by default.",
+        "In packages/core/src/tools/activate-skill.ts, update getOrFetchFolderStructure to create a FileDiscoveryService instance for the skill directory (path.dirname(skillLocation)) and pass it as { fileService } in the options argument to getFolderStructure."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/getFolderStructure.test.ts",
+      "expected_behavior": "When generating folder structure for a directory or custom skill, .venv directories are ignored by default, and local .gitignore and .geminiignore files in the skill directory are respected.",
+      "verification_steps": [
+        "Add unit tests in getFolderStructure.test.ts verifying that .venv is included in default ignored folders and marked with '...'.",
+        "Add unit tests in getFolderStructure.test.ts verifying that when a FileDiscoveryService is provided for a skill directory, files and subdirectories matching .gitignore or .geminiignore inside that directory are excluded from the output."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 27205,
+    "title": "GEMINI CLI aggressively scans .venv in custom skills (ignores .gitignore / .geminiignore)",
+    "target_version": "5611ff40e7ace8157fbeee97d459178e988862f3",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

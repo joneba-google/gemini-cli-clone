@@ -1,0 +1,47 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26021",
+    "summary": {
+      "problem": "MCP servers configured in settings.json are not connected when running Gemini CLI in non-interactive mode (-p / piped stdin). Tools registered via MCP are unavailable, resulting in 'Tool not found' errors when invoked.",
+      "root_cause": "The non-interactive CLI entry points (runNonInteractive in packages/cli/src/nonInteractiveCli.ts and packages/cli/src/nonInteractiveCliAgentSession.ts) do not invoke config.initialize(). Config._initialize() in packages/core/src/config/config.ts is implemented to start MCP servers and await their initialization when not in interactive mode, but config.initialize() was never called during non-interactive execution.",
+      "context": "In interactive mode, AppContainer.tsx calls config.initialize() during startup, which starts MCP servers via McpClientManager and registers MCP tools into ToolRegistry. Bypassing config.initialize() in non-interactive mode leaves MCP servers unstarted."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/nonInteractiveCli.ts",
+        "packages/cli/src/nonInteractiveCliAgentSession.ts"
+      ],
+      "steps": [
+        "In packages/cli/src/nonInteractiveCli.ts inside runNonInteractive, await config.initialize() if config.isInitialized() is false prior to setting up the chat session and scheduler.",
+        "In packages/cli/src/nonInteractiveCliAgentSession.ts inside runNonInteractive, await config.initialize() if config.isInitialized() is false prior to setting up the chat session and scheduler."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/nonInteractiveCli.test.ts",
+      "expected_behavior": "When gemini CLI is invoked in non-interactive mode, config.initialize() runs and connects configured MCP servers, registering MCP tools for model use.",
+      "verification_steps": [
+        "In packages/cli/src/nonInteractiveCli.test.ts, add a unit/integration test case verifying that runNonInteractive calls config.initialize() and registers tools from configured MCP servers.",
+        "Run vitest on packages/cli/src/nonInteractiveCli.test.ts to verify that non-interactive execution successfully initializes MCP servers and tools."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 26021,
+    "title": "MCP servers not connected in -p (non-interactive) mode",
+    "target_version": "main",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

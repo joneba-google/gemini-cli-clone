@@ -1,0 +1,51 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24874",
+    "summary": {
+      "problem": "terminalBuffer enabled by default causes performance regressions and needs to be set back to false as the default setting.",
+      "root_cause": "The default configuration value for useTerminalBuffer was set to true in Config class and settingsSchema.ts.",
+      "context": "terminalBuffer remains available as an optional setting for users, but defaults to false until performance regressions are resolved."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/config/config.ts",
+        "packages/cli/src/config/settingsSchema.ts",
+        "schemas/settings.schema.json",
+        "docs/cli/settings.md"
+      ],
+      "steps": [
+        "Update packages/core/src/config/config.ts to set default useTerminalBuffer to false in the Config constructor.",
+        "Update packages/cli/src/config/settingsSchema.ts to set default value for terminalBuffer setting to false.",
+        "Update schemas/settings.schema.json to set default and markdownDescription default for terminalBuffer to false.",
+        "Update docs/cli/settings.md table entry for ui.terminalBuffer default value to false."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/config.test.ts",
+      "expected_behavior": "useTerminalBuffer defaults to false when not explicitly configured.",
+      "verification_steps": [
+        "Verify that Config initializes useTerminalBuffer as false by default.",
+        "Run Vitest test suite for cli config tests."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 24874,
+    "title": "Set terminalBuffer back to false",
+    "target_version": "9fd92c0eeacae8c7e612f9cb795e7a37373bc452",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

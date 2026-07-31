@@ -1,0 +1,48 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25859",
+    "summary": {
+      "problem": "On Windows, running shell commands containing double quotes (e.g., node -e 'console.log(\"test\")') strips or mangles the double quotes because commands are executed via powershell.exe -NoProfile -Command.",
+      "root_cause": "Passing command strings directly via powershell.exe -Command leads to Windows process spawn quote stripping and PowerShell command string argument parsing mangling when double quotes are present in the command string.",
+      "context": "Executing PowerShell commands via -EncodedCommand with UTF-16LE Base64 encoding preserves complex argument strings, special characters, and internal double quotes without quote-stripping issues."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/shell-utils.ts",
+        "packages/core/src/services/shellExecutionService.ts"
+      ],
+      "steps": [
+        "Update getShellConfiguration or shell utility functions in packages/core/src/utils/shell-utils.ts to support Base64 UTF-16LE encoded command execution via -EncodedCommand for PowerShell on Windows.",
+        "Add a helper function in shell-utils.ts to encode command strings into UTF-16LE Base64 strings for PowerShell.",
+        "Update shellExecutionService.ts in packages/core/src/services/shellExecutionService.ts to use -EncodedCommand with the encoded command string when running under PowerShell."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/shell-utils.test.ts",
+      "expected_behavior": "PowerShell command execution on Windows preserves internal double quotes in arguments, allowing commands with complex strings to execute correctly without quote stripping.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/utils/shell-utils.test.ts to verify PowerShell command encoding and configuration.",
+        "Add tests in packages/core/src/services/shellExecutionService.test.ts to verify that commands with double quotes are passed correctly to powershell.exe using -EncodedCommand."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 25859,
+    "title": "Windows: Regression - run_shell_command strips double quotes",
+    "target_version": "d1c91f526704d465b4fa9d0fff7266c963d8efb1",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

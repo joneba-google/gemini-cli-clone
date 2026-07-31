@@ -1,0 +1,46 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#28048",
+    "summary": {
+      "problem": "The documentation in `docs/hooks/reference.md` lists `usageMetadata` under `LLMResponse` as having only `totalTokenCount`, whereas `hookTranslator.ts` passes `promptTokenCount`, `candidatesTokenCount`, and `totalTokenCount`.",
+      "root_cause": "The documentation schema for `LLMResponse` in `docs/hooks/reference.md` was omitted or not updated when `hookTranslator.ts` implemented full `usageMetadata` support.",
+      "context": "`hookTranslator.ts` defines `usageMetadata` in `LLMResponse` with `promptTokenCount`, `candidatesTokenCount`, and `totalTokenCount`, which matches what hooks receive at runtime."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "docs/hooks/reference.md"
+      ],
+      "steps": [
+        "Open `docs/hooks/reference.md` and locate the `LLMResponse` code block.",
+        "Update the `usageMetadata` schema definition under `LLMResponse` to include `promptTokenCount`, `candidatesTokenCount`, and `totalTokenCount`."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/hooks/hookTranslator.test.ts",
+      "expected_behavior": "The `usageMetadata` schema in `docs/hooks/reference.md` matches the properties exported by `LLMResponse` in `packages/core/src/hooks/hookTranslator.ts`.",
+      "verification_steps": [
+        "Verify `docs/hooks/reference.md` content matches `hookTranslator.ts` interface definition for `usageMetadata`.",
+        "Run existing Vitest suite `npm test packages/core/src/hooks/hookTranslator.test.ts` to ensure hook translator tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 28048,
+    "title": "docs(hooks): LLMResponse `usageMetadata` in the reference omits `promptTokenCount` and `candidatesTokenCount` (the hook receives all three)",
+    "target_version": "c22137ea0a7c9e588b79870fa1a40cba5b62099a",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}
