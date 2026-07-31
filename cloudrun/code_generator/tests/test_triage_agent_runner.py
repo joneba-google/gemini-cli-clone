@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from eval.triage_agent_runner import (
+from eval.helpers.triage_agent_runner import (
     get_output_filename,
     parse_args,
     resolve_issue_target_version,
@@ -52,7 +52,7 @@ def test_resolve_issue_target_version_open():
     assert pr_num is None
 
 
-@patch("eval.triage_agent_runner.resolve_target_version", return_value="sha12345")
+@patch("eval.helpers.triage_agent_runner.resolve_target_version", return_value="sha12345")
 def test_resolve_issue_target_version_closed(mock_resolve):
     issue_data = {"state": "CLOSED"}
     target_ver, pr_num = resolve_issue_target_version("google-gemini", "gemini-cli", issue_data, 100)
@@ -61,10 +61,10 @@ def test_resolve_issue_target_version_closed(mock_resolve):
     assert mock_resolve.called
 
 
-@patch("eval.triage_agent_runner.get_issue_details")
-@patch("eval.triage_agent_runner.add_worktree")
-@patch("eval.triage_agent_runner.remove_worktree")
-@patch("eval.triage_agent_runner.process_issue_triage")
+@patch("eval.helpers.triage_agent_runner.get_issue_details")
+@patch("eval.helpers.triage_agent_runner.add_worktree")
+@patch("eval.helpers.triage_agent_runner.remove_worktree")
+@patch("eval.helpers.triage_agent_runner.process_issue_triage")
 def test_run_single_issue_task_success(
     mock_triage, mock_remove_wt, mock_add_wt, mock_get_issue, tmp_path
 ):
@@ -82,8 +82,8 @@ def test_run_single_issue_task_success(
     issues_dir = tmp_path / "triage_agent_issues"
     logs_dir = tmp_path / "logs"
 
-    with patch("eval.triage_agent_runner.ISSUES_DIR", issues_dir), \
-         patch("eval.triage_agent_runner.LOGS_DIR", logs_dir):
+    with patch("eval.helpers.triage_agent_runner.ISSUES_DIR", issues_dir), \
+         patch("eval.helpers.triage_agent_runner.LOGS_DIR", logs_dir):
         result = run_single_issue_task(19868, worker_id=0, owner="google-gemini", repo="gemini-cli")
 
     assert result["success"] is True
@@ -99,13 +99,13 @@ def test_run_single_issue_task_success(
     assert content["github_metadata"]["issue_number"] == 19868
 
 
-@patch("eval.triage_agent_runner.get_issue_details", side_effect=RuntimeError("GitHub API rate limit"))
+@patch("eval.helpers.triage_agent_runner.get_issue_details", side_effect=RuntimeError("GitHub API rate limit"))
 def test_run_single_issue_task_fetch_error(mock_get_issue, tmp_path):
     issues_dir = tmp_path / "triage_agent_issues"
     logs_dir = tmp_path / "logs"
 
-    with patch("eval.triage_agent_runner.ISSUES_DIR", issues_dir), \
-         patch("eval.triage_agent_runner.LOGS_DIR", logs_dir):
+    with patch("eval.helpers.triage_agent_runner.ISSUES_DIR", issues_dir), \
+         patch("eval.helpers.triage_agent_runner.LOGS_DIR", logs_dir):
         result = run_single_issue_task(21527, worker_id=1, owner="google-gemini", repo="gemini-cli")
 
     assert result["success"] is False
@@ -118,10 +118,10 @@ def test_run_single_issue_task_fetch_error(mock_get_issue, tmp_path):
     assert content["issue_number"] == 21527
 
 
-@patch("eval.triage_agent_runner.get_issue_details")
-@patch("eval.triage_agent_runner.add_worktree")
-@patch("eval.triage_agent_runner.remove_worktree")
-@patch("eval.triage_agent_runner.process_issue_triage", side_effect=RuntimeError("LLM error"))
+@patch("eval.helpers.triage_agent_runner.get_issue_details")
+@patch("eval.helpers.triage_agent_runner.add_worktree")
+@patch("eval.helpers.triage_agent_runner.remove_worktree")
+@patch("eval.helpers.triage_agent_runner.process_issue_triage", side_effect=RuntimeError("LLM error"))
 def test_run_single_issue_task_triage_error_and_cleanup(
     mock_triage, mock_remove_wt, mock_add_wt, mock_get_issue, tmp_path
 ):
@@ -131,8 +131,8 @@ def test_run_single_issue_task_triage_error_and_cleanup(
     issues_dir = tmp_path / "triage_agent_issues"
     logs_dir = tmp_path / "logs"
 
-    with patch("eval.triage_agent_runner.ISSUES_DIR", issues_dir), \
-         patch("eval.triage_agent_runner.LOGS_DIR", logs_dir):
+    with patch("eval.helpers.triage_agent_runner.ISSUES_DIR", issues_dir), \
+         patch("eval.helpers.triage_agent_runner.LOGS_DIR", logs_dir):
         result = run_single_issue_task(22198, worker_id=1, owner="google-gemini", repo="gemini-cli")
 
     assert result["success"] is False
@@ -159,21 +159,21 @@ def test_sync_triage_specs_to_gcs(mock_storage_client, tmp_path):
     mock_bucket.blob.return_value = mock_blob
     mock_storage_client.return_value.bucket.return_value = mock_bucket
 
-    with patch("eval.triage_agent_runner.ISSUES_DIR", issues_dir), \
-         patch("eval.triage_agent_runner.LOGS_DIR", logs_dir):
+    with patch("eval.helpers.triage_agent_runner.ISSUES_DIR", issues_dir), \
+         patch("eval.helpers.triage_agent_runner.LOGS_DIR", logs_dir):
         sync_triage_specs_to_gcs()
 
     assert mock_storage_client.return_value.bucket.called
     assert mock_bucket.blob.called
 
 
-@patch("eval.triage_agent_runner.get_repo")
-@patch("eval.triage_agent_runner.run_single_issue_task")
+@patch("eval.helpers.triage_agent_runner.get_repo")
+@patch("eval.helpers.triage_agent_runner.run_single_issue_task")
 def test_triage_agent_runner_main_cli(mock_task, mock_get_repo):
     mock_task.return_value = {"success": True, "issue_number": 19868}
     test_args = ["triage_agent_runner.py", "--issues", "19868", "--concurrency", "1"]
     with patch("sys.argv", test_args):
-        from eval.triage_agent_runner import main as runner_main
+        from eval.helpers.triage_agent_runner import main as runner_main
         runner_main()
     assert mock_get_repo.called
     assert mock_task.called

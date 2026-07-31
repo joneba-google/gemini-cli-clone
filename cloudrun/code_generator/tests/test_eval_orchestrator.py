@@ -14,8 +14,8 @@ EVAL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "eval")
 if EVAL_DIR not in sys.path:
     sys.path.insert(0, EVAL_DIR)
 
-from eval_config import EvalConfig
-from eval_orchestrator import EvalOrchestrator
+from eval.helpers.eval_config import EvalConfig
+from eval.helpers.eval_orchestrator import EvalOrchestrator
 
 
 @pytest.fixture

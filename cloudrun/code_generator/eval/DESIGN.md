@@ -8,14 +8,14 @@ The evaluation pipeline is designed to benchmark and validate autonomous AI codi
 
 ## Table of Contents
 1. [Chapter 1: Master Parallel Test Harness (`eval_suite.py`)](#chapter-1-master-parallel-test-harness-eval_suitepy)
-2. [Chapter 2: Offline State Machine Adaptation (`eval_orchestrator.py`)](#chapter-2-offline-state-machine-adaptation-eval_orchestratorpy)
-3. [Chapter 3: Configuration & Workspace Hydration (`eval_config.py`)](#chapter-3-configuration--workspace-hydration-eval_configpy)
+2. [Chapter 2: Offline State Machine Adaptation (`eval/helpers/eval_orchestrator.py`)](#chapter-2-offline-state-machine-adaptation-eval_orchestratorpy)
+3. [Chapter 3: Configuration & Workspace Hydration (`eval/helpers/eval_config.py`)](#chapter-3-configuration--workspace-hydration-eval_configpy)
 4. [Chapter 4: LLM-as-a-Judge Diff Evaluation Engine (`eval_diff_judge.py`)](#chapter-4-llm-as-a-judge-diff-evaluation-engine-eval_diff_judgepy)
 5. [Chapter 5: Evaluation Rubric & Prompt Contract (`judge_prompt.md`)](#chapter-5-evaluation-rubric--prompt-contract-judge_promptmd)
-6. [Chapter 6: Dataset Migration & Standardization (`reformat_golden_issues.py`)](#chapter-6-dataset-migration--standardization-reformat_golden_issuespy)
-7. [Chapter 7: Dual Golden Issue Generator & Trace Logging (`generate_golden_issue.py`)](#chapter-7-dual-golden-issue-generator--trace-logging-generate_golden_issuepy)
+6. [Chapter 6: Dataset Migration & Standardization (`eval/helpers/reformat_golden_issues.py`)](#chapter-6-dataset-migration--standardization-reformat_golden_issuespy)
+7. [Chapter 7: Dual Golden Issue Generator & Trace Logging (`eval/helpers/generate_golden_issue.py`)](#chapter-7-dual-golden-issue-generator--trace-logging-generate_golden_issuepy)
 8. [Chapter 8: Multi-Instance Task Array Cloud Evaluation Pipeline (`cloud_eval_runner.py`)](#chapter-8-multi-instance-task-array-cloud-evaluation-pipeline-cloud_eval_runnerpy)
-9. [Chapter 9: Batch Triage Agent Spec Generator Architecture (`triage_agent_runner.py`)](#chapter-9-batch-triage-agent-spec-generator-architecture-triage_agent_runnerpy)
+9. [Chapter 9: Batch Triage Agent Spec Generator Architecture (`eval/helpers/triage_agent_runner.py`)](#chapter-9-batch-triage-agent-spec-generator-architecture-triage_agent_runnerpy)
 
 ---
 

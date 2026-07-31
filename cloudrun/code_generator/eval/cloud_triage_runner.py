@@ -30,7 +30,7 @@ BASE_DIR = EVAL_DIR.parent.resolve()
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from eval.triage_agent_runner import main as run_triage_batch
+from eval.helpers.triage_agent_runner import main as run_triage_batch
 
 logger = logging.getLogger("CloudTriageRunner")
 

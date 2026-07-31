@@ -34,7 +34,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from dotenv import load_dotenv
 
 # Path resolution
-EVAL_DIR = Path(__file__).parent.resolve()
+HELPERS_DIR = Path(__file__).parent.resolve()
+EVAL_DIR = HELPERS_DIR.parent.resolve()
 BASE_DIR = EVAL_DIR.parent.resolve()
 REF_TRIAGE_DIR = BASE_DIR / "reference_triage"
 TRIAGE_WORKER_DIR = (

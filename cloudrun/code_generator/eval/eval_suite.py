@@ -40,8 +40,8 @@ if WORKFLOW_DIR not in sys.path:
 if EVAL_DIR not in sys.path:
     sys.path.append(EVAL_DIR)
 
-from eval_config import EvalConfig
-from eval_orchestrator import EvalOrchestrator
+from eval.helpers.eval_config import EvalConfig
+from eval.helpers.eval_orchestrator import EvalOrchestrator
 
 
 import datetime

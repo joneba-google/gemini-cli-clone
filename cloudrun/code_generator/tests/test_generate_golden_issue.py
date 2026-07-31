@@ -15,7 +15,7 @@ EVAL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "eval")
 if EVAL_DIR not in sys.path:
     sys.path.insert(0, EVAL_DIR)
 
-from generate_golden_issue import (
+from eval.helpers.generate_golden_issue import (
     generate_ground_truth_issue,
     generate_triage_agent_issue,
     get_output_filename,
@@ -51,7 +51,7 @@ def test_generate_ground_truth_issue(tmp_path):
         "golden_spec_rationale": "Pruned lockfiles and docs.",
     }
 
-    with patch("generate_golden_issue.generate_golden_spec", return_value=mock_spec_res):
+    with patch("eval.helpers.generate_golden_issue.generate_golden_spec", return_value=mock_spec_res):
         out_file = generate_ground_truth_issue(
             owner="google-gemini",
             repo="gemini-cli",
@@ -77,31 +77,33 @@ def test_generate_ground_truth_issue(tmp_path):
 
 
 def test_generate_triage_agent_issue_custom_repo(tmp_path):
-    """Tests generating triage agent issue JSON file with custom repository name."""
-    issue_data = {
-        "title": "Custom repo issue",
-        "body": "Issue text for custom repo",
-    }
+    """Tests generating triage agent issue JSON file with custom repository name via triage_agent_runner."""
+    def mock_run_single_issue(issue_number, worker_id, owner, repo):
+        out_file = tmp_path / f"{repo.replace('-', '_')}_{issue_number}.json"
+        out_file.write_text(
+            json.dumps({
+                "status": "TRIAGED",
+                "triage_attempts": 1,
+                "expected_quality": "OK",
+                "expected_effort": "SMALL",
+                "github_metadata": {
+                    "owner": owner,
+                    "repo": repo,
+                    "issue_number": issue_number,
+                    "pr_number": 1000,
+                },
+                "workable_spec": {"summary": {"problem": "Custom issue"}},
+            }),
+            encoding="utf-8",
+        )
+        return {"success": True, "issue_number": issue_number, "spec_path": str(out_file)}
 
-    mock_triage_res = (
-        True,
-        json.dumps({
-            "quality": "OK",
-            "effort": "SMALL",
-            "workable_spec": {
-                "summary": {"problem": "Custom issue", "root_cause": "Missing check", "context": "CLI"},
-                "implementation_plan": {"files_to_modify": ["index.ts"], "steps": ["Add check"]},
-            },
-        }),
-    )
-
-    with patch("generate_golden_issue.process_issue_triage", return_value=mock_triage_res):
+    with patch("eval.helpers.triage_agent_runner.run_single_issue_task", side_effect=mock_run_single_issue):
         out_file = generate_triage_agent_issue(
             owner="my-org",
             repo="custom-agent-repo",
             issue_number=999,
             pr_number=1000,
-            issue_data=issue_data,
             output_dir=tmp_path,
         )
 
@@ -122,8 +124,8 @@ def test_generate_triage_agent_issue_custom_repo(tmp_path):
 
 def test_main_cli_dispatch(tmp_path):
     """Tests CLI main function dispatching to both generation methods."""
-    with patch("generate_golden_issue.generate_ground_truth_issue") as mock_gt:
-        with patch("generate_golden_issue.generate_triage_agent_issue") as mock_ta:
+    with patch("eval.helpers.generate_golden_issue.generate_ground_truth_issue") as mock_gt:
+        with patch("eval.helpers.generate_golden_issue.generate_triage_agent_issue") as mock_ta:
             test_args = [
                 "generate_golden_issue.py",
                 "--issue", "17733",
@@ -151,8 +153,8 @@ def test_main_cli_dispatch(tmp_path):
 
 def test_main_cli_dispatch_multiple_issues(tmp_path):
     """Tests CLI main function dispatching multiple issue and PR numbers."""
-    with patch("generate_golden_issue.generate_ground_truth_issue") as mock_gt:
-        with patch("generate_golden_issue.generate_triage_agent_issue") as mock_ta:
+    with patch("eval.helpers.generate_golden_issue.generate_ground_truth_issue") as mock_gt:
+        with patch("eval.helpers.generate_golden_issue.generate_triage_agent_issue") as mock_ta:
             test_args = [
                 "generate_golden_issue.py",
                 "--issue", "2407", "24501",

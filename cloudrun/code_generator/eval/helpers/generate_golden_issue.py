@@ -23,7 +23,8 @@ from typing import Any, Dict, Optional
 from dotenv import load_dotenv
 
 # Ensure repository root and reference_triage / triage_worker are in sys.path
-EVAL_DIR = Path(__file__).parent.resolve()
+HELPERS_DIR = Path(__file__).parent.resolve()
+EVAL_DIR = HELPERS_DIR.parent.resolve()
 BASE_DIR = EVAL_DIR.parent.resolve()
 REF_TRIAGE_DIR = BASE_DIR / "reference_triage"
 TRIAGE_WORKER_DIR = BASE_DIR.parent / "triage-worker" if (BASE_DIR.parent / "triage-worker").exists() else BASE_DIR.parent / "triage_worker"
@@ -136,71 +137,28 @@ def generate_triage_agent_issue(
     issue_data: Optional[Dict[str, Any]] = None,
     output_dir: Optional[Path] = None,
 ) -> Path:
-    """Generates golden issue JSON using the Triage Agent forward prediction method."""
+    """Generates golden issue JSON using the Triage Agent forward prediction method via triage_agent_runner."""
+    import eval.helpers.triage_agent_runner as tar
     out_dir = output_dir or TRIAGE_AGENT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     filename = get_output_filename(repo, issue_number)
     file_path = out_dir / filename
 
-    if issue_data is None:
-        if get_issue_details is None:
-            raise RuntimeError("get_issue_details helper is not available.")
-        print(f"[TRIAGE_AGENT] Fetching Issue #{issue_number} details from {owner}/{repo}...")
-        issue_data = get_issue_details(owner, repo, issue_number)
-
-    title = issue_data.get("title", "")
-    body = issue_data.get("body", "")
-
-    print(f"[TRIAGE_AGENT] Running Triage Agent on Issue #{issue_number}...")
-    payload = {
-        "issue_number": issue_number,
-        "title": title,
-        "body": body,
-        "repository": f"{owner}/{repo}",
-    }
+    print(f"[TRIAGE_AGENT] Running Triage Agent Runner on Issue #{issue_number}...")
+    orig_issues_dir = tar.ISSUES_DIR
     try:
-        success, raw_output = process_issue_triage(payload, target_cwd=str(BASE_DIR))
-    except TypeError:
-        success, raw_output = process_issue_triage(payload)
-    if not success:
-        raise RuntimeError(f"Triage agent execution failed: {raw_output}")
+        tar.ISSUES_DIR = out_dir
+        res = tar.run_single_issue_task(
+            issue_number=issue_number,
+            worker_id=0,
+            owner=owner,
+            repo=repo,
+        )
+    finally:
+        tar.ISSUES_DIR = orig_issues_dir
 
-    try:
-        agent_result = json.loads(raw_output)
-    except Exception:
-        agent_result = {"workable_spec": {}, "raw_output": raw_output}
-
-    workable_spec = agent_result.get("workable_spec", {})
-    expected_quality = agent_result.get("quality", agent_result.get("expected_quality", "OK"))
-    expected_effort = agent_result.get("effort", agent_result.get("expected_effort", "MEDIUM"))
-
-    target_ver = (
-        resolve_target_version(owner, repo, issue_data)
-        if resolve_target_version
-        else "main"
-    )
-
-    template = {
-        "status": "TRIAGED",
-        "triage_attempts": 1,
-        "generation_attempts": 0,
-        "workable_spec": workable_spec,
-        "expected_quality": expected_quality,
-        "expected_effort": expected_effort,
-        "github_metadata": {
-            "owner": owner,
-            "repo": repo,
-            "issue_number": issue_number,
-            "title": title,
-            "target_version": target_ver,
-            "pr_number": pr_number or 0,
-        },
-        "lock": {"holder": None, "expires_at": None},
-        "error": "",
-    }
-
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(template, f, indent=2)
+    if not res.get("success"):
+        raise RuntimeError(f"Triage agent execution failed: {res.get('error')}")
 
     print(f"[TRIAGE_AGENT] Saved triage agent golden issue file to: {file_path}")
     return file_path
