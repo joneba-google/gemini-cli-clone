@@ -1,0 +1,48 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#24944",
+    "summary": {
+      "problem": "The update_topic tool (and other auto-executing background tools) is included in the tool confirmation queue size calculation, causing the UI to display misleading counts (e.g. '1 of 2') when only one tool requires approval.",
+      "root_cause": "getConfirmingToolState in packages/cli/src/ui/utils/confirmingTool.ts calculates total as allPendingTools.length and index based on headIndexInFullList. Since allPendingTools includes all tool calls in pendingHistoryItems regardless of status, non-confirming background tools like update_topic inflate the queue count.",
+      "context": "Background tools like update_topic auto-execute without requiring user confirmation and never enter AwaitingApproval status. The confirmation queue counter should only reflect tools that actually require user approval."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/utils/confirmingTool.ts"
+      ],
+      "steps": [
+        "Update getConfirmingToolState in packages/cli/src/ui/utils/confirmingTool.ts to calculate total using confirmingTools.length instead of allPendingTools.length.",
+        "Update index calculation in getConfirmingToolState to reflect the 1-based index within confirmingTools rather than allPendingTools."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/utils/confirmingTool.test.ts",
+      "expected_behavior": "When pendingHistoryItems contains both a background tool like update_topic (status Executing/Success) and a tool requiring approval (status AwaitingApproval), getConfirmingToolState returns total equal to 1 and index equal to 1, excluding background tools from the confirmation queue count.",
+      "verification_steps": [
+        "Create unit tests in packages/cli/src/ui/utils/confirmingTool.test.ts for getConfirmingToolState.",
+        "Assert that when only 1 tool is AwaitingApproval and other background tools (e.g., update_topic with Executing status) are present in pendingHistoryItems, total is 1.",
+        "Assert that when multiple tools are AwaitingApproval, total equals the count of AwaitingApproval tools and index is correctly calculated.",
+        "Assert that when no tools are AwaitingApproval, getConfirmingToolState returns null."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 24944,
+    "title": "[BUG] update_topic tool inflates confirmation queue count",
+    "target_version": "3df99d8bcbef76d677f54662a25904a8d1168ba9",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

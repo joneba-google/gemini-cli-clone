@@ -1,0 +1,113 @@
+diff --git a/packages/core/src/ide/ide-client.test.ts b/packages/core/src/ide/ide-client.test.ts
+index 7cf2f101e..37d6cbcc0 100644
+--- a/packages/core/src/ide/ide-client.test.ts
++++ b/packages/core/src/ide/ide-client.test.ts
+@@ -21,6 +21,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
+ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+ import { detectIde, IDE_DEFINITIONS } from './detect-ide.js';
+ import * as os from 'node:os';
++import { getVersion } from '../utils/version.js';
+ 
+ import {
+   getConnectionConfigFromFile,
+@@ -50,6 +51,8 @@ vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
+ vi.mock('./detect-ide.js');
+ vi.mock('node:os');
+ vi.mock('./ide-connection-utils.js');
++vi.mock('../utils/version.js');
++
+ 
+ describe('IdeClient', () => {
+   let mockClient: Mocked<Client>;
+@@ -77,6 +80,7 @@ describe('IdeClient', () => {
+     });
+     vi.mocked(os.tmpdir).mockReturnValue('/tmp');
+     vi.mocked(getIdeServerHost).mockReturnValue('127.0.0.1');
++    vi.mocked(getVersion).mockResolvedValue('1.2.3');
+ 
+     // Mock MCP client and transports
+     mockClient = {
+@@ -118,6 +122,10 @@ describe('IdeClient', () => {
+         new URL('http://127.0.0.1:8080/mcp'),
+         expect.any(Object),
+       );
++      expect(Client).toHaveBeenCalledWith({
++        name: 'streamable-http-client',
++        version: '1.2.3',
++      });
+       expect(mockClient.connect).toHaveBeenCalledWith(mockHttpTransport);
+       expect(ideClient.getConnectionStatus().status).toBe(
+         IDEConnectionStatus.Connected,
+@@ -137,6 +145,10 @@ describe('IdeClient', () => {
+         command: 'test-cmd',
+         args: ['--foo'],
+       });
++      expect(Client).toHaveBeenCalledWith({
++        name: 'stdio-client',
++        version: '1.2.3',
++      });
+       expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport);
+       expect(ideClient.getConnectionStatus().status).toBe(
+         IDEConnectionStatus.Connected,
+diff --git a/packages/core/src/ide/ide-client.ts b/packages/core/src/ide/ide-client.ts
+index 373df31f5..0598ebcfe 100644
+--- a/packages/core/src/ide/ide-client.ts
++++ b/packages/core/src/ide/ide-client.ts
+@@ -22,6 +22,7 @@ import {
+ } from '@modelcontextprotocol/sdk/types.js';
+ import { IDE_REQUEST_TIMEOUT_MS } from './constants.js';
+ import { debugLogger } from '../utils/debugLogger.js';
++import { getVersion } from '../utils/version.js';
+ import {
+   getConnectionConfigFromFile,
+   getIdeServerHost,
+@@ -586,10 +587,10 @@ export class IdeClient {
+       const serverUrl = `http://${ideServerHost}:${portNumber}/mcp`;
+       logger.debug('Attempting to connect to IDE via HTTP SSE');
+       logger.debug(`Server URL: ${serverUrl}`);
++      const version = await getVersion();
+       this.client = new Client({
+         name: 'streamable-http-client',
+-        // TODO(#3487): use the CLI version here.
+-        version: '1.0.0',
++        version,
+       });
+       transport = new StreamableHTTPClientTransport(new URL(serverUrl), {
+         fetch: await createProxyAwareFetch(ideServerHost),
+@@ -621,10 +622,10 @@ export class IdeClient {
+     let transport: StdioClientTransport | undefined;
+     try {
+       logger.debug('Attempting to connect to IDE via stdio');
++      const version = await getVersion();
+       this.client = new Client({
+         name: 'stdio-client',
+-        // TODO(#3487): use the CLI version here.
+-        version: '1.0.0',
++        version,
+       });
+ 
+       transport = new StdioClientTransport({
+diff --git a/packages/core/test-setup.ts b/packages/core/test-setup.ts
+index d73036957..2a4c35e3c 100644
+--- a/packages/core/test-setup.ts
++++ b/packages/core/test-setup.ts
+@@ -9,6 +9,19 @@ if (process.env.NO_COLOR !== undefined) {
+   delete process.env.NO_COLOR;
+ }
+ 
++if (typeof File === 'undefined') {
++  globalThis.File = class File extends Blob {
++    name: string;
++    lastModified: number;
++    constructor(parts: BlobPart[], name: string, options?: FilePropertyBag) {
++      super(parts, options);
++      this.name = name;
++      this.lastModified = options?.lastModified ?? Date.now();
++    }
++  };
++}
++
++
+ import { setSimulate429 } from './src/utils/testUtils.js';
+ import { vi, afterEach } from 'vitest';
+ import { coreEvents } from './src/utils/events.js';

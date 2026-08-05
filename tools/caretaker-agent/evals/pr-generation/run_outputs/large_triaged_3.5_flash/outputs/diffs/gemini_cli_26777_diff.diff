@@ -1,0 +1,157 @@
+diff --git a/packages/core/src/tools/ripGrep.test.ts b/packages/core/src/tools/ripGrep.test.ts
+index bd3cd2118..8935bbde6 100644
+--- a/packages/core/src/tools/ripGrep.test.ts
++++ b/packages/core/src/tools/ripGrep.test.ts
+@@ -20,7 +20,7 @@ import os from 'node:os';
+ import type { Config } from '../config/config.js';
+ import { GEMINI_IGNORE_FILE_NAME } from '../config/constants.js';
+ import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
+-import { spawn, type ChildProcess } from 'node:child_process';
++import { spawn, execSync, type ChildProcess } from 'node:child_process';
+ import { PassThrough, Readable } from 'node:stream';
+ import EventEmitter from 'node:events';
+ import { createMockMessageBus } from '../test-utils/mock-message-bus.js';
+@@ -37,9 +37,11 @@ vi.mock('../utils/fileUtils.js', async (importOriginal) => {
+ // Mock child_process for ripgrep calls
+ vi.mock('child_process', () => ({
+   spawn: vi.fn(),
++  execSync: vi.fn(),
+ }));
+ 
+ const mockSpawn = vi.mocked(spawn);
++const mockExecSync = vi.mocked(execSync);
+ 
+ describe('canUseRipgrep', () => {
+   beforeEach(() => {
+@@ -1992,23 +1994,69 @@ describe('getRipgrepPath', () => {
+     it('should fall back to the Dev path if SEA path is missing', async () => {
+       vi.mocked(fileExists).mockImplementation(
+         async (checkPath) =>
+-          checkPath.includes(path.normalize('core/vendor/ripgrep')) &&
+-          !checkPath.includes(path.join(path.sep, 'tools', path.sep)),
++          checkPath.includes(path.normalize('packages/core/vendor/ripgrep')) &&
++          !checkPath.includes(path.normalize(path.join('packages', 'core', 'src', 'tools', 'vendor', 'ripgrep'))),
+       );
+ 
+       const resolvedPath = await getRipgrepPath();
+       expect(resolvedPath).not.toBeNull();
+-      expect(resolvedPath).toContain(path.normalize('core/vendor/ripgrep'));
++      expect(resolvedPath).toContain(path.normalize(path.join('packages', 'core', 'vendor', 'ripgrep')));
+       expect(resolvedPath).not.toContain(
+-        path.join(path.sep, 'tools', path.sep),
++        path.normalize(path.join('packages', 'core', 'src', 'tools', 'vendor', 'ripgrep')),
+       );
+     });
+ 
+-    it('should return null if binary is missing from both paths', async () => {
+-      vi.mocked(fileExists).mockResolvedValue(false);
++    it('should fall back to system PATH ripgrep using platform command (which) on POSIX when bundled binaries are absent', async () => {
++      vi.spyOn(os, 'platform').mockReturnValue('linux');
++      vi.mocked(fileExists).mockImplementation(async (pkg) => pkg === '/mocked/system/path/rg');
++      mockExecSync.mockReturnValue('/mocked/system/path/rg\n');
+ 
+       const resolvedPath = await getRipgrepPath();
+-      expect(resolvedPath).toBeNull();
++      expect(resolvedPath).toBe('/mocked/system/path/rg');
++      expect(mockExecSync).toHaveBeenCalledWith('which rg', expect.any(Object));
++    });
++
++    it('should fall back to system PATH ripgrep using platform command (where) on Windows when bundled binaries are absent', async () => {
++      vi.spyOn(os, 'platform').mockReturnValue('win32');
++      vi.mocked(fileExists).mockImplementation(async (pkg) => pkg === 'C:\\mocked\\system\\path\\rg.exe');
++      mockExecSync.mockReturnValue('C:\\mocked\\system\\path\\rg.exe\r\n');
++
++      const resolvedPath = await getRipgrepPath();
++      expect(resolvedPath).toBe('C:\\mocked\\system\\path\\rg.exe');
++      expect(mockExecSync).toHaveBeenCalledWith('where rg', expect.any(Object));
++    });
++
++    it('should fall back to manual PATH search if platform commands fail or are absent', async () => {
++      vi.spyOn(os, 'platform').mockReturnValue('linux');
++      vi.mocked(fileExists).mockImplementation(async (pkg) => pkg === '/another/system/path/rg');
++      mockExecSync.mockImplementation(() => {
++        throw new Error('command not found');
++      });
++      const originalPath = process.env.PATH;
++      process.env.PATH = '/another/system/path';
++
++      try {
++        const resolvedPath = await getRipgrepPath();
++        expect(resolvedPath).toBe('/another/system/path/rg');
++      } finally {
++        process.env.PATH = originalPath;
++      }
++    });
++
++    it('should return null if binary is missing from both paths and system PATH fallback lookup fails', async () => {
++      vi.mocked(fileExists).mockResolvedValue(false);
++      mockExecSync.mockImplementation(() => {
++        throw new Error('command not found');
++      });
++      const originalPath = process.env.PATH;
++      process.env.PATH = '';
++
++      try {
++        const resolvedPath = await getRipgrepPath();
++        expect(resolvedPath).toBeNull();
++      } finally {
++        process.env.PATH = originalPath;
++      }
+     });
+   });
+ });
+diff --git a/packages/core/src/tools/ripGrep.ts b/packages/core/src/tools/ripGrep.ts
+index 861b4b0b8..e11847074 100644
+--- a/packages/core/src/tools/ripGrep.ts
++++ b/packages/core/src/tools/ripGrep.ts
+@@ -10,6 +10,7 @@ import fsPromises from 'node:fs/promises';
+ import path from 'node:path';
+ import os from 'node:os';
+ import { fileURLToPath } from 'node:url';
++import { execSync } from 'node:child_process';
+ import {
+   BaseDeclarativeTool,
+   BaseToolInvocation,
+@@ -61,6 +62,43 @@ export async function getRipgrepPath(): Promise<string | null> {
+     }
+   }
+ 
++  // Fallback to platform-specific lookup
++  try {
++    if (platform === 'win32') {
++      const output = execSync('where rg', {
++        stdio: ['ignore', 'pipe', 'ignore'],
++        encoding: 'utf8',
++      }).trim();
++      const firstPath = output.split(/\r?\n/)[0]?.trim();
++      if (firstPath && (await fileExists(firstPath))) {
++        return firstPath;
++      }
++    } else {
++      const output = execSync('which rg', {
++        stdio: ['ignore', 'pipe', 'ignore'],
++        encoding: 'utf8',
++      }).trim();
++      if (output && (await fileExists(output))) {
++        return output;
++      }
++    }
++  } catch {
++    // Ignored: platform commands might fail if rg is not in PATH
++  }
++
++  // Fallback to manual PATH lookup if commands are not available/fail
++  const pathEnv = process.env.PATH || '';
++  const pathSeparator = platform === 'win32' ? ';' : ':';
++  const dirs = pathEnv.split(pathSeparator);
++  const exeName = platform === 'win32' ? 'rg.exe' : 'rg';
++  for (const dir of dirs) {
++    if (!dir) continue;
++    const fullPath = path.join(dir, exeName);
++    if (await fileExists(fullPath)) {
++      return fullPath;
++    }
++  }
++
+   return null;
+ }

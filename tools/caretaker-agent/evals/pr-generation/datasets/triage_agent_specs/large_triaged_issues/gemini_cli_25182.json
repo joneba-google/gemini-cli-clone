@@ -1,0 +1,41 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "summary": "Fix security policy bypass when target file is open in the IDE",
+    "component": "packages/core/src/policy",
+    "primary_files": [
+      "packages/core/src/policy/policy-engine.ts",
+      "packages/core/src/scheduler/policy.ts",
+      "packages/core/src/tools/edit.ts",
+      "packages/core/src/tools/write-file.ts"
+    ],
+    "test_files": [
+      "packages/core/src/policy/policy-engine.test.ts",
+      "packages/core/src/scheduler/policy.test.ts",
+      "packages/core/src/tools/edit.test.ts"
+    ],
+    "architectural_insights": "The Gemini CLI policy engine evaluates tool invocation arguments against rules such as `argsPattern`. When a file is active or open in the IDE context, the active file state or IDE diffing handlers interact with tool invocation pathways. The policy check in `checkPolicy` and `PolicyEngine.check` must be guaranteed to run and correctly match file path arguments regardless of whether the file is active or open in the IDE context.",
+    "proposed_changes": [
+      "Verify that tool calls for file modification (`replace`, `write_file`) always undergo policy checks prior to reaching IDE diffing or file-writing logic.",
+      "Normalize file paths in tool call arguments during policy evaluation so `argsPattern` rules match reliably against relative and absolute path variants.",
+      "Add unit tests to `policy-engine.test.ts` and `edit.test.ts` to verify that `deny` policy rules for `replace` and `write_file` are enforced when files are open in the IDE."
+    ]
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 25182,
+    "title": "Policy is bypassed if the file is opened in the IDE",
+    "target_version": "0179726222f62db8d2c495d73505768166646912",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

@@ -1,0 +1,49 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21527",
+    "summary": {
+      "problem": "Referencing directories via `@` commands causes `EISDIR` binary check warnings and crashes the CLI with `RangeError: Maximum call stack size exceeded` in `handleAtCommand`.",
+      "root_cause": "`isBinaryFile` attempts `fs.promises.open` on directories without prior stat checks, raising `EISDIR` on Linux. Additionally, `ReadManyFilesTool` and `atCommandProcessor` process directory paths as files, leading to call stack exhaustion during expansion.",
+      "context": "The issue occurs when users pass directory references (such as skill directories) to `@` commands."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/fileUtils.ts",
+        "packages/core/src/tools/read-many-files.ts",
+        "packages/cli/src/ui/hooks/atCommandProcessor.ts"
+      ],
+      "steps": [
+        "In `packages/core/src/utils/fileUtils.ts`, update `isBinaryFile` to stat the target path first and return `false` if it is a directory, avoiding `fs.promises.open` on directories and catching `EISDIR` without issuing warnings.",
+        "In `packages/core/src/tools/read-many-files.ts`, ensure `ReadManyFilesTool` filters out directories using `stats.isFile()` before invoking `detectFileType` or reading file content.",
+        "In `packages/cli/src/ui/hooks/atCommandProcessor.ts`, guard path expansion and `@` command processing to prevent recursive processing or unhandled directory errors."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/fileUtils.test.ts",
+      "expected_behavior": "`isBinaryFile` handles directory paths gracefully by returning `false` without warnings, and `@` command resolution handles directories without crashing.",
+      "verification_steps": [
+        "Add a unit test in `packages/core/src/utils/fileUtils.test.ts` verifying that passing a directory path to `isBinaryFile` returns `false` without throwing or logging `EISDIR` warnings.",
+        "Run `npm test` using Vitest to ensure all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 21527,
+    "title": "Failed to check if file is binary: /home/sumeet/korl-webapp-next/skills/typescript-expert EISDIR: illegal operation on a directory, read \u2502 \u2502 \u26a0 Failed to check if file is binary: /home/sumeet/korl-webapp-next/skills/web-performance-optimization EISDIR: ille",
+    "target_version": "e5d58c2b5ab2460ffb91e8681fd31b91de909632",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

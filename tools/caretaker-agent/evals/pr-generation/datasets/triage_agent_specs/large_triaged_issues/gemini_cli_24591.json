@@ -1,0 +1,45 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24591",
+    "summary": {
+      "problem": "Running the compiled SEA binary (`./dist/linux-x64/gemini`) results in CLI argument parsing failure: 'Unknown arguments: max-old-space-size, maxOldSpaceSize'.",
+      "root_cause": "`getNodeMemoryArgs` calculates a target heap limit higher than the current default heap size and returns `['--max-old-space-size=...']`. When `relaunchAppInChildProcess` spawns `process.execPath` (the binary executable), these Node memory flags are passed as CLI flags to the binary, which are then placed in `process.argv` and rejected by yargs.",
+      "context": "Standalone SEA binaries created with Node Single Executable Application (`process.env.IS_BINARY === 'true'`) do not accept Node v8 command-line options directly as executable CLI flags."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/gemini.tsx"
+      ],
+      "steps": [
+        "In `packages/cli/src/gemini.tsx`, update `getNodeMemoryArgs` to check if `process.env['IS_BINARY'] === 'true'` alongside `process.env['GEMINI_CLI_NO_RELAUNCH']`.",
+        "If `process.env['IS_BINARY'] === 'true'`, return an empty array `[]` from `getNodeMemoryArgs` so Node memory CLI arguments are not appended when executing as a standalone binary."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/gemini.test.tsx",
+      "expected_behavior": "`getNodeMemoryArgs` returns an empty array when `process.env.IS_BINARY` is set to 'true', preventing node memory flags from being passed to the standalone binary.",
+      "verification_steps": [
+        "Add a unit test in `packages/cli/src/gemini.test.tsx` under `describe('getNodeMemoryArgs')` asserting `getNodeMemoryArgs(false)` returns `[]` when `process.env.IS_BINARY = 'true'`."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 24591,
+    "title": "[bug]  SEA - Unknown arguments: max-old-space-size, maxOldSpaceSize",
+    "target_version": "8c215c7a88df34dc125250c224c70cd307e087f1",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

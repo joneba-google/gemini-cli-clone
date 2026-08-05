@@ -1,0 +1,107 @@
+diff --git a/scripts/get-release-version.js b/scripts/get-release-version.js
+index 019280aad..179ff9d10 100644
+--- a/scripts/get-release-version.js
++++ b/scripts/get-release-version.js
+@@ -432,22 +432,9 @@ export function getVersion(options = {}) {
+   switch (type) {
+     case TAG_NIGHTLY:
+       versionData = getNightlyVersion();
+-      // Nightly versions include a git hash, so conflicts are highly unlikely
+-      // and indicate a problem. We'll still validate but not auto-increment.
+-      if (doesVersionExist({ args, version: versionData.releaseVersion })) {
+-        throw new Error(
+-          `Version conflict! Nightly version ${versionData.releaseVersion} already exists.`,
+-        );
+-      }
+       break;
+     case 'promote-nightly':
+       versionData = promoteNightlyVersion({ args });
+-      // A promoted nightly version is still a nightly, so we should check for conflicts.
+-      if (doesVersionExist({ args, version: versionData.releaseVersion })) {
+-        throw new Error(
+-          `Version conflict! Promoted nightly version ${versionData.releaseVersion} already exists.`,
+-        );
+-      }
+       break;
+     case 'stable':
+       versionData = getStableVersion(args);
+@@ -462,8 +449,14 @@ export function getVersion(options = {}) {
+       throw new Error(`Unknown release type: ${type}`);
+   }
+ 
+-  // For patchable versions, check for existence and increment if needed.
+-  if (type === 'stable' || type === TAG_PREVIEW || type === 'patch') {
++  // Check for existence and increment if needed.
++  if (
++    type === 'stable' ||
++    type === TAG_PREVIEW ||
++    type === 'patch' ||
++    type === TAG_NIGHTLY ||
++    type === 'promote-nightly'
++  ) {
+     let releaseVersion = versionData.releaseVersion;
+     while (doesVersionExist({ args, version: releaseVersion })) {
+       console.error(`Version ${releaseVersion} exists, incrementing.`);
+@@ -472,6 +465,19 @@ export function getVersion(options = {}) {
+         const [version, prereleasePart] = releaseVersion.split('-');
+         const previewNumber = parseInt(prereleasePart.split('.')[1]);
+         releaseVersion = `${version}-preview.${previewNumber + 1}`;
++      } else if (releaseVersion.includes('-nightly.')) {
++        // Increment nightly sequence number:
++        // 0.48.0-nightly.20260618.g4d3dcdce1 -> 0.48.0-nightly.20260618.g4d3dcdce1.1
++        // 0.48.0-nightly.20260618.g4d3dcdce1.1 -> 0.48.0-nightly.20260618.g4d3dcdce1.2
++        const parts = releaseVersion.split('.');
++        const lastPart = parts[parts.length - 1];
++        const num = parseInt(lastPart, 10);
++        if (!isNaN(num)) {
++          parts[parts.length - 1] = String(num + 1);
++          releaseVersion = parts.join('.');
++        } else {
++          releaseVersion = `${releaseVersion}.1`;
++        }
+       } else {
+         // Increment patch number: 0.5.4 -> 0.5.5
+         const versionParts = releaseVersion.split('.');
+diff --git a/scripts/tests/get-release-version.test.js b/scripts/tests/get-release-version.test.js
+index fedf53b16..2e8b9a108 100644
+--- a/scripts/tests/get-release-version.test.js
++++ b/scripts/tests/get-release-version.test.js
+@@ -205,5 +205,38 @@ describe('getVersion', () => {
+       // identifier, preventing it from stripping the leading zero.
+       expect(result.releaseVersion).toBe('0.8.0-nightly.20250917.g017972622');
+     });
++
++    it('should auto-increment nightly version if the calculated one already exists', () => {
++      const mockWithNightlyConflict = (command) => {
++        // The calculated nightly 0.8.0-nightly.20250917.gd3bf8a3d already exists on NPM
++        if (
++          command.includes(
++            'npm view @google/gemini-cli@0.8.0-nightly.20250917.gd3bf8a3d version',
++          )
++        )
++          return '0.8.0-nightly.20250917.gd3bf8a3d';
++        // The next one, .1, also already exists
++        if (
++          command.includes(
++            'npm view @google/gemini-cli@0.8.0-nightly.20250917.gd3bf8a3d.1 version',
++          )
++        )
++          return '0.8.0-nightly.20250917.gd3bf8a3d.1';
++        // The third one is available
++        if (
++          command.includes(
++            'npm view @google/gemini-cli@0.8.0-nightly.20250917.gd3bf8a3d.2 version',
++          )
++        )
++          throw new Error('Not found');
++
++        return mockExecSync(command);
++      };
++      vi.mocked(execSync).mockImplementation(mockWithNightlyConflict);
++
++      const result = getVersion({ type: 'nightly' });
++      // Should have skipped sequence 0 and sequence 1, and landed on .2
++      expect(result.releaseVersion).toBe('0.8.0-nightly.20250917.gd3bf8a3d.2');
++    });
+   });
+ });

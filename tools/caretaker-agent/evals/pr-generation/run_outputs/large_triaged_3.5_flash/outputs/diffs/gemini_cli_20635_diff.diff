@@ -1,0 +1,64 @@
+diff --git a/packages/core/src/policy/toml-loader.test.ts b/packages/core/src/policy/toml-loader.test.ts
+index 54a81771b..ce3fcd014 100644
+--- a/packages/core/src/policy/toml-loader.test.ts
++++ b/packages/core/src/policy/toml-loader.test.ts
+@@ -539,6 +539,37 @@ priority = 100
+       expect(error.details).toContain('toolName');
+     });
+ 
++    it('should return a schema_validation error if an unrecognized property is in a rule', async () => {
++      const result = await runLoadPoliciesFromToml(`
++[[rule]]
++toolname = "glob"
++decision = "allow"
++priority = 100
++`);
++      expect(result.rules).toHaveLength(0);
++      expect(result.errors).toHaveLength(1);
++      const error = result.errors[0];
++      expect(error.errorType).toBe('schema_validation');
++      expect(error.details).toContain('Unrecognized key');
++    });
++
++    it('should return a schema_validation error if an unrecognized property is in a safety_checker', async () => {
++      const result = await runLoadPoliciesFromToml(`
++[[safety_checker]]
++toolName = "write_file"
++priority = 100
++unknownField = "value"
++[safety_checker.checker]
++type = "in-process"
++name = "allowed-path"
++`);
++      expect(result.checkers).toHaveLength(0);
++      expect(result.errors).toHaveLength(1);
++      const error = result.errors[0];
++      expect(error.errorType).toBe('schema_validation');
++      expect(error.details).toContain('Unrecognized key');
++    });
++
+     it('should return a rule_validation error if commandRegex is used with wrong toolName', async () => {
+       const result = await runLoadPoliciesFromToml(`
+ [[rule]]
+diff --git a/packages/core/src/policy/toml-loader.ts b/packages/core/src/policy/toml-loader.ts
+index df4bd3ca9..d28199709 100644
+--- a/packages/core/src/policy/toml-loader.ts
++++ b/packages/core/src/policy/toml-loader.ts
+@@ -49,7 +49,7 @@ const PolicyRuleSchema = z.object({
+   toolAnnotations: z.record(z.any()).optional(),
+   allow_redirection: z.boolean().optional(),
+   deny_message: z.string().optional(),
+-});
++}).strict();
+ 
+ /**
+  * Schema for a single safety checker rule in the TOML file.
+@@ -77,7 +77,7 @@ const SafetyCheckerRuleSchema = z.object({
+       config: z.record(z.unknown()).optional(),
+     }),
+   ]),
+-});
++}).strict();
+ 
+ /**
+  * Schema for the entire policy TOML file.

@@ -1,0 +1,185 @@
+diff --git a/packages/core/src/agents/browser/analyzeScreenshot.test.ts b/packages/core/src/agents/browser/analyzeScreenshot.test.ts
+index 71e082b75..c9ad59a6f 100644
+--- a/packages/core/src/agents/browser/analyzeScreenshot.test.ts
++++ b/packages/core/src/agents/browser/analyzeScreenshot.test.ts
+@@ -36,6 +36,7 @@ function createMockBrowserManager(
+ function createMockConfig(
+   generateContentResult?: unknown,
+   generateContentError?: Error,
++  visualModel = 'test-visual-model',
+ ): Config {
+   const generateContent = generateContentError
+     ? vi.fn().mockRejectedValue(generateContentError)
+@@ -57,7 +58,7 @@ function createMockConfig(
+ 
+   return {
+     getBrowserAgentConfig: vi.fn().mockReturnValue({
+-      customConfig: { visualModel: 'test-visual-model' },
++      customConfig: { visualModel },
+     }),
+     getContentGenerator: vi.fn().mockReturnValue({
+       generateContent,
+@@ -243,5 +244,109 @@ describe('analyzeScreenshot', () => {
+       expect(result.llmContent).toContain('Visual analysis failed');
+       expect(result.llmContent).toContain('Network timeout');
+     });
++
++    it('passes the computerUse tool declaration when using a computer-use model', async () => {
++      const browserManager = createMockBrowserManager();
++      const config = createMockConfig(
++        undefined,
++        undefined,
++        'gemini-2.5-computer-use-preview-10-2025',
++      );
++      const tool = createAnalyzeScreenshotTool(
++        browserManager,
++        config,
++        mockMessageBus,
++      );
++
++      const invocation = tool.build({
++        instruction: 'Find the submit button',
++      });
++      await invocation.execute(new AbortController().signal);
++
++      const contentGenerator = config.getContentGenerator();
++      expect(contentGenerator.generateContent).toHaveBeenCalledWith(
++        expect.objectContaining({
++          config: expect.objectContaining({
++            tools: [
++              {
++                computerUse: {
++                  excludedPredefinedFunctions: [],
++                },
++              },
++            ],
++          }),
++        }),
++        'visual-analysis',
++        'utility_tool',
++      );
++    });
++
++    it('does not pass the computerUse tool declaration when using a standard vision model', async () => {
++      const browserManager = createMockBrowserManager();
++      const config = createMockConfig(
++        undefined,
++        undefined,
++        'gemini-2.0-flash',
++      );
++      const tool = createAnalyzeScreenshotTool(
++        browserManager,
++        config,
++        mockMessageBus,
++      );
++
++      const invocation = tool.build({
++        instruction: 'Find the submit button',
++      });
++      await invocation.execute(new AbortController().signal);
++
++      const contentGenerator = config.getContentGenerator();
++      expect(contentGenerator.generateContent).toHaveBeenCalledWith(
++        expect.objectContaining({
++          config: expect.not.objectContaining({
++            tools: expect.anything(),
++          }),
++        }),
++        'visual-analysis',
++        'utility_tool',
++      );
++    });
++
++    it('correctly extracts and includes functionCall parts in the result string', async () => {
++      const browserManager = createMockBrowserManager();
++      const functionCallResult = {
++        candidates: [
++          {
++            content: {
++              parts: [
++                {
++                  text: 'Text analysis part',
++                },
++                {
++                  functionCall: {
++                    name: 'custom_function',
++                    args: { x: 12, y: 34 },
++                  },
++                },
++              ],
++            },
++          },
++        ],
++      };
++      const config = createMockConfig(functionCallResult);
++      const tool = createAnalyzeScreenshotTool(
++        browserManager,
++        config,
++        mockMessageBus,
++      );
++
++      const invocation = tool.build({
++        instruction: 'Find the element',
++      });
++      const result = await invocation.execute(new AbortController().signal);
++
++      expect(result.llmContent).toContain('Text analysis part');
++      expect(result.llmContent).toContain('custom_function');
++      expect(result.llmContent).toContain('{"name":"custom_function","args":{"x":12,"y":34}}');
++    });
+   });
+ });
+diff --git a/packages/core/src/agents/browser/analyzeScreenshot.ts b/packages/core/src/agents/browser/analyzeScreenshot.ts
+index c269b71bf..ece22cd1e 100644
+--- a/packages/core/src/agents/browser/analyzeScreenshot.ts
++++ b/packages/core/src/agents/browser/analyzeScreenshot.ts
+@@ -115,6 +115,7 @@ class AnalyzeScreenshotInvocation extends BaseToolInvocation<
+       // Make a single generateContent call with the visual model
+       const visualModel = getVisualAgentModel(this.config);
+       const contentGenerator = this.config.getContentGenerator();
++      const isComputerUseModel = visualModel.includes('computer-use');
+ 
+       const response = await contentGenerator.generateContent(
+         {
+@@ -124,6 +125,17 @@ class AnalyzeScreenshotInvocation extends BaseToolInvocation<
+             topP: 0.95,
+             systemInstruction: VISUAL_SYSTEM_PROMPT,
+             abortSignal: signal,
++            ...(isComputerUseModel
++              ? {
++                  tools: [
++                    {
++                      computerUse: {
++                        excludedPredefinedFunctions: [],
++                      },
++                    },
++                  ],
++                }
++              : {}),
+           },
+           contents: [
+             {
+@@ -146,12 +158,17 @@ class AnalyzeScreenshotInvocation extends BaseToolInvocation<
+         LlmRole.UTILITY_TOOL,
+       );
+ 
+-      // Extract text from response
+-      const responseText =
+-        response.candidates?.[0]?.content?.parts
+-          ?.filter((p) => p.text)
+-          .map((p) => p.text)
+-          .join('\n') ?? '';
++      // Extract both text and functionCall from response defensively
++      const parts = response.candidates?.[0]?.content?.parts ?? [];
++      const extractedTextParts: string[] = [];
++      for (const p of parts) {
++        if (p.text) {
++          extractedTextParts.push(p.text);
++        } else if (p.functionCall) {
++          extractedTextParts.push(JSON.stringify(p.functionCall));
++        }
++      }
++      const responseText = extractedTextParts.join('\n');
+ 
+       if (!responseText) {
+         return {

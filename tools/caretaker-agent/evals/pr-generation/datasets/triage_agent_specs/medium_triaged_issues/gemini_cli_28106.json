@@ -1,0 +1,50 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28106",
+    "summary": {
+      "problem": "Starting Gemini CLI on Windows experiences a severe 50+ seconds startup delay due to eager execution of synchronous commands during top-level ESM module import.",
+      "root_cause": "Upon importing the interactive CLI bundle, EditorSettingsManager is instantiated at module scope ('export const editorSettingsManager = new EditorSettingsManager()'). Its constructor synchronously loops over all 16+ editor types and calls hasValidEditorCommand(type), which runs execSync('where.exe ...'). Process creation overhead on Windows causes this sequential evaluation to block the main thread for 50+ seconds.",
+      "context": "Process creation on Windows with active antivirus or EDR monitoring introduces significant overhead per invocation. Deferring editor availability checks until getAvailableEditorDisplays() is called avoids spawning subprocesses during CLI initialization."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/editors/editorSettingsManager.ts"
+      ],
+      "steps": [
+        "Refactor EditorSettingsManager in packages/cli/src/ui/editors/editorSettingsManager.ts to defer querying editor command availability until requested.",
+        "Remove eager initialization logic and hasValidEditorCommand loop from the EditorSettingsManager constructor.",
+        "Add a private availableEditors property initialized to null (private availableEditors: EditorDisplay[] | null = null;).",
+        "In getAvailableEditorDisplays(), lazily populate availableEditors on first invocation by mapping EDITOR_DISPLAY_NAMES and calling hasValidEditorCommand and allowEditorTypeInSandbox, caching and returning the result."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/editors/editorSettingsManager.test.ts",
+      "expected_behavior": "Instantiating or importing EditorSettingsManager does not trigger any synchronous hasValidEditorCommand subprocess calls. Available editors are lazily computed on the first call to getAvailableEditorDisplays() and cached for subsequent calls.",
+      "verification_steps": [
+        "Create packages/cli/src/ui/editors/editorSettingsManager.test.ts using Vitest.",
+        "Mock hasValidEditorCommand from @google/gemini-cli-core.",
+        "Assert that instantiating EditorSettingsManager does not invoke hasValidEditorCommand.",
+        "Assert that calling getAvailableEditorDisplays() invokes hasValidEditorCommand for all configured editors and returns cached results on subsequent invocations."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 28106,
+    "title": "[Performance] Severe 50s+ startup delay on Windows due to eager execSync in EditorSettingsManager during ESM import",
+    "target_version": "be7ba2c22adf095880b81da26f1afcc48520eebc",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

@@ -1,0 +1,159 @@
+diff --git a/packages/core/src/skills/skillLoader.test.ts b/packages/core/src/skills/skillLoader.test.ts
+index 3fe88c344..d35bf28ef 100644
+--- a/packages/core/src/skills/skillLoader.test.ts
++++ b/packages/core/src/skills/skillLoader.test.ts
+@@ -271,4 +271,74 @@ description: Test sanitization
+     expect(skills).toHaveLength(1);
+     expect(skills[0].name).toBe('gke-prs-troubleshooter');
+   });
++
++  it('should parse skill with single-line description containing unquoted punctuation and colons', async () => {
++    const skillDir = path.join(testRootDir, 'single-line-unquoted-colon');
++    await fs.mkdir(skillDir, { recursive: true });
++    const skillFile = path.join(skillDir, 'SKILL.md');
++    await fs.writeFile(
++      skillFile,
++      `---
++name: single-line-colon
++description: This is a single-line: description with unquoted colons and, punctuation!
++---
++# Instructions
++Do something.
++`,
++    );
++
++    const skills = await loadSkillsFromDir(testRootDir);
++
++    expect(skills).toHaveLength(1);
++    expect(skills[0].name).toBe('single-line-colon');
++    expect(skills[0].description).toBe(
++      'This is a single-line: description with unquoted colons and, punctuation!',
++    );
++  });
++
++  it('should parse skill with quoted single-line description and strip surrounding quotes', async () => {
++    const skillDir = path.join(testRootDir, 'single-line-quoted');
++    await fs.mkdir(skillDir, { recursive: true });
++    const skillFile = path.join(skillDir, 'SKILL.md');
++    await fs.writeFile(
++      skillFile,
++      `---
++name: single-line-quoted
++description: "A quoted single-line description with : colons."
++---
++# Instructions
++Do something.
++`,
++    );
++
++    const skills = await loadSkillsFromDir(testRootDir);
++
++    expect(skills).toHaveLength(1);
++    expect(skills[0].name).toBe('single-line-quoted');
++    expect(skills[0].description).toBe(
++      'A quoted single-line description with : colons.',
++    );
++  });
++
++  it('should convert non-string (numeric) name and description from js-yaml or fallback properly', async () => {
++    const skillDir = path.join(testRootDir, 'numeric-fields');
++    await fs.mkdir(skillDir, { recursive: true });
++    const skillFile = path.join(skillDir, 'SKILL.md');
++    await fs.writeFile(
++      skillFile,
++      `---
++name: 12345
++description: 67890
++---
++# Instructions
++Do something.
++`,
++    );
++
++    const skills = await loadSkillsFromDir(testRootDir);
++
++    expect(skills).toHaveLength(1);
++    expect(skills[0].name).toBe('12345');
++    expect(skills[0].description).toBe('67890');
++  });
+ });
+diff --git a/packages/core/src/skills/skillLoader.ts b/packages/core/src/skills/skillLoader.ts
+index d41b46449..c83a88096 100644
+--- a/packages/core/src/skills/skillLoader.ts
++++ b/packages/core/src/skills/skillLoader.ts
+@@ -31,6 +31,24 @@ export interface SkillDefinition {
+   extensionName?: string;
+ }
+ 
++function safeString(val: unknown): string {
++  if (val === null || val === undefined) {
++    return '';
++  }
++  return String(val).trim();
++}
++
++function stripSurroundingQuotes(str: string): string {
++  let trimmed = str.trim();
++  if (
++    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
++    (trimmed.startsWith("'") && trimmed.endsWith("'"))
++  ) {
++    trimmed = trimmed.slice(1, -1);
++  }
++  return trimmed.trim();
++}
++
+ export const FRONTMATTER_REGEX =
+   /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?/;
+ 
+@@ -46,8 +64,11 @@ export function parseFrontmatter(
+     if (parsed && typeof parsed === 'object') {
+       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+       const { name, description } = parsed as Record<string, unknown>;
+-      if (typeof name === 'string' && typeof description === 'string') {
+-        return { name, description };
++      if (name !== undefined && description !== undefined) {
++        return {
++          name: safeString(name),
++          description: safeString(description),
++        };
+       }
+     }
+   } catch (yamlError) {
+@@ -85,6 +106,7 @@ function parseSimpleFrontmatter(
+     const descMatch = line.match(/^\s*description:\s*(.*)$/);
+     if (descMatch) {
+       const descLines = [descMatch[1].trim()];
++      let parsedLinesCount = 1;
+ 
+       // Check for multi-line description (indented continuation lines)
+       while (i + 1 < lines.length) {
+@@ -93,18 +115,26 @@ function parseSimpleFrontmatter(
+         if (nextLine.match(/^[ \t]+\S/)) {
+           descLines.push(nextLine.trim());
+           i++;
++          parsedLinesCount++;
+         } else {
+           break;
+         }
+       }
+ 
+-      description = descLines.filter(Boolean).join(' ');
++      let parsedDesc = descLines.filter(Boolean).join(' ');
++      if (parsedLinesCount === 1) {
++        parsedDesc = stripSurroundingQuotes(parsedDesc);
++      }
++      description = parsedDesc;
+       continue;
+     }
+   }
+ 
+   if (name !== undefined && description !== undefined) {
+-    return { name, description };
++    return {
++      name: safeString(stripSurroundingQuotes(name)),
++      description: safeString(description),
++    };
+   }
+   return null;
+ }

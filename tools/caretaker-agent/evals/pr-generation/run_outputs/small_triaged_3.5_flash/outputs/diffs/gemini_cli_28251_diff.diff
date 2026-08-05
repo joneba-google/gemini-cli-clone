@@ -1,0 +1,26 @@
+diff --git a/packages/core/src/utils/paths.test.ts b/packages/core/src/utils/paths.test.ts
+index 173ec6374..53973dade 100644
+--- a/packages/core/src/utils/paths.test.ts
++++ b/packages/core/src/utils/paths.test.ts
+@@ -867,6 +867,9 @@ describe('normalizePath', () => {
+       ).toBe(true);
+       expect(isTrustedSystemPath('/usr/sbin/rg')).toBe(true);
+       expect(isTrustedSystemPath('/sbin/rg')).toBe(true);
++      expect(
++        isTrustedSystemPath('/nix/store/abc123-ripgrep-13.0.0/bin/rg'),
++      ).toBe(true);
+ 
+       // Untrusted paths
+       expect(isTrustedSystemPath('/home/user/bin/rg')).toBe(false);
+diff --git a/packages/core/src/utils/paths.ts b/packages/core/src/utils/paths.ts
+index 09c2bebb5..4303fa83d 100644
+--- a/packages/core/src/utils/paths.ts
++++ b/packages/core/src/utils/paths.ts
+@@ -562,6 +562,7 @@ export function isTrustedSystemPath(filePath: string): boolean {
+       '/usr/local/Cellar',
+       '/usr/sbin',
+       '/sbin',
++      '/nix/store',
+       // 1P internal hermetic execution paths
+       '/google/bin',
+       '/google/src/cloud',

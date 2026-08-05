@@ -1,0 +1,129 @@
+diff --git a/packages/core/src/tools/activate-skill.ts b/packages/core/src/tools/activate-skill.ts
+index 17e0b84f2..82fd7dc5c 100644
+--- a/packages/core/src/tools/activate-skill.ts
++++ b/packages/core/src/tools/activate-skill.ts
+@@ -6,6 +6,7 @@
+ 
+ import * as path from 'node:path';
+ import { getFolderStructure } from '../utils/getFolderStructure.js';
++import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
+ import type { MessageBus } from '../confirmation-bus/message-bus.js';
+ import {
+   BaseDeclarativeTool,
+@@ -62,8 +63,11 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
+     skillLocation: string,
+   ): Promise<string> {
+     if (this.cachedFolderStructure === undefined) {
++      const skillDir = path.dirname(skillLocation);
++      const fileService = new FileDiscoveryService(skillDir);
+       this.cachedFolderStructure = await getFolderStructure(
+-        path.dirname(skillLocation),
++        skillDir,
++        { fileService },
+       );
+     }
+     return this.cachedFolderStructure;
+diff --git a/packages/core/src/utils/getFolderStructure.test.ts b/packages/core/src/utils/getFolderStructure.test.ts
+index 5a9a077e9..5042b21df 100644
+--- a/packages/core/src/utils/getFolderStructure.test.ts
++++ b/packages/core/src/utils/getFolderStructure.test.ts
+@@ -11,7 +11,7 @@ import { getFolderStructure } from './getFolderStructure.js';
+ import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
+ import * as path from 'node:path';
+ import { GEMINI_DIR } from './paths.js';
+-import { GEMINI_IGNORE_FILE_NAME } from 'src/config/constants.js';
++import { GEMINI_IGNORE_FILE_NAME } from '../config/constants.js';
+ 
+ describe('getFolderStructure', () => {
+   let testRootDir: string;
+@@ -340,4 +340,78 @@ ${testRootDir}${path.sep}
+       expect(structure).toContain(`node_modules${path.sep}...`);
+     });
+   });
++
++  it('should ignore .venv folders by default and mark them with ...', async () => {
++    await createTestFile('.venv', 'lib', 'site-packages', 'index.py');
++    await createTestFile('file1.txt');
++
++    const structure = await getFolderStructure(testRootDir);
++    expect(structure.trim()).toBe(
++      `
++Showing up to 200 items (files + folders). Folders or files indicated with ... contain more items not shown, were ignored, or the display limit (200 items) was reached.
++
++${testRootDir}${path.sep}
++├───file1.txt
++└───.venv${path.sep}...
++`.trim(),
++    );
++  });
++
++  describe('with FileDiscoveryService for skill directory', () => {
++    it('should respect .gitignore inside the skill directory', async () => {
++      const skillDir = path.join(testRootDir, 'my-custom-skill');
++      await fsPromises.mkdir(skillDir, { recursive: true });
++      await fsPromises.mkdir(path.join(skillDir, '.git'), { recursive: true });
++
++      // Create files inside the skill directory
++      await fsPromises.writeFile(
++        path.join(skillDir, '.gitignore'),
++        'ignored-by-gitignore.txt\nignored-folder/',
++      );
++
++      // Write some files to check
++      const filePath1 = path.join(skillDir, 'allowed.txt');
++      await fsPromises.writeFile(filePath1, '');
++      const filePath2 = path.join(skillDir, 'ignored-by-gitignore.txt');
++      await fsPromises.writeFile(filePath2, '');
++      const subDir = path.join(skillDir, 'ignored-folder');
++      await fsPromises.mkdir(subDir, { recursive: true });
++      await fsPromises.writeFile(path.join(subDir, 'subfile.txt'), '');
++
++      const fileService = new FileDiscoveryService(skillDir);
++      const structure = await getFolderStructure(skillDir, { fileService });
++
++      expect(structure).toContain('allowed.txt');
++      expect(structure).not.toContain('ignored-by-gitignore.txt');
++      expect(structure).toContain('ignored-folder' + path.sep + '...');
++    });
++
++    it('should respect .geminiignore inside the skill directory', async () => {
++      const skillDir = path.join(testRootDir, 'my-custom-skill');
++      await fsPromises.mkdir(skillDir, { recursive: true });
++
++      // Create files inside the skill directory
++      await fsPromises.writeFile(
++        path.join(skillDir, GEMINI_IGNORE_FILE_NAME),
++        'ignored-by-geminiignore.txt\nignored-folder/',
++      );
++
++      // Write some files to check
++      const filePath1 = path.join(skillDir, 'allowed.txt');
++      await fsPromises.writeFile(filePath1, '');
++      const filePath2 = path.join(skillDir, 'ignored-by-geminiignore.txt');
++      await fsPromises.writeFile(filePath2, '');
++      const subDir = path.join(skillDir, 'ignored-folder');
++      await fsPromises.mkdir(subDir, { recursive: true });
++      await fsPromises.writeFile(path.join(subDir, 'subfile.txt'), '');
++
++      const fileService = new FileDiscoveryService(skillDir);
++      const structure = await getFolderStructure(skillDir, { fileService });
++
++      expect(structure).toContain('allowed.txt');
++      expect(structure).not.toContain('ignored-by-geminiignore.txt');
++      expect(structure).toContain('ignored-folder' + path.sep + '...');
++    });
++  });
+ });
++
+diff --git a/packages/core/src/utils/getFolderStructure.ts b/packages/core/src/utils/getFolderStructure.ts
+index 5e7adc9d5..3f36e3b0a 100644
+--- a/packages/core/src/utils/getFolderStructure.ts
++++ b/packages/core/src/utils/getFolderStructure.ts
+@@ -25,6 +25,7 @@ const DEFAULT_IGNORED_FOLDERS = new Set([
+   '.git',
+   'dist',
+   '__pycache__',
++  '.venv',
+ ]);
+ 
+ // --- Interfaces ---

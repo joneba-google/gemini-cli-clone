@@ -1,0 +1,120 @@
+diff --git a/packages/cli/src/nonInteractiveCli.test.ts b/packages/cli/src/nonInteractiveCli.test.ts
+index 8a036ec52..a9a4e668b 100644
+--- a/packages/cli/src/nonInteractiveCli.test.ts
++++ b/packages/cli/src/nonInteractiveCli.test.ts
+@@ -40,6 +40,9 @@ import type { LoadedSettings } from './config/settings.js';
+ 
+ // Mock core modules
+ vi.mock('./ui/hooks/atCommandProcessor.js');
++vi.mock('string-width', () => ({
++  default: (str: string) => str.length,
++}));
+ 
+ const mockSetupInitialActivityLogger = vi.hoisted(() => vi.fn());
+ vi.mock('./utils/devtoolsService.js', () => ({
+@@ -173,6 +176,7 @@ describe('runNonInteractive', () => {
+ 
+     mockConfig = {
+       initialize: vi.fn().mockReturnValue(Promise.resolve(undefined)),
++      isInitialized: vi.fn().mockReturnValue(false),
+       getMessageBus: vi.fn().mockReturnValue({
+         subscribe: vi.fn(),
+         unsubscribe: vi.fn(),
+@@ -275,6 +279,52 @@ describe('runNonInteractive', () => {
+     // so we no longer expect shutdownTelemetry to be called directly here
+   });
+ 
++  it('should call config.initialize if isInitialized is false', async () => {
++    vi.mocked(mockConfig.isInitialized).mockReturnValue(false);
++    const events: ServerGeminiStreamEvent[] = [
++      {
++        type: GeminiEventType.Finished,
++        value: { reason: undefined, usageMetadata: { totalTokenCount: 0 } },
++      },
++    ];
++    mockGeminiClient.sendMessageStream.mockReturnValue(
++      createStreamFromEvents(events),
++    );
++
++    await runNonInteractive({
++      config: mockConfig,
++      settings: mockSettings,
++      input: 'test font initialize',
++      prompt_id: 'test-initialize',
++    });
++
++    expect(mockConfig.isInitialized).toHaveBeenCalled();
++    expect(mockConfig.initialize).toHaveBeenCalled();
++  });
++
++  it('should not call config.initialize if isInitialized is true', async () => {
++    vi.mocked(mockConfig.isInitialized).mockReturnValue(true);
++    const events: ServerGeminiStreamEvent[] = [
++      {
++        type: GeminiEventType.Finished,
++        value: { reason: undefined, usageMetadata: { totalTokenCount: 0 } },
++      },
++    ];
++    mockGeminiClient.sendMessageStream.mockReturnValue(
++      createStreamFromEvents(events),
++    );
++
++    await runNonInteractive({
++      config: mockConfig,
++      settings: mockSettings,
++      input: 'test font initialize',
++      prompt_id: 'test-initialize-true',
++    });
++
++    expect(mockConfig.isInitialized).toHaveBeenCalled();
++    expect(mockConfig.initialize).not.toHaveBeenCalled();
++  });
++
+   it('should register activity logger when GEMINI_CLI_ACTIVITY_LOG_TARGET is set', async () => {
+     vi.stubEnv('GEMINI_CLI_ACTIVITY_LOG_TARGET', '/tmp/test.jsonl');
+     const events: ServerGeminiStreamEvent[] = [
+diff --git a/packages/cli/src/nonInteractiveCli.ts b/packages/cli/src/nonInteractiveCli.ts
+index ce3092b81..e65a1369f 100644
+--- a/packages/cli/src/nonInteractiveCli.ts
++++ b/packages/cli/src/nonInteractiveCli.ts
+@@ -231,6 +231,10 @@ export async function runNonInteractive(
+         }
+       });
+ 
++      if (!config.isInitialized()) {
++        await config.initialize();
++      }
++
+       const geminiClient = config.getGeminiClient();
+       scheduler = new Scheduler({
+         context: config,
+diff --git a/packages/cli/src/nonInteractiveCliAgentSession.ts b/packages/cli/src/nonInteractiveCliAgentSession.ts
+index f052e0070..4584a256d 100644
+--- a/packages/cli/src/nonInteractiveCliAgentSession.ts
++++ b/packages/cli/src/nonInteractiveCliAgentSession.ts
+@@ -229,6 +229,10 @@ export async function runNonInteractive({
+         }
+       });
+ 
++      if (!config.isInitialized()) {
++        await config.initialize();
++      }
++
+       const geminiClient = config.getGeminiClient();
+       scheduler = new Scheduler({
+         context: config,
+diff --git a/packages/cli/test-setup.ts b/packages/cli/test-setup.ts
+index e64e553ed..71a396c77 100644
+--- a/packages/cli/test-setup.ts
++++ b/packages/cli/test-setup.ts
+@@ -5,6 +5,10 @@
+  */
+ 
+ import { vi, beforeEach, afterEach } from 'vitest';
++vi.mock('string-width', () => ({
++  default: (str: string) => str.length,
++}));
++
+ import { format } from 'node:util';
+ import { coreEvents, debugLogger } from '@google/gemini-cli-core';
+ import { themeManager } from './src/ui/themes/theme-manager.js';

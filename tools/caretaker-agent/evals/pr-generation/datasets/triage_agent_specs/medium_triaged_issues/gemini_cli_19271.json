@@ -1,0 +1,47 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#19271",
+    "summary": {
+      "problem": "Switching git branches within the CLI using '!' shell execution does not update the active branch name displayed in the UI footer.",
+      "root_cause": "The 'useGitBranchName' hook hardcodes 'path.join(cwd, '.git', 'logs', 'HEAD')' to watch for branch changes. If 'cwd' is a subdirectory of a git repository, or if '.git' is a worktree file, this path does not exist or fails to trigger change events.",
+      "context": "The UI footer renders 'branchName' from 'UIStateContext' in 'AppContainer.tsx', which invokes 'useGitBranchName(config.getTargetDir())'."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/hooks/useGitBranchName.ts"
+      ],
+      "steps": [
+        "In 'useGitBranchName.ts', resolve the actual git directory path dynamically (e.g., using 'git rev-parse --git-dir') rather than assuming 'cwd/.git' is a directory at the current working directory.",
+        "Set up the file system watcher on the resolved git HEAD or logs/HEAD file path so branch switches trigger a re-fetch of the current branch name.",
+        "Ensure 'fetchBranchName()' is triggered whenever git HEAD ref changes occur."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useGitBranchName.test.tsx",
+      "expected_behavior": "The 'useGitBranchName' hook detects git branch updates and returns the updated branch name, including when running inside a git subdirectory.",
+      "verification_steps": [
+        "Add a unit test verifying that 'useGitBranchName' correctly determines branch name when 'cwd' is a subdirectory within a git repository.",
+        "Add a unit test verifying that modifying HEAD updates the returned branch name in the hook."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 19271,
+    "title": "If I switch git branches within the CLI, it's not reflected in the UI",
+    "target_version": "fb32db5cd6ef9e7ca277b54e51c4b1042a0406e1",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

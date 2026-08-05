@@ -1,0 +1,47 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26777",
+    "summary": {
+      "problem": "getRipgrepPath() never falls back to system PATH when bundled ripgrep binaries are missing.",
+      "root_cause": "getRipgrepPath() in packages/core/src/tools/ripGrep.ts only checks candidate vendor directory paths relative to __dirname and returns null if they do not exist.",
+      "context": "When @google/gemini-cli is installed globally without bundled binaries, ripgrep is reported as unavailable even if installed on system PATH."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/ripGrep.ts"
+      ],
+      "steps": [
+        "Update getRipgrepPath() in packages/core/src/tools/ripGrep.ts to check candidate vendor binary paths first.",
+        "Add fallback logic to look up system ripgrep on PATH using platform lookup ('where' on win32 or 'which' / PATH lookup on POSIX) when bundled binaries are absent.",
+        "Ensure getRipgrepPath() returns the verified path to system ripgrep or null if not found."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/ripGrep.test.ts",
+      "expected_behavior": "getRipgrepPath() should fall back to locating system ripgrep when candidate bundled binary files do not exist.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/tools/ripGrep.test.ts mocking missing bundled binary files and verifying fallback resolution to system PATH.",
+        "Run Vitest suite for packages/core/src/tools/ripGrep.test.ts to verify all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 26777,
+    "title": "Title: getRipgrepPath() never falls back to system PATH \u2014 ripgrep unavailable despite being installed",
+    "target_version": "1a894c18eaaa7229159a5433c4350a1594b25bac",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

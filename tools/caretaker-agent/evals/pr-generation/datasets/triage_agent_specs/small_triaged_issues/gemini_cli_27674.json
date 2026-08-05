@@ -1,0 +1,47 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#27674",
+    "summary": {
+      "problem": "Files and directories specified in .gitignore are still included in the session_context directory structure.",
+      "root_cause": "In `getFolderStructure.ts`, directories flagged as ignored by `FileDiscoveryService.shouldIgnoreDirectory` are treated the same as `ignoredFolders` (such as `node_modules`), causing them to be added to the directory tree as truncated folder entries (`folder/...`) instead of being completely excluded.",
+      "context": "`getFolderStructure` is called during session initialization to construct the workspace directory tree for `session_context`. While ignored files are correctly skipped, ignored directories returned by `FileDiscoveryService` are formatted into the tree with a trailing `...` indicator."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/getFolderStructure.ts"
+      ],
+      "steps": [
+        "In `packages/core/src/utils/getFolderStructure.ts`, update `readFullStructure` directory iteration logic.",
+        "Check `options.ignoredFolders.has(subFolderName)` first for known top-level ignored directories (like `node_modules` or `.git`) that should be displayed as truncated placeholders.",
+        "Skip directories ignored by `options.fileService.shouldIgnoreDirectory` so that directories specified in `.gitignore` or `.geminiignore` are completely excluded from the folder structure."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/getFolderStructure.test.ts",
+      "expected_behavior": "Directories specified in `.gitignore` (such as `.ruff_cache`, `.venv`, `__pycache__`) should be omitted completely from the formatted folder structure, while `ignoredFolders` entries like `node_modules` are still shown as truncated placeholders.",
+      "verification_steps": [
+        "Add a unit test in `packages/core/src/utils/getFolderStructure.test.ts` under the `.gitignore` section.",
+        "Create git-ignored directories (e.g. `.ruff_cache`, `.venv`) and verify that `getFolderStructure` output does not contain those directory names."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 27674,
+    "title": "Files and folders specified in .gitignore are passed to session_context",
+    "target_version": "4196596f7f48c0c397776f0cb7862c88d8fae91e",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

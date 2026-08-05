@@ -1,0 +1,198 @@
+diff --git a/packages/cli/src/core/auth.test.ts b/packages/cli/src/core/auth.test.ts
+index 639ed20a8..3d90033e3 100644
+--- a/packages/cli/src/core/auth.test.ts
++++ b/packages/cli/src/core/auth.test.ts
+@@ -135,4 +135,16 @@ describe('auth', () => {
+       AuthType.LOGIN_WITH_GOOGLE,
+     );
+   });
++
++  it('should trim trailing periods from URLs in auth error messages', async () => {
++    const error = new Error('Sign-in failed. Please click https://antigravity.google.');
++    vi.mocked(mockConfig.refreshAuth).mockRejectedValue(error);
++    const result = await performInitialAuth(
++      mockConfig,
++      AuthType.LOGIN_WITH_GOOGLE,
++    );
++    expect(result.authError).toBe(
++      'Failed to sign in. Message: Sign-in failed. Please click https://antigravity.google'
++    );
++  });
+ });
+diff --git a/packages/cli/src/core/auth.ts b/packages/cli/src/core/auth.ts
+index 0bc89f5bd..8ea1dc57a 100644
+--- a/packages/cli/src/core/auth.ts
++++ b/packages/cli/src/core/auth.ts
+@@ -11,6 +11,7 @@ import {
+   ValidationRequiredError,
+   isAccountSuspendedError,
+   ProjectIdRequiredError,
++  sanitizeUrls,
+ } from '@google/gemini-cli-core';
+ 
+ import type { AccountSuspensionInfo } from '../ui/contexts/UIStateContext.js';
+@@ -59,12 +60,12 @@ export async function performInitialAuth(
+       // OAuth succeeded but account setup requires project ID
+       // Show the error message directly without "Failed to login" prefix
+       return {
+-        authError: getErrorMessage(e),
++        authError: sanitizeUrls(getErrorMessage(e)),
+         accountSuspensionInfo: null,
+       };
+     }
+     return {
+-      authError: `Failed to sign in. Message: ${getErrorMessage(e)}`,
++      authError: sanitizeUrls(`Failed to sign in. Message: ${getErrorMessage(e)}`),
+       accountSuspensionInfo: null,
+     };
+   }
+diff --git a/packages/cli/src/ui/auth/useAuth.test.tsx b/packages/cli/src/ui/auth/useAuth.test.tsx
+index d512846ee..f56bc1fea 100644
+--- a/packages/cli/src/ui/auth/useAuth.test.tsx
++++ b/packages/cli/src/ui/auth/useAuth.test.tsx
+@@ -331,5 +331,20 @@ describe('useAuth', () => {
+       expect(result.current.authError).not.toContain('Failed to login');
+       expect(result.current.authState).toBe(AuthState.Updating);
+     });
++
++    it('should trim trailing periods from URLs in error messages', async () => {
++      const { result } = await renderHook(() =>
++        useAuthCommand(createSettings(AuthType.LOGIN_WITH_GOOGLE), mockConfig),
++      );
++
++      await act(async () => {
++        deferredRefreshAuth.reject(new Error('Sign-in failed. Go to https://antigravity.google.'));
++      });
++
++      expect(result.current.authError).toBe(
++        'Failed to sign in. Message: Sign-in failed. Go to https://antigravity.google',
++      );
++      expect(result.current.authState).toBe(AuthState.Updating);
++    });
+   });
+ });
+diff --git a/packages/cli/src/ui/auth/useAuth.ts b/packages/cli/src/ui/auth/useAuth.ts
+index caa9ed2c4..aa8e9d0be 100644
+--- a/packages/cli/src/ui/auth/useAuth.ts
++++ b/packages/cli/src/ui/auth/useAuth.ts
+@@ -14,7 +14,7 @@ import {
+   isAccountSuspendedError,
+   ProjectIdRequiredError,
+ } from '@google/gemini-cli-core';
+-import { getErrorMessage } from '@google/gemini-cli-core';
++import { getErrorMessage, sanitizeUrls } from '@google/gemini-cli-core';
+ import { AuthState } from '../types.js';
+ import { validateAuthMethod } from '../../config/auth.js';
+ 
+@@ -114,7 +114,7 @@ export const useAuthCommand = (
+       const error = await validateAuthMethodWithSettings(
+         authType,
+         settings,
+-      ).catch((e: unknown) => getErrorMessage(e));
++      ).catch((e: unknown) => sanitizeUrls(getErrorMessage(e)));
+ 
+       if (error) {
+         onAuthError(error);
+@@ -151,9 +151,9 @@ export const useAuthCommand = (
+         } else if (e instanceof ProjectIdRequiredError) {
+           // OAuth succeeded but account setup requires project ID
+           // Show the error message directly without "Failed to login" prefix
+-          onAuthError(getErrorMessage(e));
++          onAuthError(sanitizeUrls(getErrorMessage(e)));
+         } else {
+-          onAuthError(`Failed to sign in. Message: ${getErrorMessage(e)}`);
++          onAuthError(sanitizeUrls(`Failed to sign in. Message: ${getErrorMessage(e)}`));
+         }
+       }
+     })();
+diff --git a/packages/core/src/utils/errors.test.ts b/packages/core/src/utils/errors.test.ts
+index b4e077189..5f5b0ae38 100644
+--- a/packages/core/src/utils/errors.test.ts
++++ b/packages/core/src/utils/errors.test.ts
+@@ -22,6 +22,7 @@ import {
+   FatalConfigError,
+   FatalTurnLimitedError,
+   FatalToolExecutionError,
++  sanitizeUrls,
+ } from './errors.js';
+ 
+ describe('getErrorMessage', () => {
+@@ -47,6 +48,12 @@ describe('getErrorMessage', () => {
+     };
+     expect(getErrorMessage(error)).toBe('Bad Request Message');
+   });
++
++  it('should sanitize error message with trailing period in URL', () => {
++    expect(getErrorMessage(new Error('Sign-in failed. Go to https://antigravity.google.'))).toBe(
++      'Sign-in failed. Go to https://antigravity.google'
++    );
++  });
+ });
+ 
+ describe('isAbortError', () => {
+@@ -381,3 +388,27 @@ describe('getErrorType', () => {
+     expect(getErrorType(new _AbortError2('test'))).toBe('AbortError');
+   });
+ });
++
++describe('sanitizeUrls', () => {
++  it('should trim trailing periods from URLs', () => {
++    expect(sanitizeUrls('Please visit https://antigravity.google. for help.')).toBe(
++      'Please visit https://antigravity.google for help.'
++    );
++    expect(sanitizeUrls('Go to http://example.com/some/path...')).toBe(
++      'Go to http://example.com/some/path'
++    );
++  });
++
++  it('should trim regular trailing sentence punctuation from URLs', () => {
++    expect(sanitizeUrls('Visit https://antigravity.google, or email us.')).toBe(
++      'Visit https://antigravity.google or email us.'
++    );
++    expect(sanitizeUrls('Is it https://antigravity.google?')).toBe(
++      'Is it https://antigravity.google'
++    );
++  });
++
++  it('should not modify URLs that have valid punctuation inside them', () => {
++    expect(sanitizeUrls('https://abc.xyz/p.html')).toBe('https://abc.xyz/p.html');
++  });
++});
+diff --git a/packages/core/src/utils/errors.ts b/packages/core/src/utils/errors.ts
+index ca3637a35..8b569c791 100644
+--- a/packages/core/src/utils/errors.ts
++++ b/packages/core/src/utils/errors.ts
+@@ -33,10 +33,19 @@ export function isAbortError(error: unknown): boolean {
+   return error instanceof Error && error.name === 'AbortError';
+ }
+ 
++export function sanitizeUrls(message: string): string {
++  if (typeof message !== 'string') {
++    return message;
++  }
++  return message.replace(/https?:\/\/[^\s]+/g, (url) =>
++    url.replace(/[.,!?;:]+$/, '')
++  );
++}
++
+ export function getErrorMessage(error: unknown): string {
+   const friendlyError = toFriendlyError(error);
+   if (friendlyError instanceof Error) {
+-    return friendlyError.message;
++    return sanitizeUrls(friendlyError.message);
+   }
+   if (
+     typeof friendlyError === 'object' &&
+@@ -45,10 +54,10 @@ export function getErrorMessage(error: unknown): string {
+     typeof (friendlyError as { message: unknown }).message === 'string'
+   ) {
+     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+-    return (friendlyError as { message: string }).message;
++    return sanitizeUrls((friendlyError as { message: string }).message);
+   }
+   try {
+-    return String(friendlyError);
++    return sanitizeUrls(String(friendlyError));
+   } catch {
+     return 'Failed to get error details';
+   }

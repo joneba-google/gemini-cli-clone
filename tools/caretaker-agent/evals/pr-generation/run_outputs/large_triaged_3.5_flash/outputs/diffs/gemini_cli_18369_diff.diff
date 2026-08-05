@@ -1,0 +1,258 @@
+diff --git a/packages/cli/src/ui/contexts/SessionContext.tsx b/packages/cli/src/ui/contexts/SessionContext.tsx
+index 7102bc9fa..70ea22831 100644
+--- a/packages/cli/src/ui/contexts/SessionContext.tsx
++++ b/packages/cli/src/ui/contexts/SessionContext.tsx
+@@ -182,27 +182,46 @@ const SessionStatsContext = createContext<SessionStatsContextValue | undefined>(
+ 
+ // --- Provider Component ---
+ 
+-export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
+-  children,
+-}) => {
++export const SessionStatsProvider: React.FC<{
++  children: React.ReactNode;
++  sessionId?: string;
++}> = ({ children, sessionId: sessionIdProp }) => {
+   const [stats, setStats] = useState<SessionStatsState>({
+-    sessionId,
++    sessionId: sessionIdProp || uiTelemetryService.getSessionId() || sessionId,
+     sessionStartTime: new Date(),
+     metrics: uiTelemetryService.getMetrics(),
+     lastPromptTokenCount: 0,
+     promptCount: 0,
+   });
+ 
++  useEffect(() => {
++    if (sessionIdProp) {
++      setStats((prevState) => {
++        if (prevState.sessionId === sessionIdProp) {
++          return prevState;
++        }
++        return {
++          ...prevState,
++          sessionId: sessionIdProp,
++        };
++      });
++    }
++  }, [sessionIdProp]);
++
+   useEffect(() => {
+     const handleUpdate = ({
+       metrics,
+       lastPromptTokenCount,
++      sessionId: newSessionId,
+     }: {
+       metrics: SessionMetrics;
+       lastPromptTokenCount: number;
++      sessionId?: string;
+     }) => {
+       setStats((prevState) => {
++        const nextSessionId = newSessionId || sessionIdProp || prevState.sessionId;
+         if (
++          prevState.sessionId === nextSessionId &&
+           prevState.lastPromptTokenCount === lastPromptTokenCount &&
+           areMetricsEqual(prevState.metrics, metrics)
+         ) {
+@@ -210,6 +229,7 @@ export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
+         }
+         return {
+           ...prevState,
++          sessionId: nextSessionId,
+           metrics,
+           lastPromptTokenCount,
+         };
+@@ -221,12 +241,13 @@ export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
+     handleUpdate({
+       metrics: uiTelemetryService.getMetrics(),
+       lastPromptTokenCount: uiTelemetryService.getLastPromptTokenCount(),
++      sessionId: uiTelemetryService.getSessionId(),
+     });
+ 
+     return () => {
+       uiTelemetryService.off('update', handleUpdate);
+     };
+-  }, []);
++  }, [sessionIdProp]);
+ 
+   const startNewPrompt = useCallback(() => {
+     setStats((prevState) => ({
+diff --git a/packages/cli/src/ui/hooks/useSessionResume.test.ts b/packages/cli/src/ui/hooks/useSessionResume.test.ts
+index 9350cc167..ac2c7c2ca 100644
+--- a/packages/cli/src/ui/hooks/useSessionResume.test.ts
++++ b/packages/cli/src/ui/hooks/useSessionResume.test.ts
+@@ -8,11 +8,12 @@ import { act } from 'react';
+ import { renderHook } from '../../test-utils/render.js';
+ import { waitFor } from '../../test-utils/async.js';
+ import { useSessionResume } from './useSessionResume.js';
+-import type {
+-  Config,
+-  ResumedSessionData,
+-  ConversationRecord,
+-  MessageRecord,
++import {
++  type Config,
++  type ResumedSessionData,
++  type ConversationRecord,
++  type MessageRecord,
++  uiTelemetryService,
+ } from '@google/gemini-cli-core';
+ import type { UseHistoryManagerReturn } from './useHistoryManager.js';
+ import type { HistoryItemWithoutId } from '../types.js';
+@@ -154,6 +155,36 @@ describe('useSessionResume', () => {
+       expect(mockGeminiClient.resumeChat).not.toHaveBeenCalled();
+     });
+ 
++    it('should call uiTelemetryService.hydrate with conversation record', async () => {
++      const { result } = renderHook(() => useSessionResume(getDefaultProps()));
++
++      const uiHistory: HistoryItemWithoutId[] = [];
++      const clientHistory: never[] = [];
++      const resumedData: ResumedSessionData = {
++        conversation: {
++          sessionId: 'test-123',
++          projectHash: 'project-123',
++          startTime: '2025-01-01T00:00:00Z',
++          lastUpdated: '2025-01-01T01:00:00Z',
++          messages: [] as MessageRecord[],
++        },
++        filePath: '/path/to/session.json',
++      };
++
++      const hydrateSpy = vi.spyOn(uiTelemetryService, 'hydrate');
++
++      await act(async () => {
++        await result.current.loadHistoryForResume(
++          uiHistory,
++          clientHistory,
++          resumedData,
++        );
++      });
++
++      expect(hydrateSpy).toHaveBeenCalledWith(resumedData.conversation);
++      hydrateSpy.mockRestore();
++    });
++
+     it('should handle empty history arrays', async () => {
+       const { result } = renderHook(() => useSessionResume(getDefaultProps()));
+ 
+diff --git a/packages/cli/src/ui/hooks/useSessionResume.ts b/packages/cli/src/ui/hooks/useSessionResume.ts
+index 9889c4bd1..5e5f06ec8 100644
+--- a/packages/cli/src/ui/hooks/useSessionResume.ts
++++ b/packages/cli/src/ui/hooks/useSessionResume.ts
+@@ -7,6 +7,7 @@
+ import { useCallback, useEffect, useRef, useState } from 'react';
+ import {
+   coreEvents,
++  uiTelemetryService,
+   type Config,
+   type ResumedSessionData,
+ } from '@google/gemini-cli-core';
+@@ -69,6 +70,7 @@ export function useSessionResume({
+         uiHistory.forEach((item, index) => {
+           historyManagerRef.current.addItem(item, index, true);
+         });
++        uiTelemetryService.hydrate(resumedData.conversation);
+         refreshStaticRef.current(); // Force Static component to re-render with the updated history.
+ 
+         // Restore directories from the resumed session
+diff --git a/packages/core/src/telemetry/uiTelemetry.ts b/packages/core/src/telemetry/uiTelemetry.ts
+index 6caf2a860..fa641eb14 100644
+--- a/packages/core/src/telemetry/uiTelemetry.ts
++++ b/packages/core/src/telemetry/uiTelemetry.ts
+@@ -12,6 +12,8 @@ import {
+ } from './types.js';
+ 
+ import { ToolCallDecision } from './tool-call-decision.js';
++import { sessionId } from '../utils/session.js';
++import type { ConversationRecord } from '../services/chatRecordingService.js';
+ import type {
+   ApiErrorEvent,
+   ApiResponseEvent,
+@@ -115,6 +117,87 @@ const createInitialMetrics = (): SessionMetrics => ({
+ export class UiTelemetryService extends EventEmitter {
+   #metrics: SessionMetrics = createInitialMetrics();
+   #lastPromptTokenCount = 0;
++  #sessionId: string = sessionId;
++
++  getSessionId(): string {
++    return this.#sessionId;
++  }
++
++  setSessionId(sessionId: string): void {
++    this.#sessionId = sessionId;
++  }
++
++  hydrate(conversation: ConversationRecord) {
++    this.#sessionId = conversation.sessionId;
++    this.#metrics = createInitialMetrics();
++    this.#lastPromptTokenCount = 0;
++
++    if (conversation.messages) {
++      for (const msg of conversation.messages) {
++        if (msg.type === 'gemini') {
++          const modelName = msg.model || 'unknown';
++          if (msg.tokens) {
++            const modelMetrics = this.getOrCreateModelMetrics(modelName);
++            modelMetrics.api.totalRequests++;
++            modelMetrics.tokens.prompt += msg.tokens.input || 0;
++            modelMetrics.tokens.candidates += msg.tokens.output || 0;
++            modelMetrics.tokens.total += msg.tokens.total || 0;
++            modelMetrics.tokens.cached += msg.tokens.cached || 0;
++            modelMetrics.tokens.thoughts += msg.tokens.thoughts || 0;
++            modelMetrics.tokens.tool += msg.tokens.tool || 0;
++            modelMetrics.tokens.input = Math.max(
++              0,
++              modelMetrics.tokens.prompt - modelMetrics.tokens.cached,
++            );
++            this.#lastPromptTokenCount = msg.tokens.input || 0;
++          }
++
++          if (msg.toolCalls) {
++            for (const toolCall of msg.toolCalls) {
++              const { tools } = this.#metrics;
++              tools.totalCalls++;
++              tools.totalDurationMs += 0;
++
++              if (toolCall.status === 'success') {
++                tools.totalSuccess++;
++              } else {
++                tools.totalFail++;
++              }
++
++              if (!tools.byName[toolCall.name]) {
++                tools.byName[toolCall.name] = {
++                  count: 0,
++                  success: 0,
++                  fail: 0,
++                  durationMs: 0,
++                  decisions: {
++                    [ToolCallDecision.ACCEPT]: 0,
++                    [ToolCallDecision.REJECT]: 0,
++                    [ToolCallDecision.MODIFY]: 0,
++                    [ToolCallDecision.AUTO_ACCEPT]: 0,
++                  },
++                };
++              }
++
++              const toolStats = tools.byName[toolCall.name];
++              toolStats.count++;
++              if (toolCall.status === 'success') {
++                toolStats.success++;
++              } else {
++                toolStats.fail++;
++              }
++            }
++          }
++        }
++      }
++    }
++
++    this.emit('update', {
++      metrics: this.#metrics,
++      lastPromptTokenCount: this.#lastPromptTokenCount,
++      sessionId: this.#sessionId,
++    });
++  }
+ 
+   addEvent(event: UiEvent) {
+     switch (event['event.name']) {

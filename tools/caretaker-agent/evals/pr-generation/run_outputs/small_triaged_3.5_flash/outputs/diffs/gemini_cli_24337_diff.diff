@@ -1,0 +1,103 @@
+diff --git a/packages/cli/src/ui/hooks/slashCommandProcessor.test.tsx b/packages/cli/src/ui/hooks/slashCommandProcessor.test.tsx
+index ec4aa0067..52fc8a680 100644
+--- a/packages/cli/src/ui/hooks/slashCommandProcessor.test.tsx
++++ b/packages/cli/src/ui/hooks/slashCommandProcessor.test.tsx
+@@ -866,6 +866,57 @@ describe('useSlashCommandProcessor', () => {
+ 
+       expect(abortSpy).toHaveBeenCalledTimes(1);
+     });
++
++    it('should register and clean up IdeClient listener on unmount', async () => {
++      const addStatusChangeListener = vi.fn();
++      const removeStatusChangeListener = vi.fn();
++      const mockClient = {
++        addStatusChangeListener,
++        removeStatusChangeListener,
++      };
++      mockIdeClientGetInstance.mockResolvedValue(mockClient);
++
++      const { unmount } = await setupProcessorHook();
++
++      // Flush microtasks so the async IIFE can execute and register the listener
++      await new Promise((resolve) => setTimeout(resolve, 0));
++
++      expect(addStatusChangeListener).toHaveBeenCalledTimes(1);
++
++      unmount();
++
++      expect(removeStatusChangeListener).toHaveBeenCalledTimes(1);
++    });
++
++    it('should prevent registering IdeClient listener if unmounted before IdeClient resolves', async () => {
++      let resolveClient!: (value: unknown) => void;
++      const clientPromise = new Promise((resolve) => {
++        resolveClient = resolve;
++      });
++      const addStatusChangeListener = vi.fn();
++      const removeStatusChangeListener = vi.fn();
++      const mockClient = {
++        addStatusChangeListener,
++        removeStatusChangeListener,
++      };
++
++      mockIdeClientGetInstance.mockReturnValue(clientPromise);
++
++      const { unmount } = await setupProcessorHook();
++
++      // Unmount before the promise resolves
++      unmount();
++
++      // Now resolve the client promise
++      resolveClient(mockClient);
++
++      // Wait for any microtasks to flush
++      await new Promise((resolve) => setTimeout(resolve, 0));
++
++      // As we unmounted before resolving, we should not have called addStatusChangeListener or removeStatusChangeListener
++      expect(addStatusChangeListener).not.toHaveBeenCalled();
++      expect(removeStatusChangeListener).not.toHaveBeenCalled();
++    });
+   });
+ 
+   describe('Slash Command Logging', () => {
+diff --git a/packages/cli/src/ui/hooks/slashCommandProcessor.ts b/packages/cli/src/ui/hooks/slashCommandProcessor.ts
+index f55503ad2..322c1292b 100644
+--- a/packages/cli/src/ui/hooks/slashCommandProcessor.ts
++++ b/packages/cli/src/ui/hooks/slashCommandProcessor.ts
+@@ -278,6 +278,9 @@ export const useSlashCommandProcessor = (
+       return;
+     }
+ 
++    let isCancelled = false;
++    let acquiredClient: IdeClient | null = null;
++
+     const listener = () => {
+       reloadCommands();
+     };
+@@ -285,6 +288,10 @@ export const useSlashCommandProcessor = (
+     // eslint-disable-next-line @typescript-eslint/no-floating-promises
+     (async () => {
+       const ideClient = await IdeClient.getInstance();
++      if (isCancelled) {
++        return;
++      }
++      acquiredClient = ideClient;
+       ideClient.addStatusChangeListener(listener);
+     })();
+ 
+@@ -307,11 +314,10 @@ export const useSlashCommandProcessor = (
+     coreEvents.on('extensionsStopping', extensionEventListener);
+ 
+     return () => {
+-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+-      (async () => {
+-        const ideClient = await IdeClient.getInstance();
+-        ideClient.removeStatusChangeListener(listener);
+-      })();
++      isCancelled = true;
++      if (acquiredClient) {
++        acquiredClient.removeStatusChangeListener(listener);
++      }
+       removeMCPStatusChangeListener(listener);
+       coreEvents.off('extensionsStarting', extensionEventListener);
+       coreEvents.off('extensionsStopping', extensionEventListener);

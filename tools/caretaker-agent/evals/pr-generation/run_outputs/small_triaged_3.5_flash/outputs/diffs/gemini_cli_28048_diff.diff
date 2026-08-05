@@ -1,0 +1,43 @@
+diff --git a/docs/hooks/reference.md b/docs/hooks/reference.md
+index 14846fe22..43f1cf56d 100644
+--- a/docs/hooks/reference.md
++++ b/docs/hooks/reference.md
+@@ -325,6 +325,10 @@ Gemini CLI uses these structures to ensure hooks don't break across SDK updates.
+     "content": { "role": "model", "parts": string[] },
+     "finishReason": string
+   }>,
+-  "usageMetadata": { "totalTokenCount": number }
++  "usageMetadata": {
++    "promptTokenCount": number,
++    "candidatesTokenCount": number,
++    "totalTokenCount": number
++  }
+ }
+ ```
+diff --git a/packages/core/src/hooks/hookTranslator.test.ts b/packages/core/src/hooks/hookTranslator.test.ts
+index 9237b8a27..23dd60f05 100644
+--- a/packages/core/src/hooks/hookTranslator.test.ts
++++ b/packages/core/src/hooks/hookTranslator.test.ts
+@@ -438,6 +438,11 @@ describe('HookTranslator', () => {
+             finishReason: 'STOP',
+           },
+         ],
++        usageMetadata: {
++          promptTokenCount: 15,
++          candidatesTokenCount: 25,
++          totalTokenCount: 40,
++        },
+       };
+ 
+       const sdkResponse = translator.fromHookLLMResponse(hookResponse);
+@@ -447,6 +452,11 @@ describe('HookTranslator', () => {
+       expect(sdkResponse.candidates?.[0]?.content?.parts?.[0]?.text).toBe(
+         'Hello response',
+       );
++      expect(sdkResponse.usageMetadata).toEqual({
++        promptTokenCount: 15,
++        candidatesTokenCount: 25,
++        totalTokenCount: 40,
++      });
+     });
+   });

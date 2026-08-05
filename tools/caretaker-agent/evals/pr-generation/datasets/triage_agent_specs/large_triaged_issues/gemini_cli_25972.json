@@ -1,0 +1,46 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25972",
+    "summary": {
+      "problem": "The CLI throws errors or crashes when processing prompts containing code logs or paths starting with '@' (e.g., '@/lib/formatTimeRange').",
+      "root_cause": "When user prompts contain '@' followed by path-like text, 'atCommandProcessor.ts' misinterprets these tokens as '@path' file inclusion commands. When resolving non-existent or alias paths (such as '@/lib/...' module aliases or code snippets in logs), file lookup or glob search failures throw errors rather than gracefully falling back to treating unresolvable '@' references as literal text.",
+      "context": "User prompts with test log output or code snippets frequently include module aliases like '@/lib/...' or decorator/annotation syntax. The CLI '@path' command parser should handle unresolvable '@' references gracefully without interrupting user query submission."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/hooks/atCommandProcessor.ts"
+      ],
+      "steps": [
+        "Update atCommandProcessor.ts to handle unresolvable or invalid '@' references gracefully during path resolution and permission checks.",
+        "Ensure that when resolveFilePaths encounters unresolvable paths or glob search errors, it catches exceptions and falls back to preserving the original text rather than failing query execution."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/atCommandProcessor.test.ts",
+      "expected_behavior": "Prompts containing code logs, module aliases with '@', or invalid '@' references are processed normally with the literal text passed to the LLM.",
+      "verification_steps": [
+        "Add a unit test in atCommandProcessor.test.ts passing a prompt string containing '@' paths like '@/lib/formatTimeRange' that do not exist on disk.",
+        "Verify that handleAtCommand succeeds and returns processedQuery containing the original query text without throwing errors."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 25972,
+    "title": "cli breaks on certain prompts which contain code logs",
+    "target_version": "42587de7338f65e075070eeea33a4149266d05ae",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

@@ -1,0 +1,53 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26361",
+    "summary": {
+      "problem": "Calling Vertex AI or Gemini API through an HTTP/HTTPS proxy throws 'TypeError: HttpsProxyAgent is not a constructor'.",
+      "root_cause": "esbuild ESM bundling with code splitting causes dynamic import('https-proxy-agent') inside gaxios to lose named exports and resolve HttpsProxyAgent to undefined.",
+      "context": "Statically importing HttpProxyAgent and HttpsProxyAgent in contentGenerator.ts and injecting the pre-instantiated agent via googleAuthOptions.clientOptions.transporterOptions.agent bypasses gaxios's dynamic import path entirely."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/contentGenerator.ts",
+        "packages/core/package.json",
+        "package.json"
+      ],
+      "steps": [
+        "Statically import HttpProxyAgent from 'http-proxy-agent' and HttpsProxyAgent from 'https-proxy-agent' in packages/core/src/core/contentGenerator.ts.",
+        "In createContentGenerator, extract and trim the proxy URL from config if present.",
+        "Instantiate HttpProxyAgent if baseUrl starts with 'http://', otherwise instantiate HttpsProxyAgent.",
+        "Inject proxyAgent into GoogleGenAI constructor options via googleAuthOptions.clientOptions.transporterOptions.agent.",
+        "Add http-proxy-agent dependency to packages/core/package.json and root package.json."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/contentGenerator.test.ts",
+      "expected_behavior": "GoogleGenAI constructor receives transporterOptions.agent set to HttpsProxyAgent for HTTPS destinations and HttpProxyAgent for HTTP destinations when a proxy is configured, and omits googleAuthOptions when no proxy is configured.",
+      "verification_steps": [
+        "Verify HttpsProxyAgent injection when proxy URL is configured with HTTPS destination.",
+        "Verify HttpProxyAgent injection when destination baseUrl uses http:// protocol.",
+        "Verify trimming of leading/trailing whitespace from proxy URL string before agent creation.",
+        "Verify googleAuthOptions is omitted when no proxy URL is configured."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 26361,
+    "title": "fix(core): externalize https-proxy-agent to fix proxy support",
+    "target_version": "4e175527a2b241a68afd5f1509a8bebc21a44dfe",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

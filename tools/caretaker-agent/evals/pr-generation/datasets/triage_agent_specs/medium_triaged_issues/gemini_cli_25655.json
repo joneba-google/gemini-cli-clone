@@ -1,0 +1,47 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25655",
+    "summary": {
+      "problem": "When a SessionStart hook returns a systemMessage, Gemini CLI renders the message twice at session start and after running the clear command.",
+      "root_cause": "HookEventHandler emits a CoreEvent.HookSystemMessage event when hooks execute, which AppContainer listens to and adds to historyManager with the command source tag. Additionally, AppContainer.tsx and clearCommand.ts manually check result.systemMessage from fireSessionStartEvent and add it to historyManager/ui a second time without the source tag.",
+      "context": "BeforeAgent and BeforeTool hooks do not double-render because their return values are not manually passed to historyManager.addItem by caller code."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/AppContainer.tsx",
+        "packages/cli/src/ui/commands/clearCommand.ts"
+      ],
+      "steps": [
+        "In packages/cli/src/ui/AppContainer.tsx, remove the explicit historyManager.addItem call for result.systemMessage following fireSessionStartEvent execution.",
+        "In packages/cli/src/ui/commands/clearCommand.ts, remove the explicit context.ui.addItem call for result.systemMessage following fireSessionStartEvent execution."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/commands/clearCommand.test.ts",
+      "expected_behavior": "SessionStart hook systemMessage is rendered exactly once via CoreEvent.HookSystemMessage without being duplicated by AppContainer or clearCommand.",
+      "verification_steps": [
+        "Verify clearCommand does not call context.ui.addItem when fireSessionStartEvent returns a systemMessage.",
+        "Run unit tests using Vitest to ensure clearCommand tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 25655,
+    "title": "SessionStart hook's systemMessage renders twice (BeforeAgent/BeforeTool render once)",
+    "target_version": "8573650253888a252500856e240385ff8a2553c8",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

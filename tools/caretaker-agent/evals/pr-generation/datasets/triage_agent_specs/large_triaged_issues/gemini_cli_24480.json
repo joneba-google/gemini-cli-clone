@@ -1,0 +1,53 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24480",
+    "summary": {
+      "problem": "Windows sandbox execution is unreliable due to missing execution synchronization in GeminiSandbox.cs (WaitForSingleObject missing), lack of detailed Win32 error reporting, permission inheritance issues with Low Integrity SID ACLs in WindowsSandboxManager.ts, premature manifest cleanup, and failing integration tests due to shell aliases, redirection syntax, and OS-specific networking/PTY limitations.",
+      "root_cause": "In GeminiSandbox.cs, processes were spawned without waiting for process completion or ensuring child processes were assigned to Job Objects prior to execution. WindowsSandboxManager.ts lacked explicit Modify grants for Low Integrity SID on allowed paths and removed temporary manifests before sandboxed commands finished. Integration tests relied on cmd/PowerShell aliases (> redirection, Invoke-WebRequest) and ran PTY and loopback network tests that Windows Job Objects and ConPTY do not support.",
+      "context": "Windows sandboxing relies on C# GeminiSandbox helper compiled at runtime or pre-built, combined with Job Objects, Low Integrity SIDs via icacls, and process pipe redirection. Fixing these issues stabilizes sandbox execution and integration test suites on Windows CI."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/sandbox/windows/GeminiSandbox.cs",
+        "packages/core/src/sandbox/windows/WindowsSandboxManager.ts"
+      ],
+      "steps": [
+        "In GeminiSandbox.cs, add WaitForSingleObject synchronization after process creation to wait for process termination and retrieve proper exit codes.",
+        "In GeminiSandbox.cs, add CREATE_SUSPENDED process creation flag, assign child process to the Job Object, and call ResumeThread to guarantee Job Object attachment before child process starts.",
+        "In GeminiSandbox.cs, add Win32 error code logging for CreateProcessAsUser, AssignProcessToJobObject, and SetInformationJobObject calls, and ensure exhaustive handle closing in a finally block with TerminateProcess fallback.",
+        "In WindowsSandboxManager.ts, update icacls permissions logic to explicitly grant Modify permissions to Low Integrity SID across allowed directories.",
+        "In WindowsSandboxManager.ts, use resolveToRealPath and isSubpath path utilities to consistently handle symlinks and junction points.",
+        "In WindowsSandboxManager.ts, defer temporary manifest file deletion into a cleanup callback executed after process termination."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/sandboxManager.integration.test.ts",
+      "expected_behavior": "Windows sandbox integration tests pass reliably on Windows platforms using native tools (curl.exe, powershell.exe New-Item), skipping network loopback and node-pty interactive tests on Windows while remaining active on non-Windows OS.",
+      "verification_steps": [
+        "Update integration tests in sandboxManager.integration.test.ts to use curl.exe instead of PowerShell Invoke-WebRequest aliases.",
+        "Update integration file creation tests to use powershell.exe New-Item instead of cmd redirection operators.",
+        "Add Platform.isWindows skips for loopback network blocking tests and node-pty interactive tests.",
+        "Run npm test -w @google/gemini-cli-core -- src/services/sandboxManager.integration.test.ts and verify all non-skipped tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 24480,
+    "title": "fix(core): improve windows sandbox reliability and fix integration tests",
+    "target_version": "0d7e778e0866dfabf0a57bf31befdd52ccd74ff4",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}

@@ -1,0 +1,152 @@
+diff --git a/packages/cli/src/test-utils/polyfill.ts b/packages/cli/src/test-utils/polyfill.ts
+new file mode 100644
+index 000000000..a0fecbf12
+--- /dev/null
++++ b/packages/cli/src/test-utils/polyfill.ts
+@@ -0,0 +1,14 @@
++/**
++ * @license
++ * Copyright 2026 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++// Polyfill globalThis.File for Node 18 environments to prevent undici ReferenceError
++if (typeof globalThis.File === 'undefined') {
++  Object.defineProperty(globalThis, 'File', {
++    value: class File {},
++    writable: true,
++    configurable: true,
++  });
++}
+diff --git a/packages/cli/src/ui/utils/confirmingTool.test.ts b/packages/cli/src/ui/utils/confirmingTool.test.ts
+new file mode 100644
+index 000000000..333c1ca12
+--- /dev/null
++++ b/packages/cli/src/ui/utils/confirmingTool.test.ts
+@@ -0,0 +1,93 @@
++/**
++ * @license
++ * Copyright 2026 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import '../../test-utils/polyfill.js';
++import { describe, expect, it } from 'vitest';
++import { CoreToolCallStatus } from '@google/gemini-cli-core';
++import { getConfirmingToolState } from './confirmingTool.js';
++import type { HistoryItemWithoutId } from '../types.js';
++
++describe('getConfirmingToolState', () => {
++  it('returns null when there are no tools awaiting approval', () => {
++    const pendingHistoryItems: HistoryItemWithoutId[] = [
++      {
++        type: 'tool_group',
++        tools: [
++          {
++            callId: 'tool-1',
++            status: CoreToolCallStatus.Executing,
++            description: 'Run background command',
++          },
++          {
++            callId: 'tool-2',
++            status: CoreToolCallStatus.Success,
++            description: 'Completed tool',
++          },
++        ],
++      } as never,
++    ];
++
++    const result = getConfirmingToolState(pendingHistoryItems);
++    expect(result).toBeNull();
++  });
++
++  it('excludes background/unconfirming tools from the confirmation queue count', () => {
++    const pendingHistoryItems: HistoryItemWithoutId[] = [
++      {
++        type: 'tool_group',
++        tools: [
++          {
++            callId: 'update_topic_1',
++            status: CoreToolCallStatus.Executing,
++            description: 'Update topic (background)',
++          },
++          {
++            callId: 'confirm_tool_1',
++            status: CoreToolCallStatus.AwaitingApproval,
++            description: 'Database query requiring approval',
++          },
++        ],
++      } as never,
++    ];
++
++    const result = getConfirmingToolState(pendingHistoryItems);
++    expect(result).not.toBeNull();
++    expect(result?.tool.callId).toBe('confirm_tool_1');
++    expect(result?.total).toBe(1);
++    expect(result?.index).toBe(1);
++  });
++
++  it('correctly calculates total and 1-based index when multiple tools requires approval', () => {
++    const pendingHistoryItems: HistoryItemWithoutId[] = [
++      {
++        type: 'tool_group',
++        tools: [
++          {
++            callId: 'confirm_tool_1',
++            status: CoreToolCallStatus.AwaitingApproval,
++            description: 'First tool requiring approval',
++          },
++          {
++            callId: 'update_topic_1',
++            status: CoreToolCallStatus.Executing,
++            description: 'Background tool',
++          },
++          {
++            callId: 'confirm_tool_2',
++            status: CoreToolCallStatus.AwaitingApproval,
++            description: 'Second tool requiring approval',
++          },
++        ],
++      } as never,
++    ];
++
++    const result = getConfirmingToolState(pendingHistoryItems);
++    expect(result).not.toBeNull();
++    expect(result?.tool.callId).toBe('confirm_tool_1');
++    expect(result?.total).toBe(2);
++    expect(result?.index).toBe(1);
++  });
++});
+diff --git a/packages/cli/src/ui/utils/confirmingTool.ts b/packages/cli/src/ui/utils/confirmingTool.ts
+index c7edf8d79..c02eee659 100644
+--- a/packages/cli/src/ui/utils/confirmingTool.ts
++++ b/packages/cli/src/ui/utils/confirmingTool.ts
+@@ -34,13 +34,13 @@ export function getConfirmingToolState(
+   }
+ 
+   const head = confirmingTools[0];
+-  const headIndexInFullList = allPendingTools.findIndex(
++  const headIndexInConfirmingList = confirmingTools.findIndex(
+     (tool) => tool.callId === head.callId,
+   );
+ 
+   return {
+     tool: head,
+-    index: headIndexInFullList + 1,
+-    total: allPendingTools.length,
++    index: headIndexInConfirmingList + 1,
++    total: confirmingTools.length,
+   };
+ }
+diff --git a/packages/cli/test-setup.ts b/packages/cli/test-setup.ts
+index 1a0947b95..68dfe4788 100644
+--- a/packages/cli/test-setup.ts
++++ b/packages/cli/test-setup.ts
+@@ -4,6 +4,7 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
++import './src/test-utils/polyfill.js';
+ import { vi, beforeEach, afterEach } from 'vitest';
+ import { format } from 'node:util';
+ import { coreEvents, debugLogger } from '@google/gemini-cli-core';

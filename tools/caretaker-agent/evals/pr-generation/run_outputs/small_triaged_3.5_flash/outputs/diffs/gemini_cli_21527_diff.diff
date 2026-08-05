@@ -1,0 +1,154 @@
+diff --git a/packages/cli/src/ui/hooks/atCommandProcessor.ts b/packages/cli/src/ui/hooks/atCommandProcessor.ts
+index c23c9fa2d..6131aea10 100644
+--- a/packages/cli/src/ui/hooks/atCommandProcessor.ts
++++ b/packages/cli/src/ui/hooks/atCommandProcessor.ts
+@@ -198,6 +198,7 @@ async function resolveFilePaths(
+ 
+   const resolvedFiles: ResolvedFile[] = [];
+   const ignoredFiles: IgnoredFile[] = [];
++  const visitedPaths = new Set<string>();
+ 
+   for (const part of fileParts) {
+     const originalAtPath = part.content;
+@@ -238,13 +239,20 @@ async function resolveFilePaths(
+       try {
+         const absolutePath = path.resolve(dir, pathName);
+         const stats = await fs.stat(absolutePath);
++        const realPath = await fs.realpath(absolutePath);
++
++        if (visitedPaths.has(realPath)) {
++          onDebugMessage(`Path ${pathName} already visited, skipping.`);
++          break;
++        }
++        visitedPaths.add(realPath);
+ 
+         const relativePath = path.isAbsolute(pathName)
+           ? path.relative(dir, absolutePath)
+           : pathName;
+ 
+         if (stats.isDirectory()) {
+-          const pathSpec = path.join(relativePath, '**');
++          const pathSpec = path.join(relativePath, '**').replace(/\\/g, '/');
+           resolvedFiles.push({
+             part,
+             pathSpec,
+diff --git a/packages/cli/test-setup.ts b/packages/cli/test-setup.ts
+index 8d055bc63..7e5004969 100644
+--- a/packages/cli/test-setup.ts
++++ b/packages/cli/test-setup.ts
+@@ -4,6 +4,13 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
++import { File } from 'node:buffer';
++if (!globalThis.File && File) {
++  globalThis.File = File;
++} else if (!globalThis.File) {
++  globalThis.File = (class File {}) as unknown as typeof globalThis.File;
++}
++
+ import { vi, beforeEach, afterEach } from 'vitest';
+ import { format } from 'node:util';
+ import { coreEvents } from '@google/gemini-cli-core';
+diff --git a/packages/cli/vitest.config.ts b/packages/cli/vitest.config.ts
+index 2924300a7..7a3b177b4 100644
+--- a/packages/cli/vitest.config.ts
++++ b/packages/cli/vitest.config.ts
+@@ -4,6 +4,13 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
++import { File } from 'node:buffer';
++if (!globalThis.File && File) {
++  globalThis.File = File;
++} else if (!globalThis.File) {
++  globalThis.File = (class File {}) as unknown as typeof globalThis.File;
++}
++
+ /// <reference types="vitest" />
+ import { defineConfig } from 'vitest/config';
+ import { fileURLToPath } from 'node:url';
+diff --git a/packages/core/src/tools/read-many-files.ts b/packages/core/src/tools/read-many-files.ts
+index c9c4e230e..670e7a17c 100644
+--- a/packages/core/src/tools/read-many-files.ts
++++ b/packages/core/src/tools/read-many-files.ts
+@@ -270,6 +270,16 @@ ${finalExclusionPatternsForDescription
+             .relative(this.config.getTargetDir(), filePath)
+             .replace(/\\/g, '/');
+ 
++          const stats = await fsPromises.stat(filePath);
++          if (!stats.isFile()) {
++            return {
++              success: false,
++              filePath,
++              relativePathForDisplay,
++              reason: 'not a standard/regular file',
++            };
++          }
++
+           const fileType = await detectFileType(filePath);
+ 
+           if (
+diff --git a/packages/core/src/utils/fileUtils.test.ts b/packages/core/src/utils/fileUtils.test.ts
+index dcbf22c5a..0647cde5b 100644
+--- a/packages/core/src/utils/fileUtils.test.ts
++++ b/packages/core/src/utils/fileUtils.test.ts
+@@ -283,6 +283,16 @@ describe('fileUtils', () => {
+       }
+       expect(await isBinaryFile(filePathForBinaryTest)).toBe(false);
+     });
++
++    it('should return false for a directory path', async () => {
++      const dirPath = path.join(tempRootDir, 'isBinary_testDir');
++      actualNodeFs.mkdirSync(dirPath);
++      try {
++        expect(await isBinaryFile(dirPath)).toBe(false);
++      } finally {
++        actualNodeFs.rmdirSync(dirPath);
++      }
++    });
+   });
+ 
+   describe('BOM detection and encoding', () => {
+diff --git a/packages/core/src/utils/fileUtils.ts b/packages/core/src/utils/fileUtils.ts
+index 2497439a6..e0ef0b24d 100644
+--- a/packages/core/src/utils/fileUtils.ts
++++ b/packages/core/src/utils/fileUtils.ts
+@@ -15,6 +15,7 @@ import { ToolErrorType } from '../tools/tool-error.js';
+ import { BINARY_EXTENSIONS } from './ignorePatterns.js';
+ import { createRequire as createModuleRequire } from 'node:module';
+ import { debugLogger } from './debugLogger.js';
++import { isNodeError } from './errors.js';
+ import {
+   DEFAULT_MAX_LINES_TEXT_FILE,
+   MAX_LINE_LENGTH_TEXT_FILE,
+@@ -286,8 +287,11 @@ export async function isEmpty(filePath: string): Promise<boolean> {
+ export async function isBinaryFile(filePath: string): Promise<boolean> {
+   let fh: fs.promises.FileHandle | null = null;
+   try {
++    const stats = await fsPromises.stat(filePath);
++    if (stats.isDirectory()) {
++      return false;
++    }
+     fh = await fs.promises.open(filePath, 'r');
+-    const stats = await fh.stat();
+     const fileSize = stats.size;
+     if (fileSize === 0) return false; // empty is not binary
+ 
+@@ -311,10 +315,12 @@ export async function isBinaryFile(filePath: string): Promise<boolean> {
+     // If >30% non-printable characters, consider it binary
+     return nonPrintableCount / bytesRead > 0.3;
+   } catch (error) {
+-    debugLogger.warn(
+-      `Failed to check if file is binary: ${filePath}`,
+-      error instanceof Error ? error.message : String(error),
+-    );
++    if (isNodeError(error) && error.code !== 'EISDIR') {
++      debugLogger.warn(
++        `Failed to check if file is binary: ${filePath}`,
++        error.message,
++      );
++    }
+     return false;
+   } finally {
+     if (fh) {

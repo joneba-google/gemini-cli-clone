@@ -1,0 +1,126 @@
+diff --git a/packages/cli/src/ui/hooks/useGitBranchName.test.tsx b/packages/cli/src/ui/hooks/useGitBranchName.test.tsx
+index dd85e73e7..d2592625d 100644
+--- a/packages/cli/src/ui/hooks/useGitBranchName.test.tsx
++++ b/packages/cli/src/ui/hooks/useGitBranchName.test.tsx
+@@ -247,4 +247,72 @@ describe('useGitBranchName', () => {
+     unmount();
+     expect(closeMock).toHaveBeenCalled();
+   });
++
++  it('should correctly determine branch name when cwd is a subdirectory within a git repository', async () => {
++    const SUBDIR = path.join(CWD, 'packages', 'cli');
++
++    (
++      mockSpawnAsync as MockedFunction<typeof mockSpawnAsync>
++    ).mockImplementation(async (command: string, args: string[]) => {
++      if (args.includes('--git-dir')) {
++        return { stdout: '/test/project/.git\n' } as { stdout: string; stderr: string };
++      }
++      if (args.includes('--abbrev-ref')) {
++        return { stdout: 'feature-branch\n' } as { stdout: string; stderr: string };
++      }
++      return { stdout: '' } as { stdout: string; stderr: string };
++    });
++
++    const { result, rerender } = renderGitBranchNameHook(SUBDIR);
++
++    await act(async () => {
++      rerender();
++    });
++
++    expect(result.current).toBe('feature-branch');
++  });
++
++  it('should update branch name when HEAD changes directly (if logs/HEAD does not exist)', async () => {
++    const gitHeadPath = path.join(CWD, '.git', 'HEAD');
++    vol.reset();
++    vol.fromJSON({
++      [gitHeadPath]: 'ref: refs/heads/main',
++    });
++
++    const watchSpy = vi.spyOn(fs, 'watch');
++
++    (mockSpawnAsync as MockedFunction<typeof mockSpawnAsync>)
++      .mockImplementation(async (command: string, args: string[]) => {
++        if (args.includes('--git-dir')) {
++          return { stdout: '.git\n' } as { stdout: string; stderr: string };
++        }
++        if (args.includes('--abbrev-ref')) {
++          const headContent = fs.readFileSync(gitHeadPath, 'utf8');
++          const branch = headContent.includes('develop') ? 'develop' : 'main';
++          return { stdout: `${branch}\n` } as { stdout: string; stderr: string };
++        }
++        return { stdout: '' } as { stdout: string; stderr: string };
++      });
++
++    const { result, rerender } = renderGitBranchNameHook(CWD);
++
++    await act(async () => {
++      rerender();
++    });
++    expect(result.current).toBe('main');
++
++    await waitFor(() => {
++      expect(watchSpy).toHaveBeenCalledWith(gitHeadPath, expect.any(Function));
++    });
++
++    await act(async () => {
++      fs.writeFileSync(gitHeadPath, 'ref: refs/heads/develop');
++      rerender();
++    });
++
++    await waitFor(() => {
++      expect(result.current).toBe('develop');
++    });
++  });
+ });
++
+diff --git a/packages/cli/src/ui/hooks/useGitBranchName.ts b/packages/cli/src/ui/hooks/useGitBranchName.ts
+index 0f8c735ed..e4dc9b43b 100644
+--- a/packages/cli/src/ui/hooks/useGitBranchName.ts
++++ b/packages/cli/src/ui/hooks/useGitBranchName.ts
+@@ -40,19 +40,38 @@ export function useGitBranchName(cwd: string): string | undefined {
+     // eslint-disable-next-line @typescript-eslint/no-floating-promises
+     fetchBranchName(); // Initial fetch
+ 
+-    const gitLogsHeadPath = path.join(cwd, '.git', 'logs', 'HEAD');
+     let watcher: fs.FSWatcher | undefined;
+     let cancelled = false;
+ 
+     const setupWatcher = async () => {
+       try {
+-        // Check if .git/logs/HEAD exists, as it might not in a new repo or orphaned head
+-        await fsPromises.access(gitLogsHeadPath, fs.constants.F_OK);
++        const { stdout } = await spawnAsync(
++          'git',
++          ['rev-parse', '--git-dir'],
++          { cwd },
++        );
++        if (cancelled) return;
++
++        let gitDirSuffix = stdout.toString().trim();
++        if (!gitDirSuffix.includes('.git')) {
++          gitDirSuffix = '.git';
++        }
++
++        const gitDir = path.resolve(cwd, gitDirSuffix);
++        const gitLogsHeadPath = path.join(gitDir, 'logs', 'HEAD');
++        const gitHeadPath = path.join(gitDir, 'HEAD');
++
++        let pathToWatch = gitLogsHeadPath;
++        try {
++          await fsPromises.access(gitLogsHeadPath, fs.constants.F_OK);
++        } catch {
++          await fsPromises.access(gitHeadPath, fs.constants.F_OK);
++          pathToWatch = gitHeadPath;
++        }
++
+         if (cancelled) return;
+-        watcher = fs.watch(gitLogsHeadPath, (eventType: string) => {
+-          // Changes to .git/logs/HEAD (appends) indicate HEAD has likely changed
++        watcher = fs.watch(pathToWatch, (eventType: string) => {
+           if (eventType === 'change' || eventType === 'rename') {
+-            // Handle rename just in case
+             // eslint-disable-next-line @typescript-eslint/no-floating-promises
+             fetchBranchName();
+           }

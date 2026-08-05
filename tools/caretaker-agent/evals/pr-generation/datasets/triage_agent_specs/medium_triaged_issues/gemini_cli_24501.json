@@ -1,0 +1,49 @@
+{
+  "status": "TRIAGED",
+  "triage_attempts": 1,
+  "generation_attempts": 0,
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24501",
+    "summary": {
+      "problem": "The analyze_screenshot tool in the browser agent fails when using computer-use models like gemini-2.5-computer-use-preview-10-2025 due to missing computerUse tool declarations and unhandled functionCall response parts.",
+      "root_cause": "Computer-use models require a computerUse tool declaration in generateContent requests to avoid 400 INVALID_ARGUMENT errors. Additionally, computer-use models return functionCall parts rather than plain text parts, which the current response parser ignores, producing empty visual analysis errors. Standard vision models (e.g., gemini-2.0-flash) should not receive the computerUse tool declaration.",
+      "context": "The analyze_screenshot tool is used by the browser agent to capture screenshots and perform visual analysis for browser automation."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/agents/browser/analyzeScreenshot.ts"
+      ],
+      "steps": [
+        "Detect whether the visual model is a computer-use model (e.g. model name containing 'computer-use').",
+        "Include the computerUse tool declaration with excludedPredefinedFunctions in the generateContent configuration when calling computer-use models.",
+        "Update response parsing in AnalyzeScreenshotInvocation.execute to defensively extract both text parts and functionCall parts from the response content.",
+        "Ensure standard non-computer-use vision models do not include the computerUse tool declaration."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/agents/browser/analyzeScreenshot.test.ts",
+      "expected_behavior": "The analyze_screenshot tool includes the computerUse tool declaration when calling computer-use models, correctly extracts both text and functionCall response parts, and omits the computerUse declaration for standard vision models.",
+      "verification_steps": [
+        "Add a unit test verifying that calling analyze_screenshot with a computer-use model passes the computerUse tool declaration in generateContent configuration.",
+        "Add a unit test verifying that functionCall parts in candidate content are correctly extracted and included in the result string.",
+        "Add a unit test verifying that calling analyze_screenshot with a standard vision model does not include the computerUse tool declaration."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "expected_quality": "OK",
+  "expected_effort": "MEDIUM",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 24501,
+    "title": "fix(browser): analyze_screenshot fails with computer-use models due to missing tool declaration and response parsing",
+    "target_version": "40b73c9447c7f0008bc39f35ceb15ca3cea7e5fd",
+    "pr_number": 0
+  },
+  "lock": {
+    "holder": null,
+    "expires_at": null
+  },
+  "error": ""
+}
