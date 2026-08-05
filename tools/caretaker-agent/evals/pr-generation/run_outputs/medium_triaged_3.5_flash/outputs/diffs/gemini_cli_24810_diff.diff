@@ -1,0 +1,80 @@
+diff --git a/.github/actions/publish-release/action.yml b/.github/actions/publish-release/action.yml
+index 63fbb2284..caa0c2160 100644
+--- a/.github/actions/publish-release/action.yml
++++ b/.github/actions/publish-release/action.yml
+@@ -170,10 +170,7 @@ runs:
+           --ignore-scripts \
+           --dry-run="${INPUTS_DRY_RUN}" \
+           --workspace="${INPUTS_CORE_PACKAGE_NAME}" \
+-          --tag staging-tmp
+-        if [[ "${INPUTS_DRY_RUN}" == "false" ]]; then
+-          npm dist-tag rm ${INPUTS_CORE_PACKAGE_NAME} staging-tmp
+-        fi
++          --tag="${{ inputs.npm-tag }}"
+ 
+     - name: '🔗 Install latest core package'
+       working-directory: '${{ inputs.working-directory }}'
+@@ -249,10 +246,7 @@ runs:
+           --ignore-scripts \
+           --dry-run="${INPUTS_DRY_RUN}" \
+           ${PUBLISH_TARGET} \
+-          --tag staging-tmp
+-        if [[ "${INPUTS_DRY_RUN}" == "false" ]]; then
+-          npm dist-tag rm ${INPUTS_CLI_PACKAGE_NAME} staging-tmp
+-        fi
++          --tag="${{ inputs.npm-tag }}"
+ 
+     - name: 'Get a2a-server Token'
+       uses: './.github/actions/npm-auth-token'
+@@ -277,10 +271,7 @@ runs:
+           --ignore-scripts \
+           --dry-run="${INPUTS_DRY_RUN}" \
+           --workspace="${INPUTS_A2A_PACKAGE_NAME}" \
+-          --tag staging-tmp
+-          if [[ "${INPUTS_DRY_RUN}" == "false" ]]; then
+-            npm dist-tag rm ${INPUTS_A2A_PACKAGE_NAME} staging-tmp
+-          fi
++          --tag="${{ inputs.npm-tag }}"
+ 
+     - name: '🏷️ Tag release'
+       uses: './.github/actions/tag-npm-release'
+diff --git a/scripts/tests/publish-release-action.test.js b/scripts/tests/publish-release-action.test.js
+new file mode 100644
+index 000000000..cdee20778
+--- /dev/null
++++ b/scripts/tests/publish-release-action.test.js
+@@ -0,0 +1,34 @@
++/**
++ * @license
++ * Copyright 2026 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import { describe, it, expect } from 'vitest';
++import { readFileSync } from 'node:fs';
++import { join } from 'node:path';
++
++describe('publish-release action.yml config', () => {
++  it('should use the template input npm-tag for npm publish', () => {
++    const actionPath = join(process.cwd(), '.github/actions/publish-release/action.yml');
++    const content = readFileSync(actionPath, 'utf8');
++
++    // Expected that we have replaced staging-tmp tag with inputs.npm-tag
++    // Let's assert that there is no "staging-tmp" in npm publish anymore
++    // and instead it outputs --tag="${{ inputs.npm-tag }}"
++    
++    // We should match npm publish occurrences and verify their tag parameters
++    const publishBlocks = content.split('npm publish');
++    expect(publishBlocks.length).toBeGreaterThan(1);
++
++    // Skip the first block because it is the text before the first 'npm publish'
++    for (let i = 1; i < publishBlocks.length; i++) {
++      const block = publishBlocks[i];
++      // Let's assert that in the lines immediately following npm publish,
++      // we specify --tag="${{ inputs.npm-tag }}"
++      expect(block).toContain('--tag="${{ inputs.npm-tag }}"');
++      expect(block).not.toContain('--tag staging-tmp');
++      expect(block).not.toContain('--no-tag');
++    }
++  });
++});

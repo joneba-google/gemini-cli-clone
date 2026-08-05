@@ -1,0 +1,148 @@
+diff --git a/packages/core/src/services/shellExecutionService.test.ts b/packages/core/src/services/shellExecutionService.test.ts
+index 3bba16f9f..64cb6093f 100644
+--- a/packages/core/src/services/shellExecutionService.test.ts
++++ b/packages/core/src/services/shellExecutionService.test.ts
+@@ -22,6 +22,7 @@ import {
+   type ShellOutputEvent,
+   type ShellExecutionConfig,
+ } from './shellExecutionService.js';
++import { encodePowerShellCommand } from '../utils/shell-utils.js';
+ import { NoopSandboxManager } from './sandboxManager.js';
+ import { ExecutionLifecycleService } from './executionLifecycleService.js';
+ import type { AnsiOutput, AnsiToken } from '../utils/terminalSerializer.js';
+@@ -1038,7 +1039,7 @@ describe('ShellExecutionService', () => {
+ 
+       expect(mockPtySpawn).toHaveBeenCalledWith(
+         'powershell.exe',
+-        ['-NoProfile', '-Command', 'dir "foo bar"'],
++        ['-NoProfile', '-EncodedCommand', encodePowerShellCommand('dir "foo bar"')],
+         expect.any(Object),
+       );
+     });
+@@ -1645,7 +1646,7 @@ describe('ShellExecutionService child_process fallback', () => {
+ 
+       expect(mockCpSpawn).toHaveBeenCalledWith(
+         'powershell.exe',
+-        ['-NoProfile', '-Command', 'dir "foo bar"'],
++        ['-NoProfile', '-EncodedCommand', encodePowerShellCommand('dir "foo bar"')],
+         expect.objectContaining({
+           shell: false,
+           detached: false,
+diff --git a/packages/core/src/services/shellExecutionService.ts b/packages/core/src/services/shellExecutionService.ts
+index 93c55f063..8fa172641 100644
+--- a/packages/core/src/services/shellExecutionService.ts
++++ b/packages/core/src/services/shellExecutionService.ts
+@@ -17,6 +17,7 @@ import { getCachedEncodingForBuffer } from '../utils/systemEncoding.js';
+ import {
+   getShellConfiguration,
+   resolveExecutable,
++  encodePowerShellCommand,
+   type ShellType,
+ } from '../utils/shell-utils.js';
+ import { isBinary, truncateString } from '../utils/textUtils.js';
+@@ -407,7 +408,9 @@ export class ShellExecutionService {
+       shellExecutionConfig.sandboxConfig?.command === 'windows-native' &&
+       !shellExecutionConfig.sandboxConfig?.networkAccess;
+ 
+-    let { executable, argsPrefix, shell } = getShellConfiguration();
++    const useEncodedCommand = !isStrictSandbox && isWindows;
++
++    let { executable, argsPrefix, shell } = getShellConfiguration(useEncodedCommand);
+     if (isStrictSandbox) {
+       shell = 'cmd';
+       argsPrefix = ['/c'];
+@@ -417,7 +420,12 @@ export class ShellExecutionService {
+     const resolvedExecutable =
+       (await resolveExecutable(executable)) ?? executable;
+ 
+-    const guardedCommand = ensurePromptvarsDisabled(commandToExecute, shell);
++    let guardedCommand = ensurePromptvarsDisabled(commandToExecute, shell);
++
++    if (shell === 'powershell' && useEncodedCommand) {
++      guardedCommand = encodePowerShellCommand(guardedCommand);
++    }
++
+     const spawnArgs = [...argsPrefix, guardedCommand];
+ 
+     // 2. Prepare Environment
+diff --git a/packages/core/src/utils/shell-utils.test.ts b/packages/core/src/utils/shell-utils.test.ts
+index 0dda7c488..eb8fb1109 100644
+--- a/packages/core/src/utils/shell-utils.test.ts
++++ b/packages/core/src/utils/shell-utils.test.ts
+@@ -17,6 +17,7 @@ import {
+   escapeShellArg,
+   getCommandRoots,
+   getShellConfiguration,
++  encodePowerShellCommand,
+   initializeShellParsers,
+   parseCommandDetails,
+   splitCommands,
+@@ -523,6 +524,12 @@ describe('getShellConfiguration', () => {
+       expect(config.argsPrefix).toEqual(['-NoProfile', '-Command']);
+       expect(config.shell).toBe('powershell');
+     });
++
++    it('should support -EncodedCommand when useEncodedCommand is true', () => {
++      process.env['ComSpec'] = 'C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
++      const config = getShellConfiguration(true);
++      expect(config.argsPrefix).toEqual(['-NoProfile', '-EncodedCommand']);
++    });
+   });
+ });
+ 
+@@ -621,3 +628,12 @@ describe('resolveExecutable', () => {
+     expect(await resolveExecutable('unknown')).toBeUndefined();
+   });
+ });
++
++describe('encodePowerShellCommand', () => {
++  it('should encode a command in UTF-16LE Base64 format', () => {
++    const command = 'Write-Output "test"';
++    const expected = Buffer.from(command, 'utf16le').toString('base64');
++    expect(encodePowerShellCommand(command)).toBe(expected);
++  });
++});
++
+diff --git a/packages/core/src/utils/shell-utils.ts b/packages/core/src/utils/shell-utils.ts
+index 6f02579df..1b01723b8 100644
+--- a/packages/core/src/utils/shell-utils.ts
++++ b/packages/core/src/utils/shell-utils.ts
+@@ -634,7 +634,11 @@ export function parseCommandDetails(
+  *
+  * @returns The ShellConfiguration for the current environment.
+  */
+-export function getShellConfiguration(): ShellConfiguration {
++export function encodePowerShellCommand(command: string): string {
++  return Buffer.from(command, 'utf16le').toString('base64');
++}
++
++export function getShellConfiguration(useEncodedCommand = false): ShellConfiguration {
+   if (isWindows()) {
+     const comSpec = process.env['ComSpec'];
+     if (comSpec) {
+@@ -645,7 +649,7 @@ export function getShellConfiguration(): ShellConfiguration {
+       ) {
+         return {
+           executable: comSpec,
+-          argsPrefix: ['-NoProfile', '-Command'],
++          argsPrefix: ['-NoProfile', useEncodedCommand ? '-EncodedCommand' : '-Command'],
+           shell: 'powershell',
+         };
+       }
+@@ -654,7 +658,7 @@ export function getShellConfiguration(): ShellConfiguration {
+     // Default to PowerShell for all other Windows configurations.
+     return {
+       executable: 'powershell.exe',
+-      argsPrefix: ['-NoProfile', '-Command'],
++      argsPrefix: ['-NoProfile', useEncodedCommand ? '-EncodedCommand' : '-Command'],
+       shell: 'powershell',
+     };
+   }
+@@ -663,6 +667,7 @@ export function getShellConfiguration(): ShellConfiguration {
+   return { executable: 'bash', argsPrefix: ['-c'], shell: 'bash' };
+ }
+ 
++
+ /**
+  * Export the platform detection constant for use in process management (e.g., killing processes).
+  */

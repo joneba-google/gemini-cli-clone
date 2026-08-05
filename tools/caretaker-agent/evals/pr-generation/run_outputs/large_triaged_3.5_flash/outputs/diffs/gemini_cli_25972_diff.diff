@@ -1,0 +1,388 @@
+diff --git a/packages/cli/src/ui/hooks/atCommandProcessor.test.ts b/packages/cli/src/ui/hooks/atCommandProcessor.test.ts
+index ca2ecf7bc..4ce1374bc 100644
+--- a/packages/cli/src/ui/hooks/atCommandProcessor.test.ts
++++ b/packages/cli/src/ui/hooks/atCommandProcessor.test.ts
+@@ -4,6 +4,15 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
++import { File } from 'node:buffer';
++if (typeof globalThis.File === 'undefined') {
++  Object.defineProperty(globalThis, 'File', {
++    value: File,
++    writable: true,
++    configurable: true,
++  });
++}
++
+ import {
+   describe,
+   it,
+@@ -1486,6 +1495,23 @@ describe('handleAtCommand', () => {
+       expect.objectContaining({ text: expectedNudge }),
+     );
+   });
++
++  it('should gracefully handle unresolvable @ paths like "@/lib/formatTimeRange" and fall back to treating them as literal text without throwing', async () => {
++    const query = 'What does @/lib/formatTimeRange do?';
++
++    const result = await handleAtCommand({
++      query,
++      config: mockConfig,
++      addItem: mockAddItem,
++      onDebugMessage: mockOnDebugMessage,
++      messageId: 700,
++      signal: abortController.signal,
++    });
++
++    expect(result).toEqual({
++      processedQuery: [{ text: query }],
++    });
++  });
+ });
+ 
+ describe('escapeAtSymbols', () => {
+diff --git a/packages/cli/src/ui/hooks/atCommandProcessor.ts b/packages/cli/src/ui/hooks/atCommandProcessor.ts
+index 512fe952b..1e14211fc 100644
+--- a/packages/cli/src/ui/hooks/atCommandProcessor.ts
++++ b/packages/cli/src/ui/hooks/atCommandProcessor.ts
+@@ -180,25 +180,38 @@ export async function checkPermissions(
+   query: string,
+   config: Config,
+ ): Promise<string[]> {
+-  const commandParts = parseAllAtCommands(query);
+-  const { fileParts } = categorizeAtCommands(commandParts, config);
+-  const permissionsRequired: string[] = [];
++  try {
++    const commandParts = parseAllAtCommands(query);
++    const { fileParts } = categorizeAtCommands(commandParts, config);
++    const permissionsRequired: string[] = [];
+ 
+-  for (const part of fileParts) {
+-    const pathName = part.content.substring(1);
+-    if (!pathName) continue;
++    for (const part of fileParts) {
++      const pathName = part.content.substring(1);
++      if (!pathName) continue;
+ 
+-    const resolvedPathName = resolveToRealPath(
+-      path.resolve(config.getTargetDir(), pathName),
+-    );
++      try {
++        const resolvedPathName = resolveToRealPath(
++          path.resolve(config.getTargetDir(), pathName),
++        );
+ 
+-    if (config.validatePathAccess(resolvedPathName, 'read')) {
+-      if (await fileExists(resolvedPathName)) {
+-        permissionsRequired.push(resolvedPathName);
++        if (config.validatePathAccess(resolvedPathName, 'read')) {
++          if (await fileExists(resolvedPathName)) {
++            permissionsRequired.push(resolvedPathName);
++          }
++        }
++      } catch (err) {
++        debugLogger.warn(
++          `Gracefully ignored error during permission check for ${pathName}: ${getErrorMessage(err)}`,
++        );
+       }
+     }
++    return permissionsRequired;
++  } catch (err) {
++    debugLogger.warn(
++      `Gracefully ignored error during permission checks: ${getErrorMessage(err)}`,
++    );
++    return [];
+   }
+-  return permissionsRequired;
+ }
+ 
+ interface ResolvedFile {
+@@ -231,139 +244,148 @@ async function resolveFilePaths(
+   const ignoredFiles: IgnoredFile[] = [];
+ 
+   for (const part of fileParts) {
+-    const originalAtPath = part.content;
+-    const pathName = originalAtPath.substring(1);
+-
+-    if (!pathName) {
+-      continue;
+-    }
++    try {
++      const originalAtPath = part.content;
++      const pathName = originalAtPath.substring(1);
+ 
+-    const gitIgnored =
+-      respectFileIgnore.respectGitIgnore &&
+-      fileDiscovery.shouldIgnoreFile(pathName, {
+-        respectGitIgnore: true,
+-        respectGeminiIgnore: false,
+-      });
+-    const geminiIgnored =
+-      respectFileIgnore.respectGeminiIgnore &&
+-      fileDiscovery.shouldIgnoreFile(pathName, {
+-        respectGitIgnore: false,
+-        respectGeminiIgnore: true,
+-      });
++      if (!pathName) {
++        continue;
++      }
+ 
+-    if (gitIgnored || geminiIgnored) {
+-      const reason =
+-        gitIgnored && geminiIgnored ? 'both' : gitIgnored ? 'git' : 'gemini';
+-      ignoredFiles.push({ path: pathName, reason });
+-      const reasonText =
+-        reason === 'both'
+-          ? 'ignored by both git and gemini'
+-          : reason === 'git'
+-            ? 'git-ignored'
+-            : 'gemini-ignored';
+-      onDebugMessage(`Path ${pathName} is ${reasonText} and will be skipped.`);
+-      continue;
+-    }
++      const gitIgnored =
++        respectFileIgnore.respectGitIgnore &&
++        fileDiscovery.shouldIgnoreFile(pathName, {
++          respectGitIgnore: true,
++          respectGeminiIgnore: false,
++        });
++      const geminiIgnored =
++        respectFileIgnore.respectGeminiIgnore &&
++        fileDiscovery.shouldIgnoreFile(pathName, {
++          respectGitIgnore: false,
++          respectGeminiIgnore: true,
++        });
++
++      if (gitIgnored || geminiIgnored) {
++        const reason =
++          gitIgnored && geminiIgnored ? 'both' : gitIgnored ? 'git' : 'gemini';
++        ignoredFiles.push({ path: pathName, reason });
++        const reasonText =
++          reason === 'both'
++            ? 'ignored by both git and gemini'
++            : reason === 'git'
++              ? 'git-ignored'
++              : 'gemini-ignored';
++        onDebugMessage(`Path ${pathName} is ${reasonText} and will be skipped.`);
++        continue;
++      }
+ 
+-    for (const dir of config.getWorkspaceContext().getDirectories()) {
+-      try {
+-        const absolutePath = path.resolve(dir, pathName);
+-        const stats = await fs.stat(absolutePath);
+-
+-        const relativePath = path.isAbsolute(pathName)
+-          ? path.relative(dir, absolutePath)
+-          : pathName;
+-
+-        if (stats.isDirectory()) {
+-          const pathSpec = path.join(relativePath, '**');
+-          resolvedFiles.push({
+-            part,
+-            pathSpec,
+-            displayLabel: path.isAbsolute(pathName) ? relativePath : pathName,
+-            absolutePath,
+-          });
+-          onDebugMessage(
+-            `Path ${pathName} resolved to directory, using glob: ${pathSpec}`,
+-          );
+-        } else {
+-          resolvedFiles.push({
+-            part,
+-            pathSpec: relativePath,
+-            displayLabel: path.isAbsolute(pathName) ? relativePath : pathName,
+-            absolutePath,
+-          });
+-          onDebugMessage(
+-            `Path ${pathName} resolved to file: ${absolutePath}, using relative path: ${relativePath}`,
+-          );
+-        }
+-        break;
+-      } catch (error) {
+-        if (isNodeError(error) && error.code === 'ENOENT') {
+-          if (config.getEnableRecursiveFileSearch() && globTool) {
++      for (const dir of config.getWorkspaceContext().getDirectories()) {
++        try {
++          const absolutePath = path.resolve(dir, pathName);
++          const stats = await fs.stat(absolutePath);
++
++          const relativePath = path.isAbsolute(pathName)
++            ? path.relative(dir, absolutePath)
++            : pathName;
++
++          if (stats.isDirectory()) {
++            const pathSpec = path.join(relativePath, '**');
++            resolvedFiles.push({
++              part,
++              pathSpec,
++              displayLabel: path.isAbsolute(pathName) ? relativePath : pathName,
++              absolutePath,
++            });
+             onDebugMessage(
+-              `Path ${pathName} not found directly, attempting glob search.`,
++              `Path ${pathName} resolved to directory, using glob: ${pathSpec}`,
+             );
+-            try {
+-              const globResult = await globTool.buildAndExecute(
+-                {
+-                  pattern: `**/*${pathName}*`,
+-                  path: dir,
+-                },
+-                signal,
++          } else {
++            resolvedFiles.push({
++              part,
++              pathSpec: relativePath,
++              displayLabel: path.isAbsolute(pathName) ? relativePath : pathName,
++              absolutePath,
++            });
++            onDebugMessage(
++              `Path ${pathName} resolved to file: ${absolutePath}, using relative path: ${relativePath}`,
++            );
++          }
++          break;
++        } catch (error) {
++          if (isNodeError(error) && error.code === 'ENOENT') {
++            if (config.getEnableRecursiveFileSearch() && globTool) {
++              onDebugMessage(
++                `Path ${pathName} not found directly, attempting glob search.`,
+               );
+-              if (
+-                globResult.llmContent &&
+-                typeof globResult.llmContent === 'string' &&
+-                !globResult.llmContent.startsWith('No files found') &&
+-                !globResult.llmContent.startsWith('Error:')
+-              ) {
+-                const lines = globResult.llmContent.split('\n');
+-                if (lines.length > 1 && lines[1]) {
+-                  const firstMatchAbsolute = lines[1].trim();
+-                  const pathSpec = path.relative(dir, firstMatchAbsolute);
+-                  resolvedFiles.push({
+-                    part,
+-                    pathSpec,
+-                    displayLabel: path.isAbsolute(pathName)
+-                      ? pathSpec
+-                      : pathName,
+-                  });
+-                  onDebugMessage(
+-                    `Glob search for ${pathName} found ${firstMatchAbsolute}, using relative path: ${pathSpec}`,
+-                  );
+-                  break;
++              try {
++                const globResult = await globTool.buildAndExecute(
++                  {
++                    pattern: `**/*${pathName}*`,
++                    path: dir,
++                  },
++                  signal,
++                );
++                if (
++                  globResult.llmContent &&
++                  typeof globResult.llmContent === 'string' &&
++                  !globResult.llmContent.startsWith('No files found') &&
++                  !globResult.llmContent.startsWith('Error:')
++                ) {
++                  const lines = globResult.llmContent.split('\n');
++                  if (lines.length > 1 && lines[1]) {
++                    const firstMatchAbsolute = lines[1].trim();
++                    const pathSpec = path.relative(dir, firstMatchAbsolute);
++                    resolvedFiles.push({
++                      part,
++                      pathSpec,
++                      displayLabel: path.isAbsolute(pathName)
++                        ? pathSpec
++                        : pathName,
++                    });
++                    onDebugMessage(
++                      `Glob search for ${pathName} found ${firstMatchAbsolute}, using relative path: ${pathSpec}`,
++                    );
++                    break;
++                  } else {
++                    onDebugMessage(
++                      `Glob search for '**/*${pathName}*' did not return a usable path. Path ${pathName} will be skipped.`,
++                    );
++                  }
+                 } else {
+                   onDebugMessage(
+-                    `Glob search for '**/*${pathName}*' did not return a usable path. Path ${pathName} will be skipped.`,
++                    `Glob search for '**/*${pathName}*' found no files or an error. Path ${pathName} will be skipped.`,
+                   );
+                 }
+-              } else {
++              } catch (globError) {
++                debugLogger.warn(
++                  `Error during glob search for ${pathName}: ${getErrorMessage(globError)}`,
++                );
+                 onDebugMessage(
+-                  `Glob search for '**/*${pathName}*' found no files or an error. Path ${pathName} will be skipped.`,
++                  `Error during glob search for ${pathName}. Path ${pathName} will be skipped.`,
+                 );
+               }
+-            } catch (globError) {
+-              debugLogger.warn(
+-                `Error during glob search for ${pathName}: ${getErrorMessage(globError)}`,
+-              );
++            } else {
+               onDebugMessage(
+-                `Error during glob search for ${pathName}. Path ${pathName} will be skipped.`,
++                `Glob tool not found. Path ${pathName} will be skipped.`,
+               );
+             }
+           } else {
++            debugLogger.warn(
++              `Error stating path ${pathName}: ${getErrorMessage(error)}`,
++            );
+             onDebugMessage(
+-              `Glob tool not found. Path ${pathName} will be skipped.`,
++              `Error stating path ${pathName}. Path ${pathName} will be skipped.`,
+             );
+           }
+-        } else {
+-          debugLogger.warn(
+-            `Error stating path ${pathName}: ${getErrorMessage(error)}`,
+-          );
+-          onDebugMessage(
+-            `Error stating path ${pathName}. Path ${pathName} will be skipped.`,
+-          );
+         }
+       }
++    } catch (partError) {
++      debugLogger.warn(
++        `Error resolving path ${part.content}: ${getErrorMessage(partError)}`,
++      );
++      onDebugMessage(
++        `Error resolving path ${part.content}. This path will be skipped.`,
++      );
+     }
+   }
+ 
+diff --git a/packages/cli/test-setup.ts b/packages/cli/test-setup.ts
+index e64e553ed..87accdcbe 100644
+--- a/packages/cli/test-setup.ts
++++ b/packages/cli/test-setup.ts
+@@ -4,6 +4,15 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
++import { File } from 'node:buffer';
++if (typeof globalThis.File === 'undefined') {
++  Object.defineProperty(globalThis, 'File', {
++    value: File,
++    writable: true,
++    configurable: true,
++  });
++}
++
+ import { vi, beforeEach, afterEach } from 'vitest';
+ import { format } from 'node:util';
+ import { coreEvents, debugLogger } from '@google/gemini-cli-core';
+diff --git a/preload.cjs b/preload.cjs
+new file mode 100644
+index 000000000..f225a897a
+--- /dev/null
++++ b/preload.cjs
+@@ -0,0 +1,2 @@
++const { File } = require('node:buffer');
++globalThis.File = File;

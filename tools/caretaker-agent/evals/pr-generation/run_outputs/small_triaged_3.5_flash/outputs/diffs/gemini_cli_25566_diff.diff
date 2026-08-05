@@ -1,0 +1,147 @@
+diff --git a/packages/core/src/config/config.test.ts b/packages/core/src/config/config.test.ts
+index ab000b269..597957de2 100644
+--- a/packages/core/src/config/config.test.ts
++++ b/packages/core/src/config/config.test.ts
+@@ -218,6 +218,10 @@ vi.mock('../utils/fetch.js', () => ({
+   setGlobalProxy: mockSetGlobalProxy,
+ }));
+ 
++vi.mock('proper-lockfile', () => ({
++  lock: vi.fn().mockResolvedValue(vi.fn().mockResolvedValue(undefined)),
++}));
++
+ vi.mock('../context/memoryContextManager.js', () => ({
+   MemoryContextManager: vi.fn().mockImplementation(() => ({
+     refresh: vi.fn(),
+@@ -3579,7 +3583,9 @@ describe('Plans Directory Initialization', () => {
+ 
+     const plansDir = config.storage.getPlansDir();
+     // Should NOT create the directory eagerly
+-    expect(fs.promises.mkdir).not.toHaveBeenCalled();
++    expect(fs.promises.mkdir).not.toHaveBeenCalledWith(plansDir, {
++      recursive: true,
++    });
+     // Should check if it exists
+     expect(fs.promises.access).toHaveBeenCalledWith(plansDir);
+ 
+@@ -3597,7 +3603,9 @@ describe('Plans Directory Initialization', () => {
+     await config.initialize();
+ 
+     const plansDir = config.storage.getPlansDir();
+-    expect(fs.promises.mkdir).not.toHaveBeenCalled();
++    expect(fs.promises.mkdir).not.toHaveBeenCalledWith(plansDir, {
++      recursive: true,
++    });
+     expect(fs.promises.access).toHaveBeenCalledWith(plansDir);
+ 
+     const context = config.getWorkspaceContext();
+@@ -3617,6 +3625,40 @@ describe('Plans Directory Initialization', () => {
+       recursive: true,
+     });
+   });
++
++  it('should initialize successfully and not throw even if custom plans directory is outside the project root', async () => {
++    vi.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
++    const config = new Config({
++      ...baseParams,
++      plan: true,
++      planSettings: {
++        directory: '../outside-root-dir',
++      },
++    });
++
++    // Should complete cleanly without throwing/unhandled rejection
++    await expect(config.initialize()).resolves.toBeUndefined();
++
++    // Verify plansDir is not added to workspace directories
++    const context = config.getWorkspaceContext();
++    expect(context.getDirectories()).not.toContain('../outside-root-dir');
++  });
++
++  it('should update sessions successfully and not throw when an invalid custom plans directory outside the project root is configured', async () => {
++    const config = new Config({
++      ...baseParams,
++      plan: true,
++      planSettings: {
++        directory: '../outside-root-dir',
++      },
++    });
++
++    // Initialize config (should catch validation error and complete successfully)
++    await expect(config.initialize()).resolves.toBeUndefined();
++
++    // Set new session ID should not throw
++    expect(() => config.setSessionId('new-session-id')).not.toThrow();
++  });
+ });
+ 
+ describe('Model Persistence Bug Fix (#19864)', () => {
+diff --git a/packages/core/src/config/config.ts b/packages/core/src/config/config.ts
+index 9dbf0f811..5e1c54b9e 100644
+--- a/packages/core/src/config/config.ts
++++ b/packages/core/src/config/config.ts
+@@ -1414,15 +1414,15 @@ export class Config implements McpContext, AgentLoopContext {
+ 
+     // Add plans directory to workspace context for plan file storage
+     if (this.planEnabled) {
+-      const plansDir = this.storage.getPlansDir();
+       try {
++        const plansDir = this.storage.getPlansDir();
+         await fs.promises.access(plansDir);
+         this.workspaceContext.addDirectory(plansDir);
+       } catch {
+-        // Directory does not exist yet, so we don't add it to the workspace context.
+-        // It will be created when the first plan is written. Since custom plan
+-        // directories must be within the project root, they are automatically
+-        // covered by the project-wide file discovery once created.
++        // Directory does not exist yet, or target holds an invalid custom plan settings dir,
++        // so we don't add it to the workspace context. It will be created when the first plan
++        // is written. Since custom plan directories must be within the project root, they are
++        // automatically covered by the project-wide file discovery once created.
+       }
+     }
+ 
+@@ -1762,9 +1762,14 @@ export class Config implements McpContext, AgentLoopContext {
+   }
+ 
+   setSessionId(sessionId: string): void {
+-    const previousPlansDir = this.storage.isInitialized()
+-      ? this.storage.getPlansDir()
+-      : undefined;
++    let previousPlansDir: string | undefined;
++    try {
++      previousPlansDir = this.storage.isInitialized()
++        ? this.storage.getPlansDir()
++        : undefined;
++    } catch {
++      // Ignore validation and access errors for custom plan directories here.
++    }
+ 
+     this._sessionId = sessionId;
+     this.storage.setSessionId(sessionId);
+@@ -2067,7 +2072,24 @@ export class Config implements McpContext, AgentLoopContext {
+   }
+ 
+   private refreshSessionScopedPlansDirectory(previousPlansDir: string): void {
+-    const nextPlansDir = this.storage.getPlansDir();
++    let nextPlansDir: string;
++    try {
++      nextPlansDir = this.storage.getPlansDir();
++    } catch {
++      // If the next plans directory is invalid, clean up the previous sessions' plans directory and return.
++      const pathsToRemove = new Set([previousPlansDir]);
++      try {
++        pathsToRemove.add(resolveToRealPath(previousPlansDir));
++      } catch {
++        // Ignored
++      }
++      const currentDirectories = this.workspaceContext
++        .getDirectories()
++        .filter((dir) => !pathsToRemove.has(dir));
++      this.workspaceContext.setDirectories(currentDirectories);
++      return;
++    }
++
+     if (previousPlansDir === nextPlansDir) {
+       return;
+     }

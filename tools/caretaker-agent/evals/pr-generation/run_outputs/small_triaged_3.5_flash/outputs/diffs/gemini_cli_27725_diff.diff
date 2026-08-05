@@ -1,0 +1,78 @@
+diff --git a/packages/core/src/tools/mcp-compliance-transport.test.ts b/packages/core/src/tools/mcp-compliance-transport.test.ts
+index 3217b4461..0609d0ae9 100644
+--- a/packages/core/src/tools/mcp-compliance-transport.test.ts
++++ b/packages/core/src/tools/mcp-compliance-transport.test.ts
+@@ -194,4 +194,50 @@ describe('McpComplianceTransport', () => {
+     mockTransport.onmessage!(errorResponse);
+     expect(onMessage).toHaveBeenCalledWith(errorResponse);
+   });
++
++  it('should NOT populate structuredContent if parsed value is not a record/object (e.g., array)', async () => {
++    const mockTransport = createMockTransport();
++    const complianceTransport = new McpComplianceTransport(mockTransport);
++    const onMessage = vi.fn();
++    complianceTransport.onmessage = onMessage;
++
++    const arrayResponse: JSONRPCMessage = {
++      jsonrpc: '2.0',
++      id: 1,
++      result: {
++        content: [
++          {
++            type: 'text',
++            text: JSON.stringify([{ id: 'event-1' }, { id: 'event-2' }]),
++          },
++        ],
++      },
++    };
++
++    mockTransport.onmessage!(arrayResponse);
++    expect(onMessage.mock.calls[0][0].result.structuredContent).toBeUndefined();
++  });
++
++  it('should NOT populate structuredContent if parsed value is a primitive', async () => {
++    const mockTransport = createMockTransport();
++    const complianceTransport = new McpComplianceTransport(mockTransport);
++    const onMessage = vi.fn();
++    complianceTransport.onmessage = onMessage;
++
++    const primitiveResponse: JSONRPCMessage = {
++      jsonrpc: '2.0',
++      id: 1,
++      result: {
++        content: [
++          {
++            type: 'text',
++            text: JSON.stringify('some simple string value'),
++          },
++        ],
++      },
++    };
++
++    mockTransport.onmessage!(primitiveResponse);
++    expect(onMessage.mock.calls[0][0].result.structuredContent).toBeUndefined();
++  });
+ });
+diff --git a/packages/core/src/tools/mcp-compliance-transport.ts b/packages/core/src/tools/mcp-compliance-transport.ts
+index 3f163f9a2..32633dbaa 100644
+--- a/packages/core/src/tools/mcp-compliance-transport.ts
++++ b/packages/core/src/tools/mcp-compliance-transport.ts
+@@ -89,9 +89,15 @@ export class McpComplianceTransport extends EventEmitter implements Transport {
+           // Attempt to parse the text as JSON
+           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+           const parsed = JSON.parse(firstItem.text);
+-          // If successful, populate structuredContent
+-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+-          result.structuredContent = parsed;
++          // If successful and it is a non-null, non-array object, populate structuredContent
++          if (
++            typeof parsed === 'object' &&
++            parsed !== null &&
++            !Array.isArray(parsed)
++          ) {
++            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
++            result.structuredContent = parsed;
++          }
+         } catch {
+           // Ignored: Content is likely plain text, not JSON.
+         }

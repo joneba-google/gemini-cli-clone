@@ -1,0 +1,101 @@
+diff --git a/packages/cli/src/config/extension-manager.test.ts b/packages/cli/src/config/extension-manager.test.ts
+index 33c335c16..46ce98d5f 100644
+--- a/packages/cli/src/config/extension-manager.test.ts
++++ b/packages/cli/src/config/extension-manager.test.ts
+@@ -50,6 +50,18 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
+   };
+ });
+ 
++const mockCloneFromGit = vi.hoisted(() => vi.fn());
++const mockDownloadFromGitHubRelease = vi.hoisted(() => vi.fn());
++
++vi.mock('./extensions/github.js', async (importOriginal) => {
++  const original = await importOriginal<typeof import('./extensions/github.js')>();
++  return {
++    ...original,
++    cloneFromGit: mockCloneFromGit,
++    downloadFromGitHubRelease: mockDownloadFromGitHubRelease,
++  };
++});
++
+ const testTheme: CustomTheme = {
+   type: 'custom',
+   name: 'MyTheme',
+@@ -637,4 +649,58 @@ describe('ExtensionManager', () => {
+       );
+     });
+   });
++
++  describe('Git SSH extension installation', () => {
++    beforeEach(async () => {
++      mockCloneFromGit.mockReset();
++      mockDownloadFromGitHubRelease.mockReset();
++      const trustedFolders = loadTrustedFolders();
++      await trustedFolders.setValue(tempWorkspaceDir, TrustLevel.TRUST_FOLDER);
++      await extensionManager.loadExtensions();
++    });
++
++    it('should bypass github release download and clone with git for SCP-style SSH repository', async () => {
++      mockCloneFromGit.mockImplementation(async (metadata, tempDir) => {
++        // Mock cloning behaviour to write a dummy gemini-extension.json
++        fs.mkdirSync(tempDir, { recursive: true });
++        fs.writeFileSync(
++          path.join(tempDir, 'gemini-extension.json'),
++          JSON.stringify({ name: 'ssh-ext', version: '1.0.0' }),
++        );
++      });
++
++      const installMetadata = {
++        source: 'git@github.com:owner/ssh-ext.git',
++        type: 'git' as const,
++      };
++
++      const extension = await extensionManager.installOrUpdateExtension(installMetadata);
++
++      expect(extension.name).toBe('ssh-ext');
++      expect(mockCloneFromGit).toHaveBeenCalled();
++      expect(mockDownloadFromGitHubRelease).not.toHaveBeenCalled();
++    });
++
++    it('should bypass github release download and clone with git for standard SSH repository url', async () => {
++      mockCloneFromGit.mockImplementation(async (metadata, tempDir) => {
++        // Mock cloning behaviour to write a dummy gemini-extension.json
++        fs.mkdirSync(tempDir, { recursive: true });
++        fs.writeFileSync(
++          path.join(tempDir, 'gemini-extension.json'),
++          JSON.stringify({ name: 'ssh-ext-2', version: '1.0.0' }),
++        );
++      });
++
++      const installMetadata = {
++        source: 'ssh://git@github.com/owner/ssh-ext-2.git',
++        type: 'git' as const,
++      };
++
++      const extension = await extensionManager.installOrUpdateExtension(installMetadata);
++
++      expect(extension.name).toBe('ssh-ext-2');
++      expect(mockCloneFromGit).toHaveBeenCalled();
++      expect(mockDownloadFromGitHubRelease).not.toHaveBeenCalled();
++    });
++  });
+ });
+diff --git a/packages/cli/src/config/extension-manager.ts b/packages/cli/src/config/extension-manager.ts
+index 65b353979..bdc84ee66 100644
+--- a/packages/cli/src/config/extension-manager.ts
++++ b/packages/cli/src/config/extension-manager.ts
+@@ -247,7 +247,13 @@ export class ExtensionManager extends ExtensionLoader {
+         installMetadata.type === 'github-release'
+       ) {
+         tempDir = await ExtensionStorage.createTmpDir();
+-        const parsedGithubParts = tryParseGithubUrl(installMetadata.source);
++        const isSshUrl =
++          installMetadata.source.startsWith('git@') ||
++          installMetadata.source.startsWith('ssh://') ||
++          installMetadata.source.startsWith('git+ssh://');
++        const parsedGithubParts = isSshUrl
++          ? null
++          : tryParseGithubUrl(installMetadata.source);
+         if (!parsedGithubParts) {
+           await cloneFromGit(installMetadata, tempDir);
+           installMetadata.type = 'git';

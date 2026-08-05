@@ -1,0 +1,192 @@
+diff --git a/packages/cli/src/ui/hooks/usePrivacySettings.test.ts b/packages/cli/src/ui/hooks/usePrivacySettings.test.ts
+new file mode 100644
+index 000000000..2d8a46d75
+--- /dev/null
++++ b/packages/cli/src/ui/hooks/usePrivacySettings.test.ts
+@@ -0,0 +1,169 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import { renderHook, act, waitFor } from '@testing-library/react';
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { usePrivacySettings } from './usePrivacySettings.js';
++import { Config, CodeAssistServer, UserTierId } from '@google/gemini-cli-core';
++
++describe('usePrivacySettings', () => {
++  // eslint-disable-next-line @typescript-eslint/no-explicit-any
++  let mockServer: any;
++  let mockConfig: Config;
++
++  beforeEach(() => {
++    mockServer = Object.create(CodeAssistServer.prototype);
++    mockServer.projectId = 'test-project';
++    mockServer.loadCodeAssist = vi.fn();
++    mockServer.getCodeAssistGlobalUserSetting = vi.fn();
++    mockServer.setCodeAssistGlobalUserSetting = vi.fn();
++
++    mockConfig = {
++      getGeminiClient: () => ({
++        getContentGenerator: () => mockServer,
++      }),
++    } as unknown as Config;
++  });
++
++  it('should set isLoading to true initially', () => {
++    mockServer.loadCodeAssist.mockReturnValue(new Promise(() => {})); // never resolves
++    const { result } = renderHook(() => usePrivacySettings(mockConfig));
++
++    expect(result.current.privacyState).toEqual({
++      isLoading: true,
++    });
++  });
++
++  it('should handle isFreeTier as true when loadCodeAssist returns FREE tier', async () => {
++    mockServer.loadCodeAssist.mockResolvedValue({
++      currentTier: { id: UserTierId.FREE, name: 'Free', description: 'Free Tier' },
++    });
++    mockServer.getCodeAssistGlobalUserSetting.mockResolvedValue({
++      freeTierDataCollectionOptin: true,
++    });
++
++    const { result } = renderHook(() => usePrivacySettings(mockConfig));
++
++    await waitFor(() => {
++      expect(result.current.privacyState.isLoading).toBe(false);
++    });
++
++    expect(result.current.privacyState).toEqual({
++      isLoading: false,
++      isFreeTier: true,
++      dataCollectionOptIn: true,
++    });
++  });
++
++  it('should handle isFreeTier as false when loadCodeAssist returns standard tier', async () => {
++    mockServer.loadCodeAssist.mockResolvedValue({
++      currentTier: { id: UserTierId.STANDARD, name: 'Standard', description: 'Standard Tier' },
++    });
++
++    const { result } = renderHook(() => usePrivacySettings(mockConfig));
++
++    await waitFor(() => {
++      expect(result.current.privacyState.isLoading).toBe(false);
++    });
++
++    expect(result.current.privacyState).toEqual({
++      isLoading: false,
++      isFreeTier: false,
++    });
++    expect(mockServer.getCodeAssistGlobalUserSetting).not.toHaveBeenCalled();
++  });
++
++  it('should handle isFreeTier as false and not throw error when loadCodeAssist returns a response with currentTier as undefined', async () => {
++    mockServer.loadCodeAssist.mockResolvedValue({
++      currentTier: undefined,
++      allowedTiers: [],
++    });
++
++    const { result } = renderHook(() => usePrivacySettings(mockConfig));
++
++    await waitFor(() => {
++      expect(result.current.privacyState.isLoading).toBe(false);
++    });
++
++    expect(result.current.privacyState).toEqual({
++      isLoading: false,
++      isFreeTier: false,
++      error: undefined,
++    });
++  });
++
++  it('should resolve the default tier from allowedTiers when currentTier is undefined', async () => {
++    mockServer.loadCodeAssist.mockResolvedValue({
++      currentTier: undefined,
++      allowedTiers: [
++        { id: UserTierId.FREE, name: 'Free', description: 'Free Tier', isDefault: true },
++      ],
++    });
++    mockServer.getCodeAssistGlobalUserSetting.mockResolvedValue({
++      freeTierDataCollectionOptin: false,
++    });
++
++    const { result } = renderHook(() => usePrivacySettings(mockConfig));
++
++    await waitFor(() => {
++      expect(result.current.privacyState.isLoading).toBe(false);
++    });
++
++    expect(result.current.privacyState).toEqual({
++      isLoading: false,
++      isFreeTier: true,
++      dataCollectionOptIn: false,
++    });
++  });
++
++  it('should allow updating data collection opt-in when isFreeTier is true', async () => {
++    mockServer.loadCodeAssist.mockResolvedValue({
++      currentTier: { id: UserTierId.FREE, name: 'Free', description: 'Free Tier' },
++    });
++    mockServer.getCodeAssistGlobalUserSetting.mockResolvedValue({
++      freeTierDataCollectionOptin: true,
++    });
++    mockServer.setCodeAssistGlobalUserSetting.mockResolvedValue({
++      freeTierDataCollectionOptin: false,
++    });
++
++    const { result } = renderHook(() => usePrivacySettings(mockConfig));
++
++    await waitFor(() => {
++      expect(result.current.privacyState.isLoading).toBe(false);
++    });
++
++    await act(async () => {
++      await result.current.updateDataCollectionOptIn(false);
++    });
++
++    expect(mockServer.setCodeAssistGlobalUserSetting).toHaveBeenCalledWith({
++      cloudaicompanionProject: 'test-project',
++      freeTierDataCollectionOptin: false,
++    });
++
++    expect(result.current.privacyState).toEqual({
++      isLoading: false,
++      isFreeTier: true,
++      dataCollectionOptIn: false,
++    });
++  });
++
++  it('should handle error from loadCodeAssist gracefully', async () => {
++    mockServer.loadCodeAssist.mockRejectedValue(new Error('Network Error'));
++
++    const { result } = renderHook(() => usePrivacySettings(mockConfig));
++
++    await waitFor(() => {
++      expect(result.current.privacyState.isLoading).toBe(false);
++    });
++
++    expect(result.current.privacyState).toEqual({
++      isLoading: false,
++      error: 'Network Error',
++    });
++  });
++});
+diff --git a/packages/cli/src/ui/hooks/usePrivacySettings.ts b/packages/cli/src/ui/hooks/usePrivacySettings.ts
+index 44824defd..9d183ad6f 100644
+--- a/packages/cli/src/ui/hooks/usePrivacySettings.ts
++++ b/packages/cli/src/ui/hooks/usePrivacySettings.ts
+@@ -102,7 +102,11 @@ async function getTier(server: CodeAssistServer): Promise<UserTierId> {
+     },
+   });
+   if (!loadRes.currentTier) {
+-    throw new Error('User does not have a current tier');
++    const defaultTier = loadRes.allowedTiers?.find((t) => t.isDefault);
++    if (defaultTier) {
++      return defaultTier.id;
++    }
++    return UserTierId.LEGACY;
+   }
+   return loadRes.currentTier.id;
+ }

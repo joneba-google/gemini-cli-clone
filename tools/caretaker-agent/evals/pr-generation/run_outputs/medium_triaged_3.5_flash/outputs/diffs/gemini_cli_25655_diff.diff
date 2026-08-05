@@ -1,0 +1,155 @@
+diff --git a/packages/cli/src/test-utils/polyfill-file.ts b/packages/cli/src/test-utils/polyfill-file.ts
+new file mode 100644
+index 000000000..8bcf914de
+--- /dev/null
++++ b/packages/cli/src/test-utils/polyfill-file.ts
+@@ -0,0 +1,12 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import { File } from 'node:buffer';
++
++if (!globalThis.File) {
++  // eslint-disable-next-line @typescript-eslint/no-explicit-any
++  globalThis.File = File as any;
++}
+diff --git a/packages/cli/src/ui/AppContainer.tsx b/packages/cli/src/ui/AppContainer.tsx
+index f9906f6fb..087d51c6c 100644
+--- a/packages/cli/src/ui/AppContainer.tsx
++++ b/packages/cli/src/ui/AppContainer.tsx
+@@ -501,16 +501,6 @@ export const AppContainer = (props: AppContainerProps) => {
+         ?.fireSessionStartEvent(sessionStartSource);
+ 
+       if (result) {
+-        if (result.systemMessage) {
+-          historyManager.addItem(
+-            {
+-              type: MessageType.INFO,
+-              text: result.systemMessage,
+-            },
+-            Date.now(),
+-          );
+-        }
+-
+         const additionalContext = result.getAdditionalContext();
+         const geminiClient = config.getGeminiClient();
+         if (additionalContext && geminiClient) {
+diff --git a/packages/cli/src/ui/commands/clearCommand.test.ts b/packages/cli/src/ui/commands/clearCommand.test.ts
+index 51e3ace2f..dcbfd2781 100644
+--- a/packages/cli/src/ui/commands/clearCommand.test.ts
++++ b/packages/cli/src/ui/commands/clearCommand.test.ts
+@@ -8,9 +8,15 @@ import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
+ import { clearCommand } from './clearCommand.js';
+ import { type CommandContext } from './types.js';
+ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
++import { uiTelemetryService, type GeminiClient } from '@google/gemini-cli-core';
+ 
+ // Mock the telemetry service
+ vi.mock('@google/gemini-cli-core', async () => {
++  if (!globalThis.File) {
++    const { File } = await import('node:buffer');
++    // eslint-disable-next-line @typescript-eslint/no-explicit-any
++    globalThis.File = File as any;
++  }
+   const actual = await vi.importActual('@google/gemini-cli-core');
+   return {
+     ...actual,
+@@ -21,8 +27,6 @@ vi.mock('@google/gemini-cli-core', async () => {
+   };
+ });
+ 
+-import { uiTelemetryService, type GeminiClient } from '@google/gemini-cli-core';
+-
+ describe('clearCommand', () => {
+   let mockContext: CommandContext;
+   let mockResetChat: ReturnType<typeof vi.fn>;
+@@ -116,4 +120,21 @@ describe('clearCommand', () => {
+     expect(uiTelemetryService.clear).toHaveBeenCalledTimes(1);
+     expect(nullConfigContext.ui.clear).toHaveBeenCalledTimes(1);
+   });
++
++  it('should not call context.ui.addItem when fireSessionStartEvent returns a systemMessage', async () => {
++    if (!clearCommand.action) {
++      throw new Error('clearCommand must have an action.');
++    }
++
++    const fireSessionStartEventMock = mockContext.services.agentContext?.config.getHookSystem()?.fireSessionStartEvent;
++    if (fireSessionStartEventMock && 'mockResolvedValue' in fireSessionStartEventMock) {
++      (fireSessionStartEventMock as unknown as Mock).mockResolvedValue({
++        systemMessage: 'Test SessionStart Hook systemMessage',
++      });
++    }
++
++    await clearCommand.action(mockContext, '');
++
++    expect(mockContext.ui.addItem).not.toHaveBeenCalled();
++  });
+ });
+diff --git a/packages/cli/src/ui/commands/clearCommand.ts b/packages/cli/src/ui/commands/clearCommand.ts
+index 8e5deafd0..ded494d1e 100644
+--- a/packages/cli/src/ui/commands/clearCommand.ts
++++ b/packages/cli/src/ui/commands/clearCommand.ts
+@@ -12,7 +12,6 @@ import {
+   resetBrowserSession,
+ } from '@google/gemini-cli-core';
+ import { CommandKind, type SlashCommand } from './types.js';
+-import { MessageType } from '../types.js';
+ import { randomUUID } from 'node:crypto';
+ 
+ export const clearCommand: SlashCommand = {
+@@ -56,9 +55,8 @@ export const clearCommand: SlashCommand = {
+     }
+ 
+     // Fire SessionStart hook after clearing
+-    let result;
+     if (hookSystem) {
+-      result = await hookSystem.fireSessionStartEvent(SessionStartSource.Clear);
++      await hookSystem.fireSessionStartEvent(SessionStartSource.Clear);
+     }
+ 
+     // Give the event loop a chance to process any pending telemetry operations
+@@ -73,15 +71,5 @@ export const clearCommand: SlashCommand = {
+ 
+     uiTelemetryService.clear(newSessionId);
+     context.ui.clear();
+-
+-    if (result?.systemMessage) {
+-      context.ui.addItem(
+-        {
+-          type: MessageType.INFO,
+-          text: result.systemMessage,
+-        },
+-        Date.now(),
+-      );
+-    }
+   },
+ };
+diff --git a/packages/cli/test-setup.ts b/packages/cli/test-setup.ts
+index 1a0947b95..32cb60e29 100644
+--- a/packages/cli/test-setup.ts
++++ b/packages/cli/test-setup.ts
+@@ -4,11 +4,13 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
++import './src/test-utils/polyfill-file.js';
+ import { vi, beforeEach, afterEach } from 'vitest';
+ import { format } from 'node:util';
+ import { coreEvents, debugLogger } from '@google/gemini-cli-core';
+ import { themeManager } from './src/ui/themes/theme-manager.js';
+ import { mockInkSpinner } from './src/test-utils/mockSpinner.js';
++import './src/test-utils/customMatchers.js';
+ 
+ // Globally mock ink-spinner to prevent non-deterministic snapshot/act flakes.
+ mockInkSpinner();
+@@ -37,8 +39,6 @@ process.env.FORCE_GENERIC_KEYBINDING_HINTS = 'true';
+ // Force generic terminal declaration to ensure stable snapshots across different host environments.
+ process.env.TERM_PROGRAM = 'generic';
+ 
+-import './src/test-utils/customMatchers.js';
+-
+ let consoleErrorSpy: vi.SpyInstance;
+ let actWarnings: Array<{ message: string; stack: string }> = [];

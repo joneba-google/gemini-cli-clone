@@ -1,0 +1,117 @@
+diff --git a/packages/core/src/tools/tool-registry.test.ts b/packages/core/src/tools/tool-registry.test.ts
+index 006bfcd89..db5c04182 100644
+--- a/packages/core/src/tools/tool-registry.test.ts
++++ b/packages/core/src/tools/tool-registry.test.ts
+@@ -869,6 +869,29 @@ describe('ToolRegistry', () => {
+         EXIT_PLAN_MODE_TOOL_NAME,
+       );
+     });
++
++    it('should retain exit_plan_mode after transitioning out of plan mode', () => {
++      const exitTool = new MockTool({ name: EXIT_PLAN_MODE_TOOL_NAME });
++      toolRegistry.registerTool(exitTool);
++
++      // 1. Initial State: DEFAULT (not in plan mode), so exit_plan_mode is not active.
++      vi.spyOn(config, 'getApprovalMode').mockReturnValue(ApprovalMode.DEFAULT);
++      expect(toolRegistry.getAllToolNames()).not.toContain(
++        EXIT_PLAN_MODE_TOOL_NAME,
++      );
++
++      // 2. Transition to PLAN mode. exit_plan_mode becomes active.
++      vi.spyOn(config, 'getApprovalMode').mockReturnValue(ApprovalMode.PLAN);
++      expect(toolRegistry.getAllToolNames()).toContain(
++        EXIT_PLAN_MODE_TOOL_NAME,
++      );
++
++      // 3. Transition back to DEFAULT mode. exit_plan_mode should be retained as active.
++      vi.spyOn(config, 'getApprovalMode').mockReturnValue(ApprovalMode.DEFAULT);
++      expect(toolRegistry.getAllToolNames()).toContain(
++        EXIT_PLAN_MODE_TOOL_NAME,
++      );
++    });
+   });
+ 
+   describe('DiscoveredToolInvocation', () => {
+diff --git a/packages/core/src/tools/tool-registry.ts b/packages/core/src/tools/tool-registry.ts
+index f9551d75d..6dc22de78 100644
+--- a/packages/core/src/tools/tool-registry.ts
++++ b/packages/core/src/tools/tool-registry.ts
+@@ -227,6 +227,8 @@ export class ToolRegistry {
+   private config: Config;
+   readonly messageBus: MessageBus;
+   private isMainRegistry: boolean;
++  private hasExitedPlanMode = false;
++  private lastObservedApprovalMode: ApprovalMode | undefined = undefined;
+ 
+   constructor(
+     config: Config,
+@@ -248,9 +250,22 @@ export class ToolRegistry {
+   clone(): ToolRegistry {
+     const clone = new ToolRegistry(this.config, this.messageBus);
+     clone.allKnownTools = new Map(this.allKnownTools);
++    clone.hasExitedPlanMode = this.hasExitedPlanMode;
++    clone.lastObservedApprovalMode = this.lastObservedApprovalMode;
+     return clone;
+   }
+ 
++  private updatePlanModeTransitionState(): void {
++    const currentMode = this.config.getApprovalMode();
++    if (
++      this.lastObservedApprovalMode === ApprovalMode.PLAN &&
++      currentMode !== ApprovalMode.PLAN
++    ) {
++      this.hasExitedPlanMode = true;
++    }
++    this.lastObservedApprovalMode = currentMode;
++  }
++
+   /**
+    * Registers a tool definition.
+    *
+@@ -527,6 +542,7 @@ export class ToolRegistry {
+    * @returns All the tools that are not excluded.
+    */
+   private getActiveTools(): AnyDeclarativeTool[] {
++    this.updatePlanModeTransitionState();
+     const toolMetadata = this.buildToolMetadata();
+     const allKnownNames = new Set(this.allKnownTools.keys());
+     const excludedTools =
+@@ -586,10 +602,10 @@ export class ToolRegistry {
+     }
+ 
+     const isPlanMode = this.config.getApprovalMode() === ApprovalMode.PLAN;
+-    if (
+-      (tool.name === ENTER_PLAN_MODE_TOOL_NAME && isPlanMode) ||
+-      (tool.name === EXIT_PLAN_MODE_TOOL_NAME && !isPlanMode)
+-    ) {
++    if (tool.name === ENTER_PLAN_MODE_TOOL_NAME && isPlanMode) {
++      return false;
++    }
++    if (tool.name === EXIT_PLAN_MODE_TOOL_NAME && !isPlanMode && !this.hasExitedPlanMode) {
+       return false;
+     }
+ 
+@@ -617,7 +633,6 @@ export class ToolRegistry {
+    */
+   getFunctionDeclarations(modelId?: string): FunctionDeclaration[] {
+     const isPlanMode = this.config.getApprovalMode() === ApprovalMode.PLAN;
+-    const plansDir = this.config.storage.getPlansDir();
+ 
+     const declarations: FunctionDeclaration[] = [];
+     const seenNames = new Set<string>();
+@@ -661,6 +676,7 @@ export class ToolRegistry {
+         isPlanMode &&
+         (toolName === WRITE_FILE_TOOL_NAME || toolName === EDIT_TOOL_NAME)
+       ) {
++        const plansDir = this.config.storage.getPlansDir();
+         schema = {
+           ...schema,
+           description: `ONLY FOR PLANS: ${schema.description}. You are currently in Plan Mode and may ONLY use this tool to write or update plans (.md files) in the plans directory: ${plansDir}/. You cannot use this tool to modify source code directly.`,
+@@ -758,6 +774,7 @@ export class ToolRegistry {
+    * Get the definition of a specific tool.
+    */
+   getTool(name: string): AnyDeclarativeTool | undefined {
++    this.updatePlanModeTransitionState();
+     let tool = this.allKnownTools.get(name);
+ 
+     // If not found, check legacy aliases

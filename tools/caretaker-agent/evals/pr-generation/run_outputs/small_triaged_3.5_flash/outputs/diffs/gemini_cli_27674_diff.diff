@@ -1,0 +1,68 @@
+diff --git a/packages/core/src/utils/getFolderStructure.test.ts b/packages/core/src/utils/getFolderStructure.test.ts
+index 5a9a077e9..6571551c1 100644
+--- a/packages/core/src/utils/getFolderStructure.test.ts
++++ b/packages/core/src/utils/getFolderStructure.test.ts
+@@ -292,6 +292,27 @@ ${testRootDir}${path.sep}
+       expect(structure).toContain('ignored.txt');
+       expect(structure).toContain('file1.txt');
+     });
++
++    it('should completely omit directories specified in .gitignore', async () => {
++      await fsPromises.writeFile(
++        path.join(testRootDir, '.gitignore'),
++        '.ruff_cache/\n.venv/\n',
++      );
++      await createTestFile('file1.txt');
++      await createTestFile('.ruff_cache', 'some_cache_file');
++      await createTestFile('.venv', 'bin', 'activate');
++      await createTestFile('node_modules', 'some-package', 'index.js');
++
++      const fileService = new FileDiscoveryService(testRootDir);
++      const structure = await getFolderStructure(testRootDir, {
++        fileService,
++      });
++
++      expect(structure).not.toContain('.ruff_cache');
++      expect(structure).not.toContain('.venv');
++      expect(structure).toContain(`node_modules${path.sep}...`);
++      expect(structure).toContain('file1.txt');
++    });
+   });
+ 
+   describe('with geminiignore', () => {
+diff --git a/packages/core/src/utils/getFolderStructure.ts b/packages/core/src/utils/getFolderStructure.ts
+index 5e7adc9d5..a8d73e9c8 100644
+--- a/packages/core/src/utils/getFolderStructure.ts
++++ b/packages/core/src/utils/getFolderStructure.ts
+@@ -179,13 +179,7 @@ async function readFullStructure(
+         const subFolderName = entry.name;
+         const subFolderPath = path.join(currentPath, subFolderName);
+ 
+-        const isIgnored =
+-          options.fileService?.shouldIgnoreDirectory(
+-            subFolderPath,
+-            filterFileOptions,
+-          ) ?? false;
+-
+-        if (options.ignoredFolders.has(subFolderName) || isIgnored) {
++        if (options.ignoredFolders.has(subFolderName)) {
+           const ignoredSubFolder: FullFolderInfo = {
+             name: subFolderName,
+             path: subFolderPath,
+@@ -201,6 +195,16 @@ async function readFullStructure(
+           continue;
+         }
+ 
++        const isIgnored =
++          options.fileService?.shouldIgnoreDirectory(
++            subFolderPath,
++            filterFileOptions,
++          ) ?? false;
++
++        if (isIgnored) {
++          continue;
++        }
++
+         const subFolderNode: FullFolderInfo = {
+           name: subFolderName,
+           path: subFolderPath,

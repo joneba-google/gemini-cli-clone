@@ -1,0 +1,150 @@
+diff --git a/packages/cli/src/acp/acpSession.test.ts b/packages/cli/src/acp/acpSession.test.ts
+index 6d21971c7..4f0815383 100644
+--- a/packages/cli/src/acp/acpSession.test.ts
++++ b/packages/cli/src/acp/acpSession.test.ts
+@@ -249,6 +249,47 @@ describe('Session', () => {
+     expect(result).toMatchObject({ stopReason: 'end_turn' });
+   });
+ 
++  it('should populate standard ACP usage including cachedReadTokens and thoughtTokens in returned PromptResponse', async () => {
++    const customFinishedEvent: ServerGeminiStreamEvent = {
++      type: GeminiEventType.Finished,
++      value: {
++        reason: FinishReason.STOP,
++        usageMetadata: {
++          promptTokenCount: 15,
++          candidatesTokenCount: 20,
++          cachedContentTokenCount: 5,
++          thoughtsTokenCount: 8,
++        },
++      },
++    };
++    async function* customMockStream() {
++      yield {
++        type: GeminiEventType.Content,
++        value: 'Hello',
++      };
++      yield customFinishedEvent;
++    }
++    mockSendMessageStream.mockImplementation(() => customMockStream());
++
++    const result = await session.prompt({
++      sessionId: 'session-1',
++      prompt: [{ type: 'text', text: 'Hi' }],
++    });
++
++    expect(result).toEqual({
++      stopReason: 'end_turn',
++      usage: {
++        inputTokens: 15,
++        outputTokens: 20,
++        cachedReadTokens: 5,
++        thoughtTokens: 8,
++        totalTokens: 48,
++      },
++      _meta: expect.any(Object),
++    });
++  });
++
++
+   it('should pass current session information directly onto geminiClient.sendMessageStream', async () => {
+     const stream = createMockStream([
+       {
+diff --git a/packages/cli/src/acp/acpSession.ts b/packages/cli/src/acp/acpSession.ts
+index 430670d49..fa8b64828 100644
+--- a/packages/cli/src/acp/acpSession.ts
++++ b/packages/cli/src/acp/acpSession.ts
+@@ -361,6 +361,8 @@ export class Session {
+ 
+     let totalInputTokens = 0;
+     let totalOutputTokens = 0;
++    let totalCachedReadTokens = 0;
++    let totalThoughtTokens = 0;
+     const modelUsageMap = new Map<string, { input: number; output: number }>();
+ 
+     let currentParts: Part[] = parts;
+@@ -372,6 +374,13 @@ export class Session {
+       if (maxTurns >= 0 && turnCount > maxTurns) {
+         return {
+           stopReason: 'max_turn_requests',
++          usage: {
++            inputTokens: totalInputTokens,
++            outputTokens: totalOutputTokens,
++            cachedReadTokens: totalCachedReadTokens,
++            thoughtTokens: totalThoughtTokens,
++            totalTokens: totalInputTokens + totalOutputTokens + totalCachedReadTokens + totalThoughtTokens,
++          },
+           _meta: {
+             quota: {
+               token_count: {
+@@ -401,6 +410,8 @@ export class Session {
+       let turnModelId = this.context.config.getModel();
+       let turnInputTokens = 0;
+       let turnOutputTokens = 0;
++      let turnCachedReadTokens = 0;
++      let turnThoughtTokens = 0;
+ 
+       try {
+         const responseStream = this.context.geminiClient.sendMessageStream(
+@@ -447,6 +458,10 @@ export class Session {
+                 turnInputTokens = usage.promptTokenCount ?? turnInputTokens;
+                 turnOutputTokens =
+                   usage.candidatesTokenCount ?? turnOutputTokens;
++                turnCachedReadTokens =
++                  usage.cachedContentTokenCount ?? turnCachedReadTokens;
++                turnThoughtTokens =
++                  usage.thoughtsTokenCount ?? turnThoughtTokens;
+               }
+               break;
+             }
+@@ -516,6 +531,13 @@ export class Session {
+           // Treat this as a graceful end to the model's turn rather than a crash.
+           return {
+             stopReason: 'end_turn',
++            usage: {
++              inputTokens: totalInputTokens,
++              outputTokens: totalOutputTokens,
++              cachedReadTokens: totalCachedReadTokens,
++              thoughtTokens: totalThoughtTokens,
++              totalTokens: totalInputTokens + totalOutputTokens + totalCachedReadTokens + totalThoughtTokens,
++            },
+             _meta: {
+               quota: {
+                 token_count: {
+@@ -544,6 +566,8 @@ export class Session {
+ 
+       totalInputTokens += turnInputTokens;
+       totalOutputTokens += turnOutputTokens;
++      totalCachedReadTokens += turnCachedReadTokens;
++      totalThoughtTokens += turnThoughtTokens;
+ 
+       if (turnInputTokens > 0 || turnOutputTokens > 0) {
+         const existing = modelUsageMap.get(turnModelId) ?? {
+@@ -558,6 +582,13 @@ export class Session {
+       if (stopReason !== 'end_turn') {
+         return {
+           stopReason,
++          usage: {
++            inputTokens: totalInputTokens,
++            outputTokens: totalOutputTokens,
++            cachedReadTokens: totalCachedReadTokens,
++            thoughtTokens: totalThoughtTokens,
++            totalTokens: totalInputTokens + totalOutputTokens + totalCachedReadTokens + totalThoughtTokens,
++          },
+           _meta: {
+             quota: {
+               token_count: {
+@@ -609,6 +640,13 @@ export class Session {
+ 
+     return {
+       stopReason: 'end_turn',
++      usage: {
++        inputTokens: totalInputTokens,
++        outputTokens: totalOutputTokens,
++        cachedReadTokens: totalCachedReadTokens,
++        thoughtTokens: totalThoughtTokens,
++        totalTokens: totalInputTokens + totalOutputTokens + totalCachedReadTokens + totalThoughtTokens,
++      },
+       _meta: {
+         quota: {
+           token_count: {

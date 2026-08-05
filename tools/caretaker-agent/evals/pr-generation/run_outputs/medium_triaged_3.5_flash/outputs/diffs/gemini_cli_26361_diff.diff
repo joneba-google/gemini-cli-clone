@@ -1,0 +1,206 @@
+diff --git a/package.json b/package.json
+index 6699efbd6..0aa270d3d 100644
+--- a/package.json
++++ b/package.json
+@@ -143,6 +143,7 @@
+     "yargs": "^17.7.2"
+   },
+   "dependencies": {
++    "http-proxy-agent": "^7.0.2",
+     "ink": "npm:@jrichman/ink@6.6.9",
+     "latest-version": "^9.0.0",
+     "node-fetch-native": "^1.6.7",
+diff --git a/packages/core/package.json b/packages/core/package.json
+index bfc7b7806..904fdd3fb 100644
+--- a/packages/core/package.json
++++ b/packages/core/package.json
+@@ -67,6 +67,7 @@
+     "glob": "^12.0.0",
+     "google-auth-library": "^9.11.0",
+     "html-to-text": "^9.0.5",
++    "http-proxy-agent": "^7.0.2",
+     "https-proxy-agent": "^7.0.6",
+     "ignore": "^7.0.0",
+     "ipaddr.js": "^1.9.1",
+diff --git a/packages/core/src/core/contentGenerator.test.ts b/packages/core/src/core/contentGenerator.test.ts
+index 4efd9f65c..77d8755ac 100644
+--- a/packages/core/src/core/contentGenerator.test.ts
++++ b/packages/core/src/core/contentGenerator.test.ts
+@@ -19,6 +19,8 @@ import { loadApiKey } from './apiKeyCredentialStorage.js';
+ import { FakeContentGenerator } from './fakeContentGenerator.js';
+ import { RecordingContentGenerator } from './recordingContentGenerator.js';
+ import { resetVersionCache } from '../utils/version.js';
++import { HttpProxyAgent } from 'http-proxy-agent';
++import { HttpsProxyAgent } from 'https-proxy-agent';
+ 
+ vi.mock('../code_assist/codeAssist.js');
+ vi.mock('@google/genai');
+@@ -851,6 +853,124 @@ describe('createContentGenerator', () => {
+       ),
+     ).rejects.toThrow('Invalid custom base URL: not-a-url');
+   });
++
++  it('should inject HttpsProxyAgent when proxy URL is configured and destination is HTTPS/default', async () => {
++    const mockConfig = {
++      getModel: vi.fn().mockReturnValue('gemini-pro'),
++      getProxy: vi.fn().mockReturnValue(undefined),
++      getUsageStatisticsEnabled: () => false,
++      getClientName: vi.fn().mockReturnValue(undefined),
++    } as unknown as Config;
++
++    await createContentGenerator(
++      {
++        apiKey: 'test-api-key',
++        authType: AuthType.USE_GEMINI,
++        proxy: 'http://my-proxy:8080',
++      },
++      mockConfig,
++    );
++
++    expect(GoogleGenAI).toHaveBeenCalledWith(
++      expect.objectContaining({
++        googleAuthOptions: {
++          clientOptions: {
++            transporterOptions: {
++              agent: expect.any(HttpsProxyAgent),
++            },
++          },
++        },
++      }),
++    );
++
++    const call = vi.mocked(GoogleGenAI).mock.calls.at(-1);
++    // eslint-disable-next-line @typescript-eslint/no-explicit-any
++    const googleAuthOptions = call?.[0]?.googleAuthOptions as any;
++    const agent = googleAuthOptions?.clientOptions?.transporterOptions?.agent;
++    expect(agent.proxy.href).toBe('http://my-proxy:8080/');
++  });
++
++  it('should inject HttpProxyAgent when destination baseUrl uses http:// protocol and proxy is configured', async () => {
++    const mockConfig = {
++      getModel: vi.fn().mockReturnValue('gemini-pro'),
++      getProxy: vi.fn().mockReturnValue(undefined),
++      getUsageStatisticsEnabled: () => false,
++      getClientName: vi.fn().mockReturnValue(undefined),
++    } as unknown as Config;
++
++    await createContentGenerator(
++      {
++        apiKey: 'test-api-key',
++        authType: AuthType.USE_GEMINI,
++        baseUrl: 'http://my-endpoint.local',
++        proxy: 'http://my-proxy:8080',
++      },
++      mockConfig,
++    );
++
++    expect(GoogleGenAI).toHaveBeenCalledWith(
++      expect.objectContaining({
++        googleAuthOptions: {
++          clientOptions: {
++            transporterOptions: {
++              agent: expect.any(HttpProxyAgent),
++            },
++          },
++        },
++      }),
++    );
++
++    const call = vi.mocked(GoogleGenAI).mock.calls.at(-1);
++    // eslint-disable-next-line @typescript-eslint/no-explicit-any
++    const googleAuthOptions = call?.[0]?.googleAuthOptions as any;
++    const agent = googleAuthOptions?.clientOptions?.transporterOptions?.agent;
++    expect(agent.proxy.href).toBe('http://my-proxy:8080/');
++  });
++
++  it('should trim proxy URL string before creating agent', async () => {
++    const mockConfig = {
++      getModel: vi.fn().mockReturnValue('gemini-pro'),
++      getProxy: vi.fn().mockReturnValue(undefined),
++      getUsageStatisticsEnabled: () => false,
++      getClientName: vi.fn().mockReturnValue(undefined),
++    } as unknown as Config;
++
++    await createContentGenerator(
++      {
++        apiKey: 'test-api-key',
++        authType: AuthType.USE_GEMINI,
++        proxy: '  http://my-trimmed-proxy:8080  \n',
++      },
++      mockConfig,
++    );
++
++    const call = vi.mocked(GoogleGenAI).mock.calls.at(-1);
++    // eslint-disable-next-line @typescript-eslint/no-explicit-any
++    const googleAuthOptions = call?.[0]?.googleAuthOptions as any;
++    const agent = googleAuthOptions?.clientOptions?.transporterOptions?.agent;
++    expect(agent.proxy.href).toBe('http://my-trimmed-proxy:8080/');
++  });
++
++  it('should omit googleAuthOptions when no proxy is configured', async () => {
++    const mockConfig = {
++      getModel: vi.fn().mockReturnValue('gemini-pro'),
++      getProxy: vi.fn().mockReturnValue(undefined),
++      getUsageStatisticsEnabled: () => false,
++      getClientName: vi.fn().mockReturnValue(undefined),
++    } as unknown as Config;
++
++    await createContentGenerator(
++      {
++        apiKey: 'test-api-key',
++        authType: AuthType.USE_GEMINI,
++        proxy: undefined,
++      },
++      mockConfig,
++    );
++
++    const call = vi.mocked(GoogleGenAI).mock.calls.at(-1);
++    expect(call?.[0]?.googleAuthOptions).toBeUndefined();
++  });
+ });
+ 
+ describe('createContentGeneratorConfig', () => {
+diff --git a/packages/core/src/core/contentGenerator.ts b/packages/core/src/core/contentGenerator.ts
+index 040fed0e9..26a4ef98c 100644
+--- a/packages/core/src/core/contentGenerator.ts
++++ b/packages/core/src/core/contentGenerator.ts
+@@ -18,6 +18,8 @@ import { createCodeAssistContentGenerator } from '../code_assist/codeAssist.js';
+ import { isCloudShell } from '../ide/detect-ide.js';
+ import type { Config } from '../config/config.js';
+ import { loadApiKey } from './apiKeyCredentialStorage.js';
++import { HttpProxyAgent } from 'http-proxy-agent';
++import { HttpsProxyAgent } from 'https-proxy-agent';
+ 
+ import type { UserTierId, GeminiUserTier } from '../code_assist/types.js';
+ import { LoggingContentGenerator } from './loggingContentGenerator.js';
+@@ -334,11 +336,30 @@ export async function createContentGenerator(
+         httpOptions.baseUrl = baseUrl;
+       }
+ 
++      let proxyAgent: HttpProxyAgent<string> | HttpsProxyAgent<string> | undefined;
++      const proxyUrl = config.proxy?.trim();
++      if (proxyUrl) {
++        if (baseUrl && baseUrl.startsWith('http://')) {
++          proxyAgent = new HttpProxyAgent(proxyUrl);
++        } else {
++          proxyAgent = new HttpsProxyAgent(proxyUrl);
++        }
++      }
++
+       const googleGenAI = new GoogleGenAI({
+         apiKey: config.apiKey === '' ? undefined : config.apiKey,
+         vertexai: config.vertexai ?? config.authType === AuthType.USE_VERTEX_AI,
+         httpOptions,
+         ...(apiVersionEnv && { apiVersion: apiVersionEnv }),
++        ...(proxyAgent && {
++          googleAuthOptions: {
++            clientOptions: {
++              transporterOptions: {
++                agent: proxyAgent,
++              },
++            },
++          },
++        }),
+       });
+       return new LoggingContentGenerator(googleGenAI.models, gcConfig);
+     }

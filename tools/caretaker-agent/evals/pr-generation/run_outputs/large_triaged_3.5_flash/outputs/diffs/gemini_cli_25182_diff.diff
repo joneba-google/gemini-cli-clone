@@ -1,0 +1,286 @@
+diff --git a/packages/core/src/policy/policy-engine.test.ts b/packages/core/src/policy/policy-engine.test.ts
+index b6c11a079..8a77a75cf 100644
+--- a/packages/core/src/policy/policy-engine.test.ts
++++ b/packages/core/src/policy/policy-engine.test.ts
+@@ -3792,4 +3792,77 @@ describe('PolicyEngine', () => {
+       );
+     });
+   });
++
++  describe('IDE and open files policy enforcement', () => {
++    const workspace = '/workspace';
++    let mockSandboxManager: SandboxManager;
++    let engine: PolicyEngine;
++
++    beforeEach(() => {
++      mockSandboxManager = {
++        prepareCommand: vi.fn(),
++        isKnownSafeCommand: vi.fn().mockReturnValue(false),
++        isDangerousCommand: vi.fn().mockReturnValue(false),
++        parseDenials: vi.fn(),
++        getWorkspace: vi.fn().mockReturnValue(workspace),
++      } as never as SandboxManager;
++    });
++
++    it('should normalize file_path to relative and enforce deny rule for target file (absolute and relative path inputs) for replace/write_file', async () => {
++      const rules: PolicyRule[] = [
++        {
++          toolName: 'replace',
++          argsPattern: /"file_path":"src\/forbidden\.txt"/,
++          decision: PolicyDecision.DENY,
++        },
++        {
++          toolName: 'write_file',
++          argsPattern: /"file_path":"src\/forbidden\.txt"/,
++          decision: PolicyDecision.DENY,
++        },
++      ];
++
++      engine = new PolicyEngine({
++        rules,
++        sandboxManager: mockSandboxManager,
++      });
++
++      // Test 1: relative path for replace
++      const relativeReplaceCall = {
++        name: 'replace',
++        args: { file_path: 'src/forbidden.txt' },
++      };
++      expect((await engine.check(relativeReplaceCall, undefined)).decision).toBe(
++        PolicyDecision.DENY,
++      );
++
++      // Test 2: absolute path for replace
++      const absoluteReplaceCall = {
++        name: 'replace',
++        args: { file_path: `${workspace}/src/forbidden.txt` },
++      };
++      expect((await engine.check(absoluteReplaceCall, undefined)).decision).toBe(
++        PolicyDecision.DENY,
++      );
++
++      // Test 3: relative path for write_file
++      const relativeWriteCall = {
++        name: 'write_file',
++        args: { file_path: 'src/forbidden.txt' },
++      };
++      expect((await engine.check(relativeWriteCall, undefined)).decision).toBe(
++        PolicyDecision.DENY,
++      );
++
++      // Test 4: absolute path for write_file
++      const absoluteWriteCall = {
++        name: 'write_file',
++        args: { file_path: `${workspace}/src/forbidden.txt` },
++      };
++      expect((await engine.check(absoluteWriteCall, undefined)).decision).toBe(
++        PolicyDecision.DENY,
++      );
++    });
++  });
+ });
++
+diff --git a/packages/core/src/policy/policy-engine.ts b/packages/core/src/policy/policy-engine.ts
+index eb5b141ba..7c9a8a0d8 100644
+--- a/packages/core/src/policy/policy-engine.ts
++++ b/packages/core/src/policy/policy-engine.ts
+@@ -13,7 +13,8 @@ import {
+   extractStringFromParseEntry,
+ } from '../utils/shell-utils.js';
+ import { parse as shellParse } from 'shell-quote';
+-import { isSubpath } from '../utils/paths.js';
++import path from 'node:path';
++import { isSubpath, makeRelative } from '../utils/paths.js';
+ import {
+   PolicyDecision,
+   type PolicyEngineConfig,
+@@ -511,6 +512,39 @@ export class PolicyEngine {
+       }
+     }
+ 
++    if (toolCall.args && isRecord(toolCall.args)) {
++      const workspace =
++        typeof this.sandboxManager.getWorkspace === 'function'
++          ? this.sandboxManager.getWorkspace()
++          : undefined;
++      if (workspace) {
++        const clonedArgs = { ...toolCall.args };
++        let modified = false;
++
++        const normalizeParam = (key: string) => {
++          const val = clonedArgs[key];
++          if (typeof val === 'string' && val.trim() !== '') {
++            let rel = val;
++            if (path.isAbsolute(val)) {
++              rel = makeRelative(val, workspace);
++            }
++            rel = rel.replace(/\\/g, '/');
++            if (rel !== val) {
++              clonedArgs[key] = rel;
++              modified = true;
++            }
++          }
++        };
++
++        normalizeParam('file_path');
++        normalizeParam('dir_path');
++
++        if (modified) {
++          toolCall = { ...toolCall, args: clonedArgs };
++        }
++      }
++    }
++
+     let stringifiedArgs: string | undefined;
+     // Compute stringified args once before the loop
+     if (
+diff --git a/packages/core/src/tools/edit.test.ts b/packages/core/src/tools/edit.test.ts
+index 075dca64b..56013067f 100644
+--- a/packages/core/src/tools/edit.test.ts
++++ b/packages/core/src/tools/edit.test.ts
+@@ -10,6 +10,7 @@ const mockFixLLMEditWithInstruction = vi.hoisted(() => vi.fn());
+ const mockGenerateJson = vi.hoisted(() => vi.fn());
+ const mockOpenDiff = vi.hoisted(() => vi.fn());
+ 
++
+ import { IdeClient } from '../ide/ide-client.js';
+ 
+ vi.mock('../ide/ide-client.js', () => ({
+@@ -1361,4 +1362,98 @@ function doIt() {
+       fs.rmSync(plansDir, { recursive: true, force: true });
+     });
+   });
++
++  describe('policy checks for open files in the IDE', () => {
++    it('should verify that deny policy rules for edit, replace, and write_file are properly matched and enforced with both absolute and relative path variants', async () => {
++      const { PolicyEngine } = await import('../policy/policy-engine.js');
++      const { PolicyDecision } = await import('../policy/types.js');
++
++      const workspace = rootDir;
++      const mockSandboxManager = {
++        prepareCommand: vi.fn(),
++        isKnownSafeCommand: vi.fn().mockReturnValue(false),
++        isDangerousCommand: vi.fn().mockReturnValue(false),
++        parseDenials: vi.fn(),
++        getWorkspace: vi.fn().mockReturnValue(workspace),
++      };
++
++      const rules = [
++        {
++          toolName: 'edit',
++          argsPattern: /"file_path":"src\/forbidden\.txt"/,
++          decision: PolicyDecision.DENY,
++        },
++        {
++          toolName: 'replace',
++          argsPattern: /"file_path":"src\/forbidden\.txt"/,
++          decision: PolicyDecision.DENY,
++        },
++        {
++          toolName: 'write_file',
++          argsPattern: /"file_path":"src\/forbidden\.txt"/,
++          decision: PolicyDecision.DENY,
++        },
++      ];
++
++      const policyEngine = new PolicyEngine({
++        rules,
++        sandboxManager: mockSandboxManager as any,
++      });
++
++      // Test 1: Relative path check for edit
++      const relativeEditCall = {
++        name: 'edit',
++        args: { file_path: 'src/forbidden.txt' },
++      };
++      expect((await policyEngine.check(relativeEditCall, undefined)).decision).toBe(
++        PolicyDecision.DENY,
++      );
++
++      // Test 2: Absolute path check for edit
++      const absoluteEditCall = {
++        name: 'edit',
++        args: { file_path: path.join(workspace, 'src/forbidden.txt') },
++      };
++      expect((await policyEngine.check(absoluteEditCall, undefined)).decision).toBe(
++        PolicyDecision.DENY,
++      );
++
++      // Test 3: Relative path check for replace
++      const relativeReplaceCall = {
++        name: 'replace',
++        args: { file_path: 'src/forbidden.txt' },
++      };
++      expect((await policyEngine.check(relativeReplaceCall, undefined)).decision).toBe(
++        PolicyDecision.DENY,
++      );
++
++      // Test 4: Absolute path check for replace
++      const absoluteReplaceCall = {
++        name: 'replace',
++        args: { file_path: path.join(workspace, 'src/forbidden.txt') },
++      };
++      expect((await policyEngine.check(absoluteReplaceCall, undefined)).decision).toBe(
++        PolicyDecision.DENY,
++      );
++
++      // Test 5: Relative path check for write_file
++      const relativeWriteCall = {
++        name: 'write_file',
++        args: { file_path: 'src/forbidden.txt' },
++      };
++      expect((await policyEngine.check(relativeWriteCall, undefined)).decision).toBe(
++        PolicyDecision.DENY,
++      );
++
++      // Test 6: Absolute path check for write_file
++      const absoluteWriteCall = {
++        name: 'write_file',
++        args: { file_path: path.join(workspace, 'src/forbidden.txt') },
++      };
++      expect((await policyEngine.check(absoluteWriteCall, undefined)).decision).toBe(
++        PolicyDecision.DENY,
++      );
++    });
++  });
+ });
++
+diff --git a/packages/core/test-polyfill.ts b/packages/core/test-polyfill.ts
+new file mode 100644
+index 000000000..2f0371e60
+--- /dev/null
++++ b/packages/core/test-polyfill.ts
+@@ -0,0 +1,19 @@
++/**
++ * @license
++ * Copyright 2026 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/* eslint-disable @typescript-eslint/no-explicit-any */
++
++if (!globalThis.File) {
++  globalThis.File = class File extends Blob {
++    name: string;
++    lastModified: number;
++    constructor(fileBits: any[], fileName: string, options?: any) {
++      super(fileBits, options);
++      this.name = fileName;
++      this.lastModified = options?.lastModified ?? Date.now();
++    }
++  } as any;
++}
+diff --git a/packages/core/test-setup.ts b/packages/core/test-setup.ts
+index d73036957..e0de65b3f 100644
+--- a/packages/core/test-setup.ts
++++ b/packages/core/test-setup.ts
+@@ -9,6 +9,9 @@ if (process.env.NO_COLOR !== undefined) {
+   delete process.env.NO_COLOR;
+ }
+ 
++import './test-polyfill.js';
++
++
+ import { setSimulate429 } from './src/utils/testUtils.js';
+ import { vi, afterEach } from 'vitest';
+ import { coreEvents } from './src/utils/events.js';
