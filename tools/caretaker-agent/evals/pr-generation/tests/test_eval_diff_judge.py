@@ -91,7 +91,9 @@ async def test_evaluate_single_diff_score_3(mock_agent_runner_cls, mock_fetch_di
         "gemini_cli_25693", "+ proposed change", doc_dict, "{{PROPOSED_DIFF}} {{TRUE_DIFF}}", "gemini-3.5-flash"
     )
 
-    assert result["score"] == 3
+    assert result["overall_score"] == 6
+    assert result["functional_score"] == 3
+    assert result["quality_score"] == 3
     assert "identical in functionality" in result["verdict_description"]
     assert result["success"] is True
 
@@ -105,7 +107,10 @@ async def test_evaluate_single_diff_score_0(mock_agent_runner_cls, mock_fetch_di
     mock_agent_runner.run_agent = AsyncMock(
         return_value=(
             json.dumps({
-                "score": 0,
+                "functional_score": 0,
+                "quality_score": 0,
+                "functional_critique": "Introduces syntax errors and breaks build.",
+                "quality_critique": "Unacceptable code structure.",
                 "verdict_description": "Introduces syntax errors and breaks build.",
             }),
             [],
@@ -122,7 +127,10 @@ async def test_evaluate_single_diff_score_0(mock_agent_runner_cls, mock_fetch_di
         "gemini_cli_25693", "+ broken code", doc_dict, "{{PROPOSED_DIFF}} {{TRUE_DIFF}}", "gemini-3.5-flash"
     )
 
-    assert result["score"] == 0
+    assert result["overall_score"] == 0
+    assert result["functional_score"] == 0
+    assert result["quality_score"] == 0
+    assert "breaks build" in result["verdict_description"]
     assert "breaks build" in result["verdict_description"]
 
 
@@ -131,7 +139,11 @@ def test_main_report_generation(mock_eval_single, tmp_path):
     """Tests full main() evaluation run generating eval_score.txt report."""
     mock_eval_single.return_value = {
         "test_id": "gemini_cli_25693",
-        "score": 3,
+        "functional_score": 3,
+        "quality_score": 3,
+        "overall_score": 6,
+        "functional_critique": "Full parity fix.",
+        "quality_critique": "Exemplary code quality.",
         "verdict_description": "Full parity fix.",
         "success": True,
     }
@@ -158,12 +170,13 @@ def test_main_report_generation(mock_eval_single, tmp_path):
     assert score_file.exists()
     content = score_file.read_text()
     assert "# 📊 Diff Evaluation Score Report: test_run_1" in content
-    assert "| **Average Score** | **3.00 / 3.00** |" in content
+    assert "| **Average Total Score** | **6.00 / 6.00** |" in content
+    assert "| **Average Functional Parity** | **3.00 / 3.00** |" in content
+    assert "| **Average Production Quality** | **3.00 / 3.00** |" in content
     assert "| **Average Turns** | **2.00** |" in content
     assert "| **Average Runtime** | **45.20s** |" in content
     assert "| **Max Attempts** | **5** |" in content
-    assert "| ✅ PASS | `#25693` | 2 | 45.20s | **3/3** | Full parity fix. |" in content
-    assert "Full parity fix." in content
+    assert "| ✅ PASS | `#25693` | 2 | 45.20s | **3/3** | **3/3** | **6/6** |" in content
 
 
 @pytest.mark.asyncio
@@ -174,7 +187,11 @@ async def test_eval_oversized_diff_feedback_prefix(mock_eval_single_diff, tmp_pa
 
     mock_eval_single_diff.return_value = {
         "test_id": "gemini_cli_123",
-        "score": 3,
+        "functional_score": 3,
+        "quality_score": 3,
+        "overall_score": 6,
+        "functional_critique": "Approved functional fix.",
+        "quality_critique": "Clean production code.",
         "verdict_description": "Approved code changes.",
         "success": True,
     }
@@ -206,9 +223,9 @@ async def test_eval_oversized_diff_feedback_prefix(mock_eval_single_diff, tmp_pa
 
     assert len(results) == 1
     res = results[0]
-    assert res["score"] == 3
-    assert res["attempts"] == 2
-    assert res["verdict_description"].startswith("(Line Count Exceeded Limit: 820 lines) Approved code changes.")
+    assert res["overall_score"] == 6
+    assert res["functional_critique"].startswith("(Line Count Exceeded Limit: 820 lines) Approved functional fix.")
+    assert res["quality_critique"].startswith("(Line Count Exceeded Limit: 820 lines) Clean production code.")
 
 
 @patch("eval_suite.load_test_files")
