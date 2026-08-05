@@ -161,18 +161,30 @@ async def evaluate_single_diff(
                     pass
 
         if isinstance(parsed, dict):
-            score = int(parsed.get("score", 0))
+            func_score = int(parsed.get("functional_score", parsed.get("score", 0)))
+            qual_score = int(parsed.get("quality_score", parsed.get("score", 0)))
+            func_critique = str(parsed.get("functional_critique", parsed.get("verdict_description", raw_output)))
+            qual_critique = str(parsed.get("quality_critique", parsed.get("verdict_description", raw_output)))
             verdict = str(parsed.get("verdict_description", raw_output))
         else:
-            score = 1 if "Score: 1" in raw_output or "2" in raw_output else 0
+            func_score = 1 if "Score: 1" in raw_output or "2" in raw_output else 0
+            qual_score = func_score
+            func_critique = raw_output.strip()
+            qual_critique = raw_output.strip()
             verdict = raw_output.strip()
 
-        # Clamp score between 0 and 3
-        score = max(0, min(3, score))
+        # Clamp scores between 0 and 3
+        func_score = max(0, min(3, func_score))
+        qual_score = max(0, min(3, qual_score))
+        overall_score = func_score + qual_score
 
         return {
             "test_id": test_id,
-            "score": score,
+            "functional_score": func_score,
+            "quality_score": qual_score,
+            "overall_score": overall_score,
+            "functional_critique": func_critique,
+            "quality_critique": qual_critique,
             "verdict_description": verdict,
             "success": True,
         }
@@ -180,7 +192,11 @@ async def evaluate_single_diff(
         logging.error("Failed LLM evaluation for %s: %s", test_id, e)
         return {
             "test_id": test_id,
-            "score": 0,
+            "functional_score": 0,
+            "quality_score": 0,
+            "overall_score": 0,
+            "functional_critique": f"Evaluation exception: {e}",
+            "quality_critique": f"Evaluation exception: {e}",
             "verdict_description": f"Evaluation exception: {e}",
             "success": False,
         }
@@ -300,23 +316,33 @@ async def evaluate_all_specs(
                 if proposed_diff.strip():
                     eval_res = await evaluate_single_diff(test_id, proposed_diff, doc_dict, prompt_template, model)
                 else:
+                    err_msg = f"FAILED: {test_error or 'Agent generated an empty diff file.'}"
                     eval_res = {
                         "test_id": test_id,
-                        "score": 0,
-                        "verdict_description": f"FAILED: {test_error or 'Agent generated an empty diff file.'}",
+                        "functional_score": 0,
+                        "quality_score": 0,
+                        "overall_score": 0,
+                        "functional_critique": err_msg,
+                        "quality_critique": err_msg,
+                        "verdict_description": err_msg,
                         "success": False,
                         "doc": doc_dict,
                     }
             else:
+                err_msg = f"FAILED: {test_error or 'Agent failed to generate a response or diff.'}"
                 eval_res = {
                     "test_id": test_id,
-                    "score": 0,
-                    "verdict_description": f"FAILED: {test_error or 'Agent failed to generate a response or diff.'}",
+                    "functional_score": 0,
+                    "quality_score": 0,
+                    "overall_score": 0,
+                    "functional_critique": err_msg,
+                    "quality_critique": err_msg,
+                    "verdict_description": err_msg,
                     "success": False,
                     "doc": doc_dict,
                 }
 
-            # If diff line count limit was exceeded, prefix the LLM Judge's verdict description
+            # If diff line count limit was exceeded, prefix BOTH critiques with the line count exceeded message
             if test_status == "EXCEEDED_LINE_LIMIT" or (test_error and "exceed" in test_error.lower()) or (line_cnt and line_cnt > 750):
                 cnt_str = str(line_cnt) if line_cnt else ""
                 if not cnt_str and test_error:
@@ -324,6 +350,8 @@ async def evaluate_all_specs(
                     if num_match:
                         cnt_str = num_match.group(1)
                 prefix = f"(Line Count Exceeded Limit: {cnt_str} lines) " if cnt_str else "(Line Count Exceeded Limit) "
+                eval_res["functional_critique"] = prefix + eval_res.get("functional_critique", "")
+                eval_res["quality_critique"] = prefix + eval_res.get("quality_critique", "")
                 eval_res["verdict_description"] = prefix + eval_res.get("verdict_description", "")
 
             eval_res["attempts"] = attempts
@@ -375,9 +403,15 @@ def run_diff_judge_eval(run_name: str, input_path: str, model: str = "gemini-3.5
         evaluate_all_specs(spec_files, diffs_dir, turn_map, runtime_map, line_count_map, status_map, error_map, prompt_template, model)
     )
 
-    # Compute overall score average, average turns, and average runtime
-    total_score = sum(r["score"] for r in results)
-    avg_score = total_score / len(results) if results else 0.0
+    # Compute overall, functional, and quality score averages
+    total_func = sum(r.get("functional_score", 0) for r in results)
+    avg_func = total_func / len(results) if results else 0.0
+
+    total_qual = sum(r.get("quality_score", 0) for r in results)
+    avg_qual = total_qual / len(results) if results else 0.0
+
+    total_overall = sum(r.get("overall_score", 0) for r in results)
+    avg_overall = total_overall / len(results) if results else 0.0
 
     valid_turns = [int(r["attempts"]) for r in results if str(r.get("attempts", "")).isdigit()]
     avg_turns = sum(valid_turns) / len(valid_turns) if valid_turns else 0.0
@@ -395,7 +429,9 @@ def run_diff_judge_eval(run_name: str, input_path: str, model: str = "gemini-3.5
         f.write(f"# 📊 Diff Evaluation Score Report: {run_name}\n\n")
         f.write("| Metric | Value |\n")
         f.write("| :--- | :--- |\n")
-        f.write(f"| **Average Score** | **{avg_score:.2f} / 3.00** |\n")
+        f.write(f"| **Average Total Score** | **{avg_overall:.2f} / 6.00** |\n")
+        f.write(f"| **Average Functional Parity** | **{avg_func:.2f} / 3.00** |\n")
+        f.write(f"| **Average Production Quality** | **{avg_qual:.2f} / 3.00** |\n")
         f.write(f"| **Average Turns** | **{avg_turns_str}** |\n")
         f.write(f"| **Average Runtime** | **{avg_runtime_str}** |\n")
         f.write(f"| **Evaluated Test Cases** | **{len(results)}** |\n")
@@ -404,14 +440,16 @@ def run_diff_judge_eval(run_name: str, input_path: str, model: str = "gemini-3.5
         f.write("\n---\n\n")
 
         f.write("## 🔍 Detailed Test Case Scores & Verdicts\n\n")
-        f.write("| Status | Issue | Turns | Runtime | Score | Verdict & Critique |\n")
-        f.write("| :--- | :--- | :--- | :--- | :--- | :--- |\n")
+        f.write("| Status | Issue | Turns | Runtime | Func (0-3) | Qual (0-3) | Total (0-6) | Verdict & Quality Critique |\n")
+        f.write("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
         for r in results:
-            status_icon = "✅ PASS" if r.get("score", 0) >= 2 else "❌ FAIL"
+            status_icon = "✅ PASS" if r.get("overall_score", 0) >= 4 else "❌ FAIL"
             attempts = r.get("attempts", "?")
             runtime_val = r.get("runtime_seconds")
             runtime_str = f"{runtime_val:.2f}s" if runtime_val is not None else "N/A"
-            verdict_clean = str(r.get("verdict_description", "")).replace("|", "\\|").replace("\n", " ")
+            func_crit = str(r.get("functional_critique", "")).replace("|", "\\|").replace("\n", " ")
+            qual_crit = str(r.get("quality_critique", "")).replace("|", "\\|").replace("\n", " ")
+            critique_combined = f"**Func:** {func_crit} <br>**Qual:** {qual_crit}"
             
             # Extract clean issue number for table display
             issue_num = r.get("doc", {}).get("github_metadata", {}).get("issue_number")
@@ -424,16 +462,16 @@ def run_diff_judge_eval(run_name: str, input_path: str, model: str = "gemini-3.5
                 if not issue_num:
                     issue_num = parts[-1]
             issue_label = f"#{issue_num}"
-            f.write(f"| {status_icon} | `{issue_label}` | {attempts} | {runtime_str} | **{r['score']}/3** | {verdict_clean} |\n")
+            f.write(f"| {status_icon} | `{issue_label}` | {attempts} | {runtime_str} | **{r.get('functional_score', 0)}/3** | **{r.get('quality_score', 0)}/3** | **{r.get('overall_score', 0)}/6** | {critique_combined} |\n")
         f.write("\n---\n\n")
         f.write("*Generated by LLM-as-a-Judge Diff Evaluator.*\n")
 
     print("\n==========================================================")
     print(f" Diff Evaluation Complete!")
-    print(f" Average Score:   {avg_score:.2f} / 3.00 across {len(results)} test cases")
-    print(f" Average Turns:   {avg_turns_str}")
-    print(f" Average Runtime: {avg_runtime_str}")
-    print(f" Score Report:    {eval_score_file}")
+    print(f" Average Total Score: {avg_overall:.2f} / 6.00 across {len(results)} test cases")
+    print(f" Average Turns:       {avg_turns_str}")
+    print(f" Average Runtime:     {avg_runtime_str}")
+    print(f" Score Report:        {eval_score_file}")
     print("==========================================================")
     return results
 

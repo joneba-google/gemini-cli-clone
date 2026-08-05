@@ -27,11 +27,11 @@ def sanitize_relative_path(path: str | os.PathLike) -> str | None:
     """
     if not path:
         return None
-    raw_str = str(path).replace("\x00", "").strip()
+    raw_str = str(path).replace("\x00", "").replace("\\", "/").strip()
     if not raw_str:
         return None
     clean_path = os.path.normpath(raw_str)
-    if clean_path.startswith("..") or os.path.isabs(clean_path):
+    if clean_path == ".." or clean_path.startswith("../") or os.path.isabs(clean_path):
         logging.warning("Path traversal attempt or absolute path detected: %s", path)
         return None
     return clean_path
@@ -111,6 +111,15 @@ class CommandExecutor:
                     args.append(token)
         else:
             args = list(cmd)
+
+        if not args:
+            logger.error("Command execution failed: no executable command provided after parsing tokens.")
+            raise CommandExecutionError(
+                cmd=cmd,
+                returncode=-1,
+                stdout="",
+                stderr="No executable command specified to run.",
+            )
 
         cmd_str = " ".join(args)
         logger.info("Executing command: %s (CWD: %s)", cmd_str, active_cwd)
