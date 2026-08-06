@@ -1,0 +1,237 @@
+diff --git a/packages/cli/src/ui/hooks/useGitBranchName.test.tsx b/packages/cli/src/ui/hooks/useGitBranchName.test.tsx
+index dd85e73e7..bedab9aec 100644
+--- a/packages/cli/src/ui/hooks/useGitBranchName.test.tsx
++++ b/packages/cli/src/ui/hooks/useGitBranchName.test.tsx
+@@ -41,12 +41,14 @@ vi.mock('node:fs/promises', async () => {
+ });
+ 
+ const CWD = '/test/project';
++const GIT_HEAD_PATH = path.join(CWD, '.git', 'HEAD');
+ const GIT_LOGS_HEAD_PATH = path.join(CWD, '.git', 'logs', 'HEAD');
+ 
+ describe('useGitBranchName', () => {
+   beforeEach(() => {
+     vol.reset(); // Reset in-memory filesystem
+     vol.fromJSON({
++      [GIT_HEAD_PATH]: 'ref: refs/heads/main',
+       [GIT_LOGS_HEAD_PATH]: 'ref: refs/heads/main',
+     });
+   });
+@@ -161,9 +163,52 @@ describe('useGitBranchName', () => {
+     });
+     expect(result.current).toBe('main');
+ 
+-    // Wait for watcher to be set up
++    // Wait for watcher to be set up on .git/HEAD
+     await waitFor(() => {
+-      expect(watchSpy).toHaveBeenCalled();
++      expect(watchSpy).toHaveBeenCalledWith(
++        GIT_HEAD_PATH,
++        expect.any(Function),
++      );
++    });
++
++    // Simulate file change event
++    await act(async () => {
++      fs.writeFileSync(GIT_HEAD_PATH, 'ref: refs/heads/develop'); // Trigger watcher
++      rerender();
++    });
++
++    await waitFor(() => {
++      expect(result.current).toBe('develop');
++    });
++  });
++
++  it('should update branch name when .git/logs/HEAD changes', async () => {
++    vi.spyOn(fsPromises, 'access').mockResolvedValue(undefined);
++    const watchSpy = vi.spyOn(fs, 'watch');
++
++    (mockSpawnAsync as MockedFunction<typeof mockSpawnAsync>)
++      .mockResolvedValueOnce({ stdout: 'main\n' } as {
++        stdout: string;
++        stderr: string;
++      })
++      .mockResolvedValue({ stdout: 'develop\n' } as {
++        stdout: string;
++        stderr: string;
++      });
++
++    const { result, rerender } = renderGitBranchNameHook(CWD);
++
++    await act(async () => {
++      rerender();
++    });
++    expect(result.current).toBe('main');
++
++    // Wait for watcher to be set up on .git/logs/HEAD
++    await waitFor(() => {
++      expect(watchSpy).toHaveBeenCalledWith(
++        GIT_LOGS_HEAD_PATH,
++        expect.any(Function),
++      );
+     });
+ 
+     // Simulate file change event
+@@ -178,7 +223,8 @@ describe('useGitBranchName', () => {
+   });
+ 
+   it('should handle watcher setup error silently', async () => {
+-    // Remove .git/logs/HEAD to cause an error in fs.watch setup
++    // Remove both paths from mock fs to cause an error in setup
++    vol.unlinkSync(GIT_HEAD_PATH);
+     vol.unlinkSync(GIT_LOGS_HEAD_PATH);
+ 
+     (mockSpawnAsync as MockedFunction<typeof mockSpawnAsync>).mockResolvedValue(
+@@ -201,18 +247,6 @@ describe('useGitBranchName', () => {
+       stdout: 'develop\n',
+     } as { stdout: string; stderr: string });
+ 
+-    // This write would trigger the watcher if it was set up
+-    // but since it failed, the branch name should not update
+-    // We need to create the file again for writeFileSync to not throw
+-    vol.fromJSON({
+-      [GIT_LOGS_HEAD_PATH]: 'ref: refs/heads/develop',
+-    });
+-
+-    await act(async () => {
+-      fs.writeFileSync(GIT_LOGS_HEAD_PATH, 'ref: refs/heads/develop');
+-      rerender();
+-    });
+-
+     // Branch name should not change because watcher setup failed
+     expect(result.current).toBe('main');
+   });
+@@ -236,8 +270,12 @@ describe('useGitBranchName', () => {
+       rerender();
+     });
+ 
+-    // Wait for watcher to be set up BEFORE unmounting
++    // Wait for watchers to be set up BEFORE unmounting
+     await waitFor(() => {
++      expect(watchMock).toHaveBeenCalledWith(
++        GIT_HEAD_PATH,
++        expect.any(Function),
++      );
+       expect(watchMock).toHaveBeenCalledWith(
+         GIT_LOGS_HEAD_PATH,
+         expect.any(Function),
+@@ -245,6 +283,6 @@ describe('useGitBranchName', () => {
+     });
+ 
+     unmount();
+-    expect(closeMock).toHaveBeenCalled();
++    expect(closeMock).toHaveBeenCalledTimes(2);
+   });
+ });
+diff --git a/packages/cli/src/ui/hooks/useGitBranchName.ts b/packages/cli/src/ui/hooks/useGitBranchName.ts
+index 0f8c735ed..2e3adb97c 100644
+--- a/packages/cli/src/ui/hooks/useGitBranchName.ts
++++ b/packages/cli/src/ui/hooks/useGitBranchName.ts
+@@ -13,63 +13,75 @@ import path from 'node:path';
+ export function useGitBranchName(cwd: string): string | undefined {
+   const [branchName, setBranchName] = useState<string | undefined>(undefined);
+ 
+-  const fetchBranchName = useCallback(async () => {
+-    try {
+-      const { stdout } = await spawnAsync(
+-        'git',
+-        ['rev-parse', '--abbrev-ref', 'HEAD'],
+-        { cwd },
+-      );
+-      const branch = stdout.toString().trim();
+-      if (branch && branch !== 'HEAD') {
+-        setBranchName(branch);
+-      } else {
+-        const { stdout: hashStdout } = await spawnAsync(
++  const fetchBranchName = useCallback(
++    async (isMounted?: () => boolean) => {
++      try {
++        const { stdout } = await spawnAsync(
+           'git',
+-          ['rev-parse', '--short', 'HEAD'],
++          ['rev-parse', '--abbrev-ref', 'HEAD'],
+           { cwd },
+         );
+-        setBranchName(hashStdout.toString().trim());
++        const branch = stdout.toString().trim();
++        if (isMounted && !isMounted()) return;
++        if (branch && branch !== 'HEAD') {
++          setBranchName(branch);
++        } else {
++          const { stdout: hashStdout } = await spawnAsync(
++            'git',
++            ['rev-parse', '--short', 'HEAD'],
++            { cwd },
++          );
++          if (isMounted && !isMounted()) return;
++          setBranchName(hashStdout.toString().trim());
++        }
++      } catch (_error) {
++        if (isMounted && !isMounted()) return;
++        setBranchName(undefined);
+       }
+-    } catch (_error) {
+-      setBranchName(undefined);
+-    }
+-  }, [cwd, setBranchName]);
++    },
++    [cwd, setBranchName],
++  );
+ 
+   useEffect(() => {
++    let cancelled = false;
++    const isMounted = () => !cancelled;
++
+     // eslint-disable-next-line @typescript-eslint/no-floating-promises
+-    fetchBranchName(); // Initial fetch
++    fetchBranchName(isMounted); // Initial fetch
+ 
++    const gitHeadPath = path.join(cwd, '.git', 'HEAD');
+     const gitLogsHeadPath = path.join(cwd, '.git', 'logs', 'HEAD');
+-    let watcher: fs.FSWatcher | undefined;
+-    let cancelled = false;
++    const watchers: fs.FSWatcher[] = [];
+ 
+-    const setupWatcher = async () => {
++    const watchFile = async (filePath: string) => {
+       try {
+-        // Check if .git/logs/HEAD exists, as it might not in a new repo or orphaned head
+-        await fsPromises.access(gitLogsHeadPath, fs.constants.F_OK);
++        await fsPromises.access(filePath, fs.constants.F_OK);
+         if (cancelled) return;
+-        watcher = fs.watch(gitLogsHeadPath, (eventType: string) => {
+-          // Changes to .git/logs/HEAD (appends) indicate HEAD has likely changed
++        const watcher = fs.watch(filePath, (eventType: string) => {
+           if (eventType === 'change' || eventType === 'rename') {
+-            // Handle rename just in case
+             // eslint-disable-next-line @typescript-eslint/no-floating-promises
+-            fetchBranchName();
++            fetchBranchName(isMounted);
+           }
+         });
++        watchers.push(watcher);
+       } catch (_watchError) {
+-        // Silently ignore watcher errors (e.g. permissions or file not existing),
+-        // similar to how exec errors are handled.
+-        // The branch name will simply not update automatically.
++        // Silently ignore watcher errors (e.g. permissions or file not existing)
+       }
+     };
+ 
++    const setupWatchers = async () => {
++      await watchFile(gitHeadPath);
++      await watchFile(gitLogsHeadPath);
++    };
++
+     // eslint-disable-next-line @typescript-eslint/no-floating-promises
+-    setupWatcher();
++    setupWatchers();
+ 
+     return () => {
+       cancelled = true;
+-      watcher?.close();
++      for (const watcher of watchers) {
++        watcher.close();
++      }
+     };
+   }, [cwd, fetchBranchName]);

@@ -1,0 +1,50 @@
+diff --git a/packages/cli/src/config/extension-manager.test.ts b/packages/cli/src/config/extension-manager.test.ts
+index 33c335c16..de18caf84 100644
+--- a/packages/cli/src/config/extension-manager.test.ts
++++ b/packages/cli/src/config/extension-manager.test.ts
+@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+ import * as fs from 'node:fs';
+ import * as os from 'node:os';
+ import * as path from 'node:path';
+-import { ExtensionManager } from './extension-manager.js';
++import { ExtensionManager, inferInstallMetadata } from './extension-manager.js';
+ import { createTestMergedSettings, type MergedSettings } from './settings.js';
+ import { createExtension } from '../test-utils/createExtension.js';
+ import { EXTENSIONS_DIRECTORY_NAME } from './extensions/variables.js';
+@@ -637,4 +637,24 @@ describe('ExtensionManager', () => {
+       );
+     });
+   });
++
++  describe('inferInstallMetadata', () => {
++    it('should correctly identify ssh:// URLs as git source type', async () => {
++      const sshUrl = 'ssh://url.domain.com';
++      const metadata = await inferInstallMetadata(sshUrl);
++      expect(metadata).toEqual({
++        source: sshUrl,
++        type: 'git',
++        ref: undefined,
++        autoUpdate: undefined,
++        allowPreRelease: undefined,
++      });
++    });
++
++    it('should correctly identify other standard protocols as git source type', async () => {
++      const httpsUrl = 'https://github.com/user/repo';
++      const metadata = await inferInstallMetadata(httpsUrl);
++      expect(metadata.type).toBe('git');
++    });
++  });
+ });
+diff --git a/packages/cli/src/config/extension-manager.ts b/packages/cli/src/config/extension-manager.ts
+index 65b353979..ee0542e00 100644
+--- a/packages/cli/src/config/extension-manager.ts
++++ b/packages/cli/src/config/extension-manager.ts
+@@ -1298,6 +1298,7 @@ export async function inferInstallMetadata(
+     source.startsWith('http://') ||
+     source.startsWith('https://') ||
+     source.startsWith('git@') ||
++    source.startsWith('ssh://') ||
+     source.startsWith('sso://') ||
+     source.startsWith('github:') ||
+     source.startsWith('gitlab:')

@@ -2,16 +2,44 @@
   "status": "TRIAGED",
   "triage_attempts": 1,
   "generation_attempts": 0,
-  "workable_spec": {},
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28001",
+    "summary": {
+      "problem": "The nightly release workflow failed during the 'Publish Release' step with 'npm error No workspaces found: --workspace='.",
+      "root_cause": "In .github/workflows/release-nightly.yml, package names are passed to .github/actions/publish-release using repository variables (vars.CLI_PACKAGE_NAME, vars.CORE_PACKAGE_NAME, vars.A2A_PACKAGE_NAME). When executing scheduled nightly releases in the 'internal' environment where these variables are not defined, the inputs evaluate to empty strings, causing 'npm publish --workspace=' to fail.",
+      "context": "The publish-release action requires cli-package-name, core-package-name, and a2a-package-name inputs but does not define default values for them. Providing default fallback values ('@google/gemini-cli', '@google/gemini-cli-core', '@google/gemini-cli-a2a-server') ensures the publish action succeeds even when environment repository variables are omitted or empty."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        ".github/actions/publish-release/action.yml",
+        ".github/actions/tag-npm-release/action.yml",
+        ".github/workflows/release-nightly.yml"
+      ],
+      "steps": [
+        "Add default values for cli-package-name ('@google/gemini-cli'), core-package-name ('@google/gemini-cli-core'), and a2a-package-name ('@google/gemini-cli-a2a-server') in .github/actions/publish-release/action.yml.",
+        "Add default values for cli-package-name ('@google/gemini-cli'), core-package-name ('@google/gemini-cli-core'), and a2a-package-name ('@google/gemini-cli-a2a-server') in .github/actions/tag-npm-release/action.yml.",
+        "Update .github/workflows/release-nightly.yml to use fallback expressions for package name parameters (e.g. ${{ vars.CLI_PACKAGE_NAME || '@google/gemini-cli' }}) when calling publish-release."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "The nightly release workflow successfully resolves package names when executing in the internal environment and publishes packages without empty workspace flags.",
+      "verification_steps": [
+        "Trigger a dry-run of the release-nightly.yml workflow via workflow_dispatch.",
+        "Verify that the Publish Release step resolves cli-package-name, core-package-name, and a2a-package-name correctly without producing --workspace=."
+      ],
+      "framework": "N/A"
+    }
+  },
   "expected_quality": "OK",
-  "expected_effort": "MEDIUM",
+  "expected_effort": "SMALL",
   "github_metadata": {
     "owner": "google-gemini",
     "repo": "gemini-cli",
     "issue_number": 28001,
     "title": "Nightly Release Failed for v0.48.0-nightly.20260618.g4d3dcdce1 on 2026-06-18",
-    "target_version": "4d3dcdce1f03f6048bc65383b795ab4701da950b",
-    "pr_number": 0
+    "target_version": "7ef3b4e1fc9dfef5ca15fef855a0fdd696369c14",
+    "pr_number": 28016
   },
   "lock": {
     "holder": null,

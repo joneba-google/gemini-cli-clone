@@ -1,0 +1,129 @@
+diff --git a/packages/core/src/skills/skillLoader.test.ts b/packages/core/src/skills/skillLoader.test.ts
+index 3fe88c344..598c91e24 100644
+--- a/packages/core/src/skills/skillLoader.test.ts
++++ b/packages/core/src/skills/skillLoader.test.ts
+@@ -271,4 +271,79 @@ description: Test sanitization
+     expect(skills).toHaveLength(1);
+     expect(skills[0].name).toBe('gke-prs-troubleshooter');
+   });
++
++  it('should parse skill with UTF-8 BOM in SKILL.md', async () => {
++    const skillDir = path.join(testRootDir, 'bom-skill');
++    await fs.mkdir(skillDir, { recursive: true });
++    const skillFile = path.join(skillDir, 'SKILL.md');
++    await fs.writeFile(
++      skillFile,
++      '\uFEFF---\nname: bom-skill\ndescription: A test skill with UTF-8 BOM\n---\n# Instructions\nDo something.\n',
++    );
++
++    const skills = await loadSkillsFromDir(testRootDir);
++
++    expect(skills).toHaveLength(1);
++    expect(skills[0].name).toBe('bom-skill');
++    expect(skills[0].description).toBe('A test skill with UTF-8 BOM');
++  });
++
++  it('should parse skill with trailing horizontal spaces after frontmatter markers', async () => {
++    const skillDir = path.join(testRootDir, 'trailing-spaces');
++    await fs.mkdir(skillDir, { recursive: true });
++    const skillFile = path.join(skillDir, 'SKILL.md');
++    await fs.writeFile(
++      skillFile,
++      `--- \t \nname: trailing-spaces-skill\ndescription: A skill with trailing spaces\n---  \n# Instructions\nDo something.\n`,
++    );
++
++    const skills = await loadSkillsFromDir(testRootDir);
++
++    expect(skills).toHaveLength(1);
++    expect(skills[0].name).toBe('trailing-spaces-skill');
++    expect(skills[0].description).toBe('A skill with trailing spaces');
++  });
++
++  it('should parse skill with case-insensitivity and spacing around colons in simple parser', async () => {
++    const skillDir = path.join(testRootDir, 'case-spacing');
++    await fs.mkdir(skillDir, { recursive: true });
++    const skillFile = path.join(skillDir, 'SKILL.md');
++    // Using a description with a colon to force the simple parser fallback
++    await fs.writeFile(
++      skillFile,
++      `---
++  NAME   : case-spacing-skill
++  DESCRIPTION  : Parsing issues: resolved in simple parser fallback
++---
++`,
++    );
++
++    const skills = await loadSkillsFromDir(testRootDir);
++
++    expect(skills).toHaveLength(1);
++    expect(skills[0].name).toBe('case-spacing-skill');
++    expect(skills[0].description).toBe('Parsing issues: resolved in simple parser fallback');
++  });
++
++  it('should prevent swallowing of indented keys during multi-line description continuation in simple parser', async () => {
++    const skillDir = path.join(testRootDir, 'prevent-swallowing');
++    await fs.mkdir(skillDir, { recursive: true });
++    const skillFile = path.join(skillDir, 'SKILL.md');
++    // Force simple parser fallback via a colon in the description line
++    await fs.writeFile(
++      skillFile,
++      `---
++  description: Multi-line description: has a colon
++    name: swallowed-key-prevention
++---
++`,
++    );
++
++    const skills = await loadSkillsFromDir(testRootDir);
++
++    expect(skills).toHaveLength(1);
++    expect(skills[0].name).toBe('swallowed-key-prevention');
++    expect(skills[0].description).toBe('Multi-line description: has a colon');
++  });
+ });
++
+diff --git a/packages/core/src/skills/skillLoader.ts b/packages/core/src/skills/skillLoader.ts
+index d41b46449..5256fc7f5 100644
+--- a/packages/core/src/skills/skillLoader.ts
++++ b/packages/core/src/skills/skillLoader.ts
+@@ -32,7 +32,7 @@ export interface SkillDefinition {
+ }
+ 
+ export const FRONTMATTER_REGEX =
+-  /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?/;
++  /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n([\s\S]*))?/;
+ 
+ /**
+  * Parses frontmatter content using YAML with a fallback to simple key-value parsing.
+@@ -74,15 +74,15 @@ function parseSimpleFrontmatter(
+   for (let i = 0; i < lines.length; i++) {
+     const line = lines[i];
+ 
+-    // Match "name:" at the start of the line (optional whitespace)
+-    const nameMatch = line.match(/^\s*name:\s*(.*)$/);
++    // Match "name:" at the start of the line (optional whitespace, case-insensitive)
++    const nameMatch = line.match(/^\s*name\s*:\s*(.*)$/i);
+     if (nameMatch) {
+       name = nameMatch[1].trim();
+       continue;
+     }
+ 
+-    // Match "description:" at the start of the line (optional whitespace)
+-    const descMatch = line.match(/^\s*description:\s*(.*)$/);
++    // Match "description:" at the start of the line (optional whitespace, case-insensitive)
++    const descMatch = line.match(/^\s*description\s*:\s*(.*)$/i);
+     if (descMatch) {
+       const descLines = [descMatch[1].trim()];
+ 
+@@ -90,7 +90,10 @@ function parseSimpleFrontmatter(
+       while (i + 1 < lines.length) {
+         const nextLine = lines[i + 1];
+         // If next line is indented, it's a continuation of the description
+-        if (nextLine.match(/^[ \t]+\S/)) {
++        if (
++          nextLine.match(/^[ \t]+\S/) &&
++          !nextLine.match(/^\s*(?:name|description)\s*:/i)
++        ) {
+           descLines.push(nextLine.trim());
+           i++;
+         } else {

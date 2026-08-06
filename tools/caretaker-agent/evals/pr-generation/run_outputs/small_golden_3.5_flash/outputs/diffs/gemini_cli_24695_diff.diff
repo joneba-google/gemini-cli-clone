@@ -1,0 +1,66 @@
+diff --git a/packages/core/src/code_assist/setup.test.ts b/packages/core/src/code_assist/setup.test.ts
+index cf2251ed1..a4c032c1c 100644
+--- a/packages/core/src/code_assist/setup.test.ts
++++ b/packages/core/src/code_assist/setup.test.ts
+@@ -6,6 +6,7 @@
+ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+ import {
+   ProjectIdRequiredError,
++  InvalidNumericProjectIdError,
+   setupUser,
+   ValidationCancelledError,
+   resetUserDataCacheForTesting,
+@@ -399,6 +400,22 @@ describe('setupUser', () => {
+         'LoadCodeAssist returned empty response',
+       );
+     });
++
++    it('should throw InvalidNumericProjectIdError when GOOGLE_CLOUD_PROJECT is numeric-only', async () => {
++      vi.stubEnv('GOOGLE_CLOUD_PROJECT', '1234567890');
++      const client = {} as OAuth2Client;
++      await expect(setupUser(client, mockConfig)).rejects.toThrow(
++        InvalidNumericProjectIdError,
++      );
++    });
++
++    it('should throw InvalidNumericProjectIdError when GOOGLE_CLOUD_PROJECT_ID is numeric-only', async () => {
++      vi.stubEnv('GOOGLE_CLOUD_PROJECT_ID', '9876543210');
++      const client = {} as OAuth2Client;
++      await expect(setupUser(client, mockConfig)).rejects.toThrow(
++        InvalidNumericProjectIdError,
++      );
++    });
+   });
+ });
+ 
+diff --git a/packages/core/src/code_assist/setup.ts b/packages/core/src/code_assist/setup.ts
+index a68a1ec55..4ddab182e 100644
+--- a/packages/core/src/code_assist/setup.ts
++++ b/packages/core/src/code_assist/setup.ts
+@@ -36,6 +36,15 @@ export class ProjectIdRequiredError extends Error {
+   }
+ }
+ 
++export class InvalidNumericProjectIdError extends Error {
++  constructor() {
++    super(
++      'GOOGLE_CLOUD_PROJECT (or GOOGLE_CLOUD_PROJECT_ID) must be set to a string-based Project ID (e.g., "my-project-123") rather than a numeric Project Number.',
++    );
++    this.name = 'InvalidNumericProjectIdError';
++  }
++}
++
+ /**
+  * Error thrown when user cancels the validation process.
+  * This is a non-recoverable error that should result in auth failure.
+@@ -122,6 +131,10 @@ export async function setupUser(
+     process.env['GOOGLE_CLOUD_PROJECT_ID'] ||
+     undefined;
+ 
++  if (projectId && /^\d+$/.test(projectId)) {
++    throw new InvalidNumericProjectIdError();
++  }
++
+   const projectCache = userDataCache.getOrCreate(client, () =>
+     createCache<string | undefined, Promise<UserData>>({
+       storage: 'map',

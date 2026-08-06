@@ -1,0 +1,23 @@
+## Commit Message
+
+[SSR Agent] Issue Fix (21053): Wrap all MCP transports with McpComplianceTransport
+
+## PR Description
+
+fixes #21053
+Original issue: https://github.com/google-gemini/gemini-cli/issues/21053
+
+### Context & Problem
+MCP tool calls failed with a protocol error when an MCP server (such as HTTP or SSE connection types) returned JSON payloads in the `content` field without the `structuredContent` field. Previously, only stdio transports for Xcode's `mcpbridge` were wrapped to fix this non-compliance, leaving HTTP/SSE and other stdio connections vulnerable to validation failures in the MCP SDK.
+
+### Detailed Changes
+The following modifications have been successfully implemented:
+- Renamed the wrapper transport file from [xcode-mcp-fix-transport.ts](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/tools/caretaker-agent/evals/pr-generation/run_outputs/test_large_golden_3.5_flash/agent_environments/gemini_cli_21053/tmp/eval/gemini-cli/packages/core/src/tools/xcode-mcp-fix-transport.ts) to [mcp-compliance-transport.ts](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/tools/caretaker-agent/evals/pr-generation/run_outputs/test_large_golden_3.5_flash/agent_environments/gemini_cli_21053/tmp/eval/gemini-cli/packages/core/src/tools/mcp-compliance-transport.ts), and refactored the [XcodeMcpBridgeFixTransport](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/tools/caretaker-agent/evals/pr-generation/run_outputs/test_large_golden_3.5_flash/agent_environments/gemini_cli_21053/tmp/eval/gemini-cli/packages/core/src/tools/mcp-compliance-transport.ts#L23) class to [McpComplianceTransport](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/tools/caretaker-agent/evals/pr-generation/run_outputs/test_large_golden_3.5_flash/agent_environments/gemini_cli_21053/tmp/eval/gemini-cli/packages/core/src/tools/mcp-compliance-transport.ts#L23).
+- Updated [mcp-client.ts](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/tools/caretaker-agent/evals/pr-generation/run_outputs/test_large_golden_3.5_flash/agent_environments/gemini_cli_21053/tmp/eval/gemini-cli/packages/core/src/tools/mcp-client.ts) to wrap all URL transports (SSE, HTTP) and standard input/output (stdio) transports unconditionally with [McpComplianceTransport](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/tools/caretaker-agent/evals/pr-generation/run_outputs/test_large_golden_3.5_flash/agent_environments/gemini_cli_21053/tmp/eval/gemini-cli/packages/core/src/tools/mcp-compliance-transport.ts#L23).
+- Exposed the underlying `transport` field within [McpComplianceTransport](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/tools/caretaker-agent/evals/pr-generation/run_outputs/test_large_golden_3.5_flash/agent_environments/gemini_cli_21053/tmp/eval/gemini-cli/packages/core/src/tools/mcp-compliance-transport.ts#L23) as public to enable clean unwrapping in debug mode and test environments.
+- Updated and renamed mock-testing environments inside [mcp-client.test.ts](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/tools/caretaker-agent/evals/pr-generation/run_outputs/test_large_golden_3.5_flash/agent_environments/gemini_cli_21053/tmp/eval/gemini-cli/packages/core/src/tools/mcp-client.test.ts#L18) and [mcp-compliance-transport.test.ts](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/tools/caretaker-agent/evals/pr-generation/run_outputs/test_large_golden_3.5_flash/agent_environments/gemini_cli_21053/tmp/eval/gemini-cli/packages/core/src/tools/mcp-compliance-transport.test.ts) to handle the wrapped transport appropriately.
+
+### Verification
+Verification has been successfully performed with:
+- Unit tests via Vitest in [mcp-compliance-transport.test.ts](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/tools/caretaker-agent/evals/pr-generation/run_outputs/test_large_golden_3.5_flash/agent_environments/gemini_cli_21053/tmp/eval/gemini-cli/packages/core/src/tools/mcp-compliance-transport.test.ts) validating successful structuredContent insertion for non-compliant JSON textual content, while leaving already compliant or non-JSON payloads untouched.
+- Unit and integration tests in [mcp-client.test.ts](file:///usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/tools/caretaker-agent/evals/pr-generation/run_outputs/test_large_golden_3.5_flash/agent_environments/gemini_cli_21053/tmp/eval/gemini-cli/packages/core/src/tools/mcp-client.test.ts) confirming seamless wrapped transport interaction.

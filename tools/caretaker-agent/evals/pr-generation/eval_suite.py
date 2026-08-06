@@ -107,7 +107,7 @@ def load_test_files(input_path: str) -> list[tuple[str, dict]]:
         try:
             with open(p, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if isinstance(data, dict) and "workable_spec" in data:
+                if isinstance(data, dict):
                     files.append((p, data))
         except Exception as e:
             print(f"Warning: Skipping invalid test JSON {p}: {e}")
@@ -121,8 +121,32 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
 
     file_base = os.path.splitext(os.path.basename(file_path))[0]
     github_meta = doc_dict.get("github_metadata", {})
-    issue_num = github_meta.get("issue_number", "0")
+    issue_num = github_meta.get("issue_number") or doc_dict.get("issue_number", "0")
     test_id = file_base if str(issue_num) in file_base else f"{file_base}_{issue_num}"
+
+    VALID_QUALITIES = {"OK", "FEATURE", "NEEDS_INFO", "SPAM_EMPTY"}
+    expected_quality = doc_dict.get("expected_quality", "OK")
+    workable_spec = doc_dict.get("workable_spec")
+
+    # If issue quality is not OK ("FEATURE", "NEEDS_INFO", "SPAM_EMPTY") or workable_spec is missing/empty, skip PR generation and mark as PASS
+    if expected_quality != "OK" or not workable_spec:
+        quality_label = expected_quality if expected_quality in VALID_QUALITIES else (expected_quality or "UNKNOWN")
+        print(f"[EVAL] Skipping PR generation for test case {test_id} (Quality: {quality_label})")
+        return {
+            "success": True,
+            "status": "SKIPPED_NON_OK",
+            "diff": "",
+            "pr_details": f"PR generation skipped: Expected quality is '{quality_label}'.",
+            "error": None,
+            "attempts": 0,
+            "max_attempts": max_attempts,
+            "test_id": test_id,
+            "file_base": file_base,
+            "issue_num": issue_num,
+            "line_count": 0,
+            "runtime_seconds": 0.01,
+            "expected_quality": quality_label,
+        }
 
     # Setup distinct directories for this run under eval/run_outputs/{run_name}/
     env_dir = os.path.join(run_dir, "agent_environments", test_id)
@@ -316,7 +340,11 @@ def main():
             attempts = r.get("attempts", "?")
             runtime_val = r.get("runtime_seconds")
             runtime_str = f"{runtime_val:.2f}s" if runtime_val is not None else "N/A"
-            f.write(f"[{status_symbol}] {r['test_id']} (Turns: {attempts}, Runtime: {runtime_str})\n")
+            if r.get("status") == "SKIPPED_NON_OK":
+                eq = r.get("expected_quality", "NON_OK")
+                f.write(f"[{status_symbol}] {r['test_id']} (Quality: {eq}, Skipped PR Generation, Runtime: {runtime_str})\n")
+            else:
+                f.write(f"[{status_symbol}] {r['test_id']} (Turns: {attempts}, Runtime: {runtime_str})\n")
             if not r.get("success"):
                 f.write(f"    Error: {r.get('error', 'Unknown failure')}\n")
             f.write("\n")

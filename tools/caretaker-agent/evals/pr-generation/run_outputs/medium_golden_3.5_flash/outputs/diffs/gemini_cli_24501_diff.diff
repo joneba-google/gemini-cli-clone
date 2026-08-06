@@ -1,0 +1,237 @@
+diff --git a/packages/core/src/agents/browser/analyzeScreenshot.test.ts b/packages/core/src/agents/browser/analyzeScreenshot.test.ts
+index 71e082b75..4fb58e429 100644
+--- a/packages/core/src/agents/browser/analyzeScreenshot.test.ts
++++ b/packages/core/src/agents/browser/analyzeScreenshot.test.ts
+@@ -9,6 +9,7 @@ import { createAnalyzeScreenshotTool } from './analyzeScreenshot.js';
+ import type { BrowserManager, McpToolCallResult } from './browserManager.js';
+ import type { Config } from '../../config/config.js';
+ import type { MessageBus } from '../../confirmation-bus/message-bus.js';
++import { Environment } from '@google/genai';
+ 
+ const mockMessageBus = {
+   waitForConfirmation: vi.fn().mockResolvedValue({ approved: true }),
+@@ -36,6 +37,7 @@ function createMockBrowserManager(
+ function createMockConfig(
+   generateContentResult?: unknown,
+   generateContentError?: Error,
++  visualModel: string = 'test-visual-model',
+ ): Config {
+   const generateContent = generateContentError
+     ? vi.fn().mockRejectedValue(generateContentError)
+@@ -57,7 +59,7 @@ function createMockConfig(
+ 
+   return {
+     getBrowserAgentConfig: vi.fn().mockReturnValue({
+-      customConfig: { visualModel: 'test-visual-model' },
++      customConfig: { visualModel },
+     }),
+     getContentGenerator: vi.fn().mockReturnValue({
+       generateContent,
+@@ -87,7 +89,11 @@ describe('analyzeScreenshot', () => {
+   describe('AnalyzeScreenshotInvocation', () => {
+     it('captures a screenshot and returns visual analysis', async () => {
+       const browserManager = createMockBrowserManager();
+-      const config = createMockConfig();
++      const config = createMockConfig(
++        undefined,
++        undefined,
++        'gemini-2.5-computer-use-preview-10-2025',
++      );
+       const tool = createAnalyzeScreenshotTool(
+         browserManager,
+         config,
+@@ -109,7 +115,22 @@ describe('analyzeScreenshot', () => {
+       const contentGenerator = config.getContentGenerator();
+       expect(contentGenerator.generateContent).toHaveBeenCalledWith(
+         expect.objectContaining({
+-          model: 'test-visual-model',
++          model: 'gemini-2.5-computer-use-preview-10-2025',
++          config: expect.objectContaining({
++            tools: [
++              {
++                computerUse: {
++                  environment: Environment.ENVIRONMENT_BROWSER,
++                  excludedPredefinedFunctions: [
++                    'open_web_browser',
++                    'click_at',
++                    'key_combination',
++                    'drag_and_drop',
++                  ],
++                },
++              },
++            ],
++          }),
+           contents: expect.arrayContaining([
+             expect.objectContaining({
+               role: 'user',
+@@ -136,6 +157,66 @@ describe('analyzeScreenshot', () => {
+       expect(result.error).toBeUndefined();
+     });
+ 
++    it('omits computerUse tools for non-computer-use models', async () => {
++      const browserManager = createMockBrowserManager();
++      const config = createMockConfig(
++        undefined,
++        undefined,
++        'gemini-2.0-flash',
++      );
++      const tool = createAnalyzeScreenshotTool(
++        browserManager,
++        config,
++        mockMessageBus,
++      );
++
++      const invocation = tool.build({
++        instruction: 'Find the button',
++      });
++      await invocation.execute(new AbortController().signal);
++
++      const contentGenerator = config.getContentGenerator();
++      const generateContentMock = vi.mocked(contentGenerator.generateContent);
++      const calledWithConfig = generateContentMock.mock.calls[0][0].config;
++      expect(calledWithConfig.tools).toBeUndefined();
++    });
++
++    it('successfully parses both text and functionCall response parts', async () => {
++      const browserManager = createMockBrowserManager();
++      const config = createMockConfig({
++        candidates: [
++          {
++            content: {
++              parts: [
++                { text: 'First line of text.' },
++                {
++                  functionCall: {
++                    name: 'click_at',
++                    args: { x: 100, y: 200 },
++                  },
++                },
++                { text: 'Second line of text.' },
++              ],
++            },
++          },
++        ],
++      });
++      const tool = createAnalyzeScreenshotTool(
++        browserManager,
++        config,
++        mockMessageBus,
++      );
++
++      const invocation = tool.build({
++        instruction: 'Execute actions',
++      });
++      const result = await invocation.execute(new AbortController().signal);
++
++      expect(result.llmContent).toContain('First line of text.');
++      expect(result.llmContent).toContain('Action: click_at with args {"x":100,"y":200}');
++      expect(result.llmContent).toContain('Second line of text.');
++    });
++
+     it('returns an error when screenshot capture fails (no image)', async () => {
+       const browserManager = createMockBrowserManager({
+         content: [{ type: 'text', text: 'No screenshot available' }],
+diff --git a/packages/core/src/agents/browser/analyzeScreenshot.ts b/packages/core/src/agents/browser/analyzeScreenshot.ts
+index c269b71bf..29a13c484 100644
+--- a/packages/core/src/agents/browser/analyzeScreenshot.ts
++++ b/packages/core/src/agents/browser/analyzeScreenshot.ts
+@@ -27,9 +27,10 @@ import {
+ import type { MessageBus } from '../../confirmation-bus/message-bus.js';
+ import type { BrowserManager } from './browserManager.js';
+ import type { Config } from '../../config/config.js';
+-import { getVisualAgentModel } from './modelAvailability.js';
++import { getVisualAgentModel, isComputerUseModel } from './modelAvailability.js';
+ import { debugLogger } from '../../utils/debugLogger.js';
+ import { LlmRole } from '../../telemetry/llmRole.js';
++import { Environment } from '@google/genai';
+ 
+ /**
+  * System prompt for the visual analysis model call.
+@@ -116,6 +117,23 @@ class AnalyzeScreenshotInvocation extends BaseToolInvocation<
+       const visualModel = getVisualAgentModel(this.config);
+       const contentGenerator = this.config.getContentGenerator();
+ 
++      const isCompUse = isComputerUseModel(visualModel);
++      const tools = isCompUse
++        ? [
++            {
++              computerUse: {
++                environment: Environment.ENVIRONMENT_BROWSER,
++                excludedPredefinedFunctions: [
++                  'open_web_browser',
++                  'click_at',
++                  'key_combination',
++                  'drag_and_drop',
++                ],
++              },
++            },
++          ]
++        : undefined;
++
+       const response = await contentGenerator.generateContent(
+         {
+           model: visualModel,
+@@ -124,6 +142,7 @@ class AnalyzeScreenshotInvocation extends BaseToolInvocation<
+             topP: 0.95,
+             systemInstruction: VISUAL_SYSTEM_PROMPT,
+             abortSignal: signal,
++            ...(tools ? { tools } : {}),
+           },
+           contents: [
+             {
+@@ -146,12 +165,23 @@ class AnalyzeScreenshotInvocation extends BaseToolInvocation<
+         LlmRole.UTILITY_TOOL,
+       );
+ 
+-      // Extract text from response
+-      const responseText =
+-        response.candidates?.[0]?.content?.parts
+-          ?.filter((p) => p.text)
+-          .map((p) => p.text)
+-          .join('\n') ?? '';
++      // Extract text and action response components from the response
++      const parts = response.candidates?.[0]?.content?.parts ?? [];
++      const responseText = parts
++        .filter((p) => p.text || p.functionCall)
++        .map((p) => {
++          if (p.text) {
++            return p.text;
++          }
++          if (p.functionCall) {
++            const name = p.functionCall.name;
++            const args = p.functionCall.args ? JSON.stringify(p.functionCall.args) : '';
++            return `Action: ${name} with args ${args}`;
++          }
++          return '';
++        })
++        .filter((str) => str !== '')
++        .join('\n');
+ 
+       if (!responseText) {
+         return {
+diff --git a/packages/core/src/agents/browser/modelAvailability.ts b/packages/core/src/agents/browser/modelAvailability.ts
+index 358d498aa..f517c6eb8 100644
+--- a/packages/core/src/agents/browser/modelAvailability.ts
++++ b/packages/core/src/agents/browser/modelAvailability.ts
+@@ -19,6 +19,21 @@ import { debugLogger } from '../../utils/debugLogger.js';
+  */
+ export const VISUAL_AGENT_MODEL = 'gemini-2.5-computer-use-preview-10-2025';
+ 
++/**
++ * Pattern to identify computer-use capable models.
++ */
++export const COMPUTER_USE_MODEL_PATTERN = /^gemini-.*-computer-use-/;
++
++/**
++ * Helper function to detect if a given model is computer-use capable.
++ *
++ * @param model Model name
++ * @returns true if the model is computer-use capable
++ */
++export function isComputerUseModel(model: string): boolean {
++  return COMPUTER_USE_MODEL_PATTERN.test(model);
++}
++
+ /**
+  * Gets the visual agent model from config, falling back to default.
+  *

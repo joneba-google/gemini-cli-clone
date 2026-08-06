@@ -1,0 +1,378 @@
+diff --git a/packages/core/src/services/shellExecutionService.test.ts b/packages/core/src/services/shellExecutionService.test.ts
+index f1aa08f41..aba20dff0 100644
+--- a/packages/core/src/services/shellExecutionService.test.ts
++++ b/packages/core/src/services/shellExecutionService.test.ts
+@@ -213,7 +213,7 @@ describe('ShellExecutionService', () => {
+     mockSerializeTerminalToObject.mockReturnValue([]);
+     mockIsBinary.mockReturnValue(false);
+     mockPlatform.mockReturnValue('linux');
+-    mockResolveExecutable.mockImplementation(async (exe: string) => exe);
++    mockResolveExecutable.mockImplementation((exe: string) => exe);
+     process.env['PATH'] = '/test/path';
+     mockGetPty.mockResolvedValue({
+       module: { spawn: mockPtySpawn },
+@@ -2064,7 +2064,7 @@ describe('ShellExecutionService environment variables', () => {
+       sandboxManager: mockSandboxManager,
+     };
+ 
+-    mockResolveExecutable.mockResolvedValue('/bin/bash/resolved');
++    mockResolveExecutable.mockReturnValue('/bin/bash/resolved');
+     const mockChild = new EventEmitter() as unknown as ChildProcess;
+     mockChild.stdout = new EventEmitter() as unknown as Readable;
+     mockChild.stderr = new EventEmitter() as unknown as Readable;
+diff --git a/packages/core/src/services/shellExecutionService.ts b/packages/core/src/services/shellExecutionService.ts
+index 5817ffd33..82506ab3a 100644
+--- a/packages/core/src/services/shellExecutionService.ts
++++ b/packages/core/src/services/shellExecutionService.ts
+@@ -415,7 +415,7 @@ export class ShellExecutionService {
+     }
+ 
+     const resolvedExecutable =
+-      (await resolveExecutable(executable)) ?? executable;
++      resolveExecutable(executable) ?? executable;
+ 
+     const guardedCommand = ensurePromptvarsDisabled(commandToExecute, shell);
+     const spawnArgs = [...argsPrefix, guardedCommand];
+diff --git a/packages/core/src/services/shellExecutionService.windows.integration.test.ts b/packages/core/src/services/shellExecutionService.windows.integration.test.ts
+new file mode 100644
+index 000000000..f9ebeecaa
+--- /dev/null
++++ b/packages/core/src/services/shellExecutionService.windows.integration.test.ts
+@@ -0,0 +1,40 @@
++/**
++ * @license
++ * Copyright 2026 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++import { describe, it, expect } from 'vitest';
++import { ShellExecutionService } from './shellExecutionService.js';
++import { NoopSandboxManager } from './sandboxManager.js';
++
++describe.skipIf(process.platform !== 'win32')('ShellExecutionService (Windows Integration)', () => {
++  it('should execute embedded double quotes successfully via pwsh.exe and preserve quotes', async () => {
++    // Assert that complex commands execute successfully and output "preserved" with exit code 0.
++    const command = 'node -e "console.log(\\"preserved\\")"';
++    let output = '';
++
++    const handle = await ShellExecutionService.execute(
++      command,
++      process.cwd(),
++      (event) => {
++        if (event.type === 'data') {
++          output += event.chunk;
++        }
++      },
++      new AbortController().signal,
++      false,
++      {
++        sanitizationConfig: {
++          allowedEnvironmentVariables: [],
++          blockedEnvironmentVariables: [],
++          enableEnvironmentVariableRedaction: false,
++        },
++        sandboxManager: new NoopSandboxManager(),
++      }
++    );
++
++    const result = await handle.result;
++    expect(result.exitCode).toBe(0);
++    expect(output.trim()).toBe('preserved');
++  });
++});
+diff --git a/packages/core/src/tools/ripGrep.test.ts b/packages/core/src/tools/ripGrep.test.ts
+index 5abadd50a..ba34ab4d7 100644
+--- a/packages/core/src/tools/ripGrep.test.ts
++++ b/packages/core/src/tools/ripGrep.test.ts
+@@ -1825,7 +1825,7 @@ describe('resolveRipgrepPath', () => {
+ 
+       it('should fall back to system PATH if both bundled paths are missing and system is trusted', async () => {
+         vi.mocked(fileExists).mockResolvedValue(false);
+-        vi.mocked(resolveExecutable).mockResolvedValue('/usr/bin/rg');
++        vi.mocked(resolveExecutable).mockReturnValue('/usr/bin/rg');
+         vi.mocked(resolveToRealPath).mockReturnValue('/usr/bin/rg');
+ 
+         const resolvedPath = await resolveRipgrepPath();
+@@ -1836,7 +1836,7 @@ describe('resolveRipgrepPath', () => {
+       it('should reject system PATH if it is in the current working directory', async () => {
+         vi.mocked(fileExists).mockResolvedValue(false);
+         const unsafePath = path.join(process.cwd(), 'rg');
+-        vi.mocked(resolveExecutable).mockResolvedValue(unsafePath);
++        vi.mocked(resolveExecutable).mockReturnValue(unsafePath);
+         vi.mocked(resolveToRealPath).mockReturnValue(unsafePath);
+ 
+         const resolvedPath = await resolveRipgrepPath();
+@@ -1848,7 +1848,7 @@ describe('resolveRipgrepPath', () => {
+         const trustedLink = '/usr/local/bin/rg';
+         const trustedRealPath = '/opt/homebrew/Cellar/ripgrep/13.0.0/bin/rg';
+ 
+-        vi.mocked(resolveExecutable).mockResolvedValue(trustedLink);
++        vi.mocked(resolveExecutable).mockReturnValue(trustedLink);
+         vi.mocked(resolveToRealPath).mockReturnValue(trustedRealPath);
+ 
+         const resolvedPath = await resolveRipgrepPath();
+@@ -1857,7 +1857,7 @@ describe('resolveRipgrepPath', () => {
+ 
+       it('should return null if binary is missing from both bundled paths and system PATH', async () => {
+         vi.mocked(fileExists).mockResolvedValue(false);
+-        vi.mocked(resolveExecutable).mockResolvedValue(undefined);
++        vi.mocked(resolveExecutable).mockReturnValue(undefined);
+ 
+         const resolvedPath = await resolveRipgrepPath();
+         expect(resolvedPath).toBeNull();
+@@ -1883,7 +1883,7 @@ describe('resolveRipgrepPath', () => {
+ 
+       it('should fall back to system PATH if system is trusted on Windows', async () => {
+         vi.mocked(fileExists).mockResolvedValue(false);
+-        vi.mocked(resolveExecutable).mockResolvedValue(
++        vi.mocked(resolveExecutable).mockReturnValue(
+           'C:\\Windows\\System32\\rg.exe',
+         );
+         vi.mocked(resolveToRealPath).mockReturnValue(
+@@ -1898,7 +1898,7 @@ describe('resolveRipgrepPath', () => {
+       it('should reject system PATH if it is untrusted on Windows', async () => {
+         vi.mocked(fileExists).mockResolvedValue(false);
+         const unsafePath = 'D:\\Downloads\\rg.exe';
+-        vi.mocked(resolveExecutable).mockResolvedValue(unsafePath);
++        vi.mocked(resolveExecutable).mockReturnValue(unsafePath);
+         vi.mocked(resolveToRealPath).mockReturnValue(unsafePath);
+ 
+         const resolvedPath = await resolveRipgrepPath();
+diff --git a/packages/core/src/tools/ripGrep.ts b/packages/core/src/tools/ripGrep.ts
+index 1a5ae5421..a6721b9b5 100644
+--- a/packages/core/src/tools/ripGrep.ts
++++ b/packages/core/src/tools/ripGrep.ts
+@@ -72,7 +72,7 @@ export async function resolveRipgrepPath(): Promise<string | null> {
+     }
+ 
+     // 3. Fallback: check system PATH
+-    const systemRg = await resolveExecutable('rg');
++    const systemRg = resolveExecutable('rg');
+     if (systemRg) {
+       // Security: Validate the system executable to prevent Search Path Interruption.
+       const realPath = resolveToRealPath(systemRg);
+diff --git a/packages/core/src/utils/shell-utils.test.ts b/packages/core/src/utils/shell-utils.test.ts
+index ed1d709da..b06fb2de9 100644
+--- a/packages/core/src/utils/shell-utils.test.ts
++++ b/packages/core/src/utils/shell-utils.test.ts
+@@ -38,17 +38,19 @@ vi.mock('os', () => ({
+   homedir: mockHomedir,
+ }));
+ 
+-const mockAccess = vi.hoisted(() => vi.fn());
++const mockAccessSync = vi.hoisted(() => vi.fn());
+ vi.mock('node:fs', () => ({
+   default: {
+     promises: {
+-      access: mockAccess,
++      access: vi.fn(),
+     },
++    accessSync: mockAccessSync,
+     constants: { X_OK: 1 },
+   },
+   promises: {
+-    access: mockAccess,
++    access: vi.fn(),
+   },
++  accessSync: mockAccessSync,
+   constants: { X_OK: 1 },
+ }));
+ 
+@@ -83,6 +85,9 @@ beforeAll(async () => {
+ 
+ beforeEach(() => {
+   mockPlatform.mockReturnValue('linux');
++  mockAccessSync.mockImplementation(() => {
++    throw new Error('ENOENT');
++  });
+   mockQuote.mockImplementation((args: string[]) =>
+     args.map((arg) => `'${arg}'`).join(' '),
+   );
+@@ -570,59 +575,109 @@ describe('resolveExecutable', () => {
+ 
+   beforeEach(() => {
+     process.env = { ...originalEnv };
+-    mockAccess.mockReset();
++    mockAccessSync.mockReset();
+   });
+ 
+   afterEach(() => {
+     process.env = originalEnv;
+   });
+ 
+-  it('should return the absolute path if it exists and is executable', async () => {
++  it('should return the absolute path if it exists and is executable', () => {
+     const absPath = path.resolve('/usr/bin/git');
+-    mockAccess.mockResolvedValue(undefined); // success
+-    expect(await resolveExecutable(absPath)).toBe(absPath);
+-    expect(mockAccess).toHaveBeenCalledWith(absPath, 1);
++    mockAccessSync.mockReturnValue(undefined); // success
++    expect(resolveExecutable(absPath)).toBe(absPath);
++    expect(mockAccessSync).toHaveBeenCalledWith(absPath, 1);
+   });
+ 
+-  it('should return undefined for absolute path if it does not exist', async () => {
++  it('should return undefined for absolute path if it does not exist', () => {
+     const absPath = path.resolve('/usr/bin/nonexistent');
+-    mockAccess.mockRejectedValue(new Error('ENOENT'));
+-    expect(await resolveExecutable(absPath)).toBeUndefined();
++    mockAccessSync.mockImplementation(() => {
++      throw new Error('ENOENT');
++    });
++    expect(resolveExecutable(absPath)).toBeUndefined();
+   });
+ 
+-  it('should resolve executable in PATH', async () => {
++  it('should resolve executable in PATH', () => {
+     const binDir = path.resolve('/bin');
+     const usrBinDir = path.resolve('/usr/bin');
+     process.env['PATH'] = `${binDir}${path.delimiter}${usrBinDir}`;
+     mockPlatform.mockReturnValue('linux');
+ 
+     const targetPath = path.join(usrBinDir, 'ls');
+-    mockAccess.mockImplementation(async (p: string) => {
++    mockAccessSync.mockImplementation((p: string) => {
+       if (p === targetPath) return undefined;
+       throw new Error('ENOENT');
+     });
+ 
+-    expect(await resolveExecutable('ls')).toBe(targetPath);
++    expect(resolveExecutable('ls')).toBe(targetPath);
+   });
+ 
+-  it('should try extensions on Windows', async () => {
++  it('should try extensions on Windows', () => {
+     const sys32 = path.resolve('C:\\Windows\\System32');
+     process.env['PATH'] = sys32;
+     mockPlatform.mockReturnValue('win32');
+-    mockAccess.mockImplementation(async (p: string) => {
++    mockAccessSync.mockImplementation((p: string) => {
+       // Use includes because on Windows path separators might differ
+       if (p.includes('cmd.exe')) return undefined;
+       throw new Error('ENOENT');
+     });
+ 
+-    expect(await resolveExecutable('cmd')).toContain('cmd.exe');
++    expect(resolveExecutable('cmd')).toContain('cmd.exe');
+   });
+ 
+-  it('should return undefined if not found in PATH', async () => {
++  it('should return undefined if not found in PATH', () => {
+     process.env['PATH'] = path.resolve('/bin');
+     mockPlatform.mockReturnValue('linux');
+-    mockAccess.mockRejectedValue(new Error('ENOENT'));
++    mockAccessSync.mockImplementation(() => {
++      throw new Error('ENOENT');
++    });
++
++    expect(resolveExecutable('unknown')).toBeUndefined();
++  });
++});
++
++describe('getShellConfiguration on Windows', () => {
++  const originalEnv = process.env;
++
++  beforeEach(() => {
++    process.env = { ...originalEnv };
++    mockAccessSync.mockReset();
++    mockPlatform.mockReturnValue('win32');
++  });
++
++  afterEach(() => {
++    process.env = originalEnv;
++  });
++
++  it('should use ComSpec if it specifies interactive shell', () => {
++    process.env['ComSpec'] = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
++    const config = getShellConfiguration();
++    expect(config.executable).toBe(process.env['ComSpec']);
++    expect(config.shell).toBe('powershell');
++  });
++
++  it('should use resolved pwsh.exe path if ComSpec is cmd.exe and pwsh.exe exists in PATH', () => {
++    process.env['ComSpec'] = 'C:\\Windows\\System32\\cmd.exe';
++    process.env['PATH'] = 'C:\\Program Files\\PowerShell\\7';
++    mockAccessSync.mockImplementation((p: string) => {
++      if (p.includes('pwsh.exe')) return undefined;
++      throw new Error('ENOENT');
++    });
++
++    const config = getShellConfiguration();
++    expect(config.executable).toContain('pwsh.exe');
++    expect(config.shell).toBe('powershell');
++  });
+ 
+-    expect(await resolveExecutable('unknown')).toBeUndefined();
++  it('should default to powershell.exe if ComSpec is cmd.exe and pwsh.exe is not resolved', () => {
++    process.env['ComSpec'] = 'C:\\Windows\\System32\\cmd.exe';
++    process.env['PATH'] = 'C:\\Windows\\System32';
++    mockAccessSync.mockImplementation(() => {
++      throw new Error('ENOENT');
++    });
++
++    const config = getShellConfiguration();
++    expect(config.executable).toBe('powershell.exe');
++    expect(config.shell).toBe('powershell');
+   });
+ });
+diff --git a/packages/core/src/utils/shell-utils.ts b/packages/core/src/utils/shell-utils.ts
+index e1e5127e5..2f63cddae 100644
+--- a/packages/core/src/utils/shell-utils.ts
++++ b/packages/core/src/utils/shell-utils.ts
+@@ -76,16 +76,20 @@ export interface ShellConfiguration {
+   shell: ShellType;
+ }
+ 
+-export async function resolveExecutable(
++function isExecutable(filePath: string): boolean {
++  try {
++    fs.accessSync(filePath, fs.constants.X_OK);
++    return true;
++  } catch {
++    return false;
++  }
++}
++
++export function resolveExecutable(
+   exe: string,
+-): Promise<string | undefined> {
++): string | undefined {
+   if (path.isAbsolute(exe)) {
+-    try {
+-      await fs.promises.access(exe, fs.constants.X_OK);
+-      return exe;
+-    } catch {
+-      return undefined;
+-    }
++    return isExecutable(exe) ? exe : undefined;
+   }
+   const paths = (process.env['PATH'] || '').split(path.delimiter);
+   const extensions =
+@@ -94,11 +98,8 @@ export async function resolveExecutable(
+   for (const p of paths) {
+     for (const ext of extensions) {
+       const fullPath = path.join(p, exe + ext);
+-      try {
+-        await fs.promises.access(fullPath, fs.constants.X_OK);
++      if (isExecutable(fullPath)) {
+         return fullPath;
+-      } catch {
+-        continue;
+       }
+     }
+   }
+@@ -663,6 +664,15 @@ export function getShellConfiguration(): ShellConfiguration {
+       }
+     }
+ 
++    const pwshPath = resolveExecutable('pwsh.exe');
++    if (pwshPath) {
++      return {
++        executable: pwshPath,
++        argsPrefix: ['-NoProfile', '-Command'],
++        shell: 'powershell',
++      };
++    }
++
+     // Default to PowerShell for all other Windows configurations.
+     return {
+       executable: 'powershell.exe',

@@ -1,0 +1,102 @@
+diff --git a/packages/core/src/services/fileDiscoveryService.test.ts b/packages/core/src/services/fileDiscoveryService.test.ts
+index c205463bc..6849bc3c4 100644
+--- a/packages/core/src/services/fileDiscoveryService.test.ts
++++ b/packages/core/src/services/fileDiscoveryService.test.ts
+@@ -10,6 +10,7 @@ import * as os from 'node:os';
+ import * as path from 'node:path';
+ import { FileDiscoveryService } from './fileDiscoveryService.js';
+ import { GEMINI_IGNORE_FILE_NAME } from '../config/constants.js';
++import { loadIgnoreRules } from '../utils/filesearch/ignore.js';
+ 
+ describe('FileDiscoveryService', () => {
+   let testRootDir: string;
+@@ -598,4 +599,42 @@ describe('FileDiscoveryService', () => {
+       );
+     });
+   });
++
++  describe('bug #19868 tests', () => {
++    it('should exclude directories from getIgnoreFilePaths (#19868)', async () => {
++      await fs.mkdir(path.join(projectRoot, 'node_modules'), { recursive: true });
++      const service = new FileDiscoveryService(projectRoot, {
++        customIgnoreFilePaths: ['node_modules'],
++      });
++      expect(service.getIgnoreFilePaths()).not.toContain(
++        path.join(projectRoot, 'node_modules'),
++      );
++    });
++
++    it('should exclude directories from getAllIgnoreFilePaths (#19868)', async () => {
++      await fs.mkdir(path.join(projectRoot, '.git'), { recursive: true });
++      await fs.mkdir(path.join(projectRoot, 'node_modules'), { recursive: true });
++      await createTestFile('.gitignore', 'dummy');
++      const service = new FileDiscoveryService(projectRoot, {
++        customIgnoreFilePaths: ['node_modules'],
++      });
++      const paths = service.getAllIgnoreFilePaths();
++      expect(paths).not.toContain(path.join(projectRoot, 'node_modules'));
++      expect(paths).toContain(path.join(projectRoot, '.gitignore'));
++    });
++
++    it('should not crash when customIgnoreFilePaths contains directory names (#19868)', async () => {
++      await fs.mkdir(path.join(projectRoot, 'node_modules'), { recursive: true });
++      await fs.mkdir(path.join(projectRoot, 'temp'), { recursive: true });
++      await fs.mkdir(path.join(projectRoot, 'cache'), { recursive: true });
++
++      expect(() => {
++        const service = new FileDiscoveryService(projectRoot, {
++          customIgnoreFilePaths: ['node_modules', 'temp', 'cache'],
++        });
++        loadIgnoreRules(service);
++      }).not.toThrow();
++    });
++  });
+ });
++
+diff --git a/packages/core/src/services/fileDiscoveryService.ts b/packages/core/src/services/fileDiscoveryService.ts
+index 28b55894b..d58f31a74 100644
+--- a/packages/core/src/services/fileDiscoveryService.ts
++++ b/packages/core/src/services/fileDiscoveryService.ts
+@@ -274,7 +274,8 @@ export class FileDiscoveryService {
+       this.defaultFilterFileOptions.respectGitIgnore
+     ) {
+       const gitIgnorePath = path.join(this.projectRoot, '.gitignore');
+-      if (fs.existsSync(gitIgnorePath)) {
++      const stat = fs.statSync(gitIgnorePath, { throwIfNoEntry: false });
++      if (stat?.isFile()) {
+         paths.push(gitIgnorePath);
+       }
+     }
+diff --git a/packages/core/src/utils/filesearch/ignore.ts b/packages/core/src/utils/filesearch/ignore.ts
+index b8b2635c1..fc7ad2073 100644
+--- a/packages/core/src/utils/filesearch/ignore.ts
++++ b/packages/core/src/utils/filesearch/ignore.ts
+@@ -20,7 +20,11 @@ export function loadIgnoreRules(
+ 
+   for (const filePath of ignoreFiles) {
+     if (fs.existsSync(filePath)) {
+-      ignorer.add(fs.readFileSync(filePath, 'utf8'));
++      try {
++        ignorer.add(fs.readFileSync(filePath, 'utf8'));
++      } catch {
++        // Skip files that cannot be read, e.g. directories or permission issues.
++      }
+     }
+   }
+ 
+diff --git a/packages/core/src/utils/ignoreFileParser.ts b/packages/core/src/utils/ignoreFileParser.ts
+index 991826e3f..ee7284bfa 100644
+--- a/packages/core/src/utils/ignoreFileParser.ts
++++ b/packages/core/src/utils/ignoreFileParser.ts
+@@ -105,7 +105,10 @@ export class IgnoreFileParser implements IgnoreFileFilter {
+       .slice()
+       .reverse()
+       .map((fileName) => path.join(this.projectRoot, fileName))
+-      .filter((filePath) => fs.existsSync(filePath));
++      .filter(
++        (filePath) =>
++          fs.statSync(filePath, { throwIfNoEntry: false })?.isFile() ?? false,
++      );
+   }
+ 
+   /**

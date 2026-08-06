@@ -1,0 +1,86 @@
+diff --git a/packages/core/src/config/config.test.ts b/packages/core/src/config/config.test.ts
+index efff35eda..267f35b2c 100644
+--- a/packages/core/src/config/config.test.ts
++++ b/packages/core/src/config/config.test.ts
+@@ -4066,7 +4066,7 @@ describe('Plans Directory Initialization', () => {
+ 
+     const plansDir = config.storage.getPlansDir();
+     // Should NOT create the directory eagerly
+-    expect(fs.promises.mkdir).not.toHaveBeenCalled();
++    expect(fs.promises.mkdir).not.toHaveBeenCalledWith(plansDir, expect.any(Object));
+     // Should check if it exists
+     expect(fs.promises.access).toHaveBeenCalledWith(plansDir);
+ 
+@@ -4084,7 +4084,7 @@ describe('Plans Directory Initialization', () => {
+     await config.initialize();
+ 
+     const plansDir = config.storage.getPlansDir();
+-    expect(fs.promises.mkdir).not.toHaveBeenCalled();
++    expect(fs.promises.mkdir).not.toHaveBeenCalledWith(plansDir, expect.any(Object));
+     expect(fs.promises.access).toHaveBeenCalledWith(plansDir);
+ 
+     const context = config.getWorkspaceContext();
+@@ -4104,6 +4104,38 @@ describe('Plans Directory Initialization', () => {
+       recursive: true,
+     });
+   });
++
++  it('should gracefully fallback to default plans directory if retrieving custom directory throw an error', async () => {
++    const emitFeedbackSpy = vi.spyOn(coreEvents, 'emitFeedback');
++    vi.spyOn(fs.promises, 'access').mockResolvedValue(undefined);
++
++    const config = new Config({
++      ...baseParams,
++      plan: true,
++      planSettings: {
++        enabled: true,
++        directory: '../outside-root',
++      },
++    });
++
++    // Ensure we do not throw
++    await expect(config.initialize()).resolves.not.toThrow();
++
++    // Verify plansDir falls back to project temp plans directory
++    const fallbackPlansDir = config.storage.getPlansDir();
++    expect(fallbackPlansDir).not.toContain('outside-root');
++
++    // Assert emitFeedback was called with warning type and contains 'Invalid custom plans directory'
++    expect(emitFeedbackSpy).toHaveBeenCalledWith(
++      'warning',
++      expect.stringContaining('Invalid custom plans directory'),
++      expect.any(Error),
++    );
++
++    // Assert that the workspaceContext contains the fallback plans directory
++    const context = config.getWorkspaceContext();
++    expect(context.getDirectories()).toContain(fallbackPlansDir);
++  });
+ });
+ 
+ describe('Model Persistence Bug Fix (#19864)', () => {
+diff --git a/packages/core/src/config/config.ts b/packages/core/src/config/config.ts
+index 985915e6f..ed9c4165e 100644
+--- a/packages/core/src/config/config.ts
++++ b/packages/core/src/config/config.ts
+@@ -1444,7 +1444,19 @@ export class Config implements McpContext, AgentLoopContext {
+ 
+     // Add plans directory to workspace context for plan file storage
+     if (this.planEnabled) {
+-      const plansDir = this.storage.getPlansDir();
++      let plansDir: string;
++      try {
++        plansDir = this.storage.getPlansDir();
++      } catch (error: unknown) {
++        const errorMessage = error instanceof Error ? error.message : String(error);
++        coreEvents.emitFeedback(
++          'warning',
++          `Invalid custom plans directory. Falling back to default project temp directory. Error: ${errorMessage}`,
++          error,
++        );
++        this.storage.setCustomPlansDir(undefined);
++        plansDir = this.storage.getPlansDir();
++      }
+       try {
+         await fs.promises.access(plansDir);
+         this.workspaceContext.addDirectory(plansDir);

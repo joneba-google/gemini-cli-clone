@@ -5,7 +5,7 @@
 """LLM-as-a-Judge Diff Evaluator for SSR Code Generator Evaluation Runs.
 
 Usage:
-    python3 evals/pr-generation/eval_diff_judge.py --run-name run_1 [--model gemini-3.5-flash]
+    python3 evals/pr-generation/eval_diff_judge.py --run-name run_1 [--model gemini-3.6-flash]
 """
 
 import argparse
@@ -41,7 +41,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="LLM-as-a-Judge Diff Evaluator")
     parser.add_argument("--run-name", required=True, help="Run identifier (e.g. 'run_1')")
     parser.add_argument("--input-path", "--input-dir", required=True, help="Input directory or file containing golden issue JSON specs")
-    parser.add_argument("--model", default="gemini-3.5-flash", help="LLM model for judge evaluation")
+    parser.add_argument("--model", default="gemini-3.6-flash", help="LLM model for judge evaluation")
     return parser.parse_args()
 
 
@@ -108,8 +108,26 @@ async def evaluate_single_diff(
 ) -> dict[str, Any]:
     """Evaluates a single proposed diff against ground-truth using LLM judge."""
     github_meta = doc_dict.get("github_metadata", {})
-    workable_spec = doc_dict.get("workable_spec", {})
+    VALID_QUALITIES = {"OK", "FEATURE", "NEEDS_INFO", "SPAM_EMPTY"}
+    expected_quality = doc_dict.get("expected_quality", "OK")
+    workable_spec = doc_dict.get("workable_spec")
 
+    # Handle non-OK quality status ("FEATURE", "NEEDS_INFO", "SPAM_EMPTY") or missing workable spec without calling LLM Judge
+    if expected_quality != "OK" or not workable_spec:
+        quality_label = expected_quality if expected_quality in VALID_QUALITIES else (expected_quality or "UNKNOWN")
+        msg = f"PR generation skipped: Expected triage quality status is '{quality_label}'. No PR or workable spec required."
+        return {
+            "test_id": test_id,
+            "functional_score": 3,
+            "quality_score": 3,
+            "overall_score": 6,
+            "functional_critique": msg,
+            "quality_critique": msg,
+            "verdict_description": msg,
+            "success": True,
+        }
+
+    workable_spec = workable_spec or {}
     owner = github_meta.get("owner", "google-gemini")
     repo = github_meta.get("repo", "gemini-cli")
     pr_number = github_meta.get("pr_number", 0)
@@ -268,6 +286,7 @@ async def evaluate_all_specs(
     async def _eval_one(spec_file: str) -> dict[str, Any]:
         async with semaphore:
             test_id = os.path.splitext(os.path.basename(spec_file))[0]
+            logging.info("Starting LLM evaluation for test case: %s", test_id)
             doc_dict = {}
             try:
                 with open(spec_file, "r", encoding="utf-8") as f:
@@ -357,13 +376,42 @@ async def evaluate_all_specs(
             eval_res["attempts"] = attempts
             eval_res["max_attempts"] = max_att
             eval_res["runtime_seconds"] = runtime_sec
+
+            logging.info(
+                "Completed LLM evaluation for test case: %s (Func: %s/3, Qual: %s/3, Total: %s/6)",
+                test_id,
+                eval_res.get("functional_score", 0),
+                eval_res.get("quality_score", 0),
+                eval_res.get("overall_score", 0),
+            )
             return eval_res
 
     return await asyncio.gather(*(_eval_one(sf) for sf in spec_files))
 
 
-def run_diff_judge_eval(run_name: str, input_path: str, model: str = "gemini-3.5-flash") -> list[dict[str, Any]]:
+class JudgeProgressFilter(logging.Filter):
+    """Filter that ONLY permits high-level judge evaluation progress log messages to stdout."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return (
+            "Starting LLM evaluation for test case:" in msg
+            or "Completed LLM evaluation for test case:" in msg
+        )
+
+
+def run_diff_judge_eval(run_name: str, input_path: str, model: str = "gemini-3.6-flash") -> list[dict[str, Any]]:
     """Programmatic execution engine for LLM-as-a-Judge evaluations."""
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    for h in root.handlers[:]:
+        root.removeHandler(h)
+
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    sh.addFilter(JudgeProgressFilter())
+    root.addHandler(sh)
+
     run_dir = os.path.join(RUNS_BASE_DIR, run_name)
     diffs_dir = os.path.join(run_dir, "outputs", "diffs")
 

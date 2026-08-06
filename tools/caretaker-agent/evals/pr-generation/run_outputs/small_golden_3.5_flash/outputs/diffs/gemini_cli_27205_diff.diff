@@ -1,0 +1,66 @@
+diff --git a/packages/core/src/tools/activate-skill.test.ts b/packages/core/src/tools/activate-skill.test.ts
+index b2a37479b..62fb1ab8f 100644
+--- a/packages/core/src/tools/activate-skill.test.ts
++++ b/packages/core/src/tools/activate-skill.test.ts
+@@ -9,6 +9,8 @@ import { ActivateSkillTool } from './activate-skill.js';
+ import type { Config } from '../config/config.js';
+ import type { MessageBus } from '../confirmation-bus/message-bus.js';
+ import { createMockMessageBus } from '../test-utils/mock-message-bus.js';
++import { getFolderStructure } from '../utils/getFolderStructure.js';
++import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
+ 
+ vi.mock('../utils/getFolderStructure.js', () => ({
+   getFolderStructure: vi.fn().mockResolvedValue('Mock folder structure'),
+@@ -18,8 +20,13 @@ describe('ActivateSkillTool', () => {
+   let mockConfig: Config;
+   let tool: ActivateSkillTool;
+   let mockMessageBus: MessageBus;
++  let mockFileService: FileDiscoveryService;
+ 
+   beforeEach(() => {
++    mockFileService = {
++      shouldIgnoreFile: vi.fn(),
++      shouldIgnoreDirectory: vi.fn(),
++    } as unknown as FileDiscoveryService;
+     mockMessageBus = createMockMessageBus();
+     const skills = [
+       {
+@@ -32,6 +39,7 @@ describe('ActivateSkillTool', () => {
+       getWorkspaceContext: vi.fn().mockReturnValue({
+         addDirectory: vi.fn(),
+       }),
++      getFileService: vi.fn().mockReturnValue(mockFileService),
+       getSkillManager: vi.fn().mockReturnValue({
+         getSkills: vi.fn().mockReturnValue(skills),
+         getAllSkills: vi.fn().mockReturnValue(skills),
+@@ -151,4 +159,18 @@ describe('ActivateSkillTool', () => {
+       tool.build({ name: '' } as unknown as { name: string }),
+     ).toThrow();
+   });
++
++  it('should call getFolderStructure with fileService from config', async () => {
++    vi.mocked(getFolderStructure).mockClear();
++    const params = { name: 'test-skill' };
++    const invocation = tool.build(params);
++    await invocation.execute({
++      abortSignal: new AbortController().signal,
++    });
++
++    expect(getFolderStructure).toHaveBeenCalledWith(
++      '/path/to/test-skill',
++      { fileService: mockFileService }
++    );
++  });
+ });
+diff --git a/packages/core/src/tools/activate-skill.ts b/packages/core/src/tools/activate-skill.ts
+index 17e0b84f2..3c2804dae 100644
+--- a/packages/core/src/tools/activate-skill.ts
++++ b/packages/core/src/tools/activate-skill.ts
+@@ -64,6 +64,7 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
+     if (this.cachedFolderStructure === undefined) {
+       this.cachedFolderStructure = await getFolderStructure(
+         path.dirname(skillLocation),
++        { fileService: this.config.getFileService() },
+       );
+     }
+     return this.cachedFolderStructure;

@@ -1,0 +1,126 @@
+diff --git a/packages/cli/src/ui/hooks/slashCommandProcessor.test.tsx b/packages/cli/src/ui/hooks/slashCommandProcessor.test.tsx
+index ec4aa0067..61d4093f7 100644
+--- a/packages/cli/src/ui/hooks/slashCommandProcessor.test.tsx
++++ b/packages/cli/src/ui/hooks/slashCommandProcessor.test.tsx
+@@ -3,6 +3,10 @@
+  * Copyright 2025 Google LLC
+  * SPDX-License-Identifier: Apache-2.0
+  */
++import { File } from 'node:buffer';
++if (typeof globalThis.File === 'undefined') {
++  (globalThis as { File?: unknown }).File = File;
++}
+ 
+ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+ import { act } from 'react';
+@@ -866,6 +870,56 @@ describe('useSlashCommandProcessor', () => {
+ 
+       expect(abortSpy).toHaveBeenCalledTimes(1);
+     });
++
++    it('removes the IDE status listener on unmount after async initialization', async () => {
++      const mockAddStatusChangeListener = vi.fn();
++      const mockRemoveStatusChangeListener = vi.fn();
++      mockIdeClientGetInstance.mockResolvedValue({
++        addStatusChangeListener: mockAddStatusChangeListener,
++        removeStatusChangeListener: mockRemoveStatusChangeListener,
++      });
++
++      const { unmount } = await setupProcessorHook();
++
++      // Wait for any pending promises (such as IdeClient.getInstance resolve)
++      await act(async () => {
++        await Promise.resolve();
++      });
++
++      expect(mockAddStatusChangeListener).toHaveBeenCalledTimes(1);
++
++      unmount();
++
++      expect(mockRemoveStatusChangeListener).toHaveBeenCalledTimes(1);
++    });
++
++    it('does not register an IDE status listener if unmounted before async initialization resolves', async () => {
++      const mockAddStatusChangeListener = vi.fn();
++      const mockRemoveStatusChangeListener = vi.fn();
++
++      let resolveIdeClient!: (value: unknown) => void;
++      const ideClientPromise = new Promise((resolve) => {
++        resolveIdeClient = resolve as (value: unknown) => void;
++      });
++      mockIdeClientGetInstance.mockReturnValue(ideClientPromise);
++
++      const { unmount } = await setupProcessorHook();
++
++      // Unmount immediately before the promise resolves
++      unmount();
++
++      // Now resolve the promise
++      await act(async () => {
++        resolveIdeClient({
++          addStatusChangeListener: mockAddStatusChangeListener,
++          removeStatusChangeListener: mockRemoveStatusChangeListener,
++        });
++        await ideClientPromise;
++      });
++
++      expect(mockAddStatusChangeListener).not.toHaveBeenCalled();
++      expect(mockRemoveStatusChangeListener).not.toHaveBeenCalled();
++    });
+   });
+ 
+   describe('Slash Command Logging', () => {
+diff --git a/packages/cli/src/ui/hooks/slashCommandProcessor.ts b/packages/cli/src/ui/hooks/slashCommandProcessor.ts
+index f55503ad2..a994f2dd7 100644
+--- a/packages/cli/src/ui/hooks/slashCommandProcessor.ts
++++ b/packages/cli/src/ui/hooks/slashCommandProcessor.ts
+@@ -282,9 +282,16 @@ export const useSlashCommandProcessor = (
+       reloadCommands();
+     };
+ 
++    let isActive = true;
++    let activeIdeClient: IdeClient | undefined;
++
+     // eslint-disable-next-line @typescript-eslint/no-floating-promises
+     (async () => {
+       const ideClient = await IdeClient.getInstance();
++      if (!isActive) {
++        return;
++      }
++      activeIdeClient = ideClient;
+       ideClient.addStatusChangeListener(listener);
+     })();
+ 
+@@ -307,11 +314,8 @@ export const useSlashCommandProcessor = (
+     coreEvents.on('extensionsStopping', extensionEventListener);
+ 
+     return () => {
+-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+-      (async () => {
+-        const ideClient = await IdeClient.getInstance();
+-        ideClient.removeStatusChangeListener(listener);
+-      })();
++      isActive = false;
++      activeIdeClient?.removeStatusChangeListener(listener);
+       removeMCPStatusChangeListener(listener);
+       coreEvents.off('extensionsStarting', extensionEventListener);
+       coreEvents.off('extensionsStopping', extensionEventListener);
+diff --git a/packages/cli/test-setup.ts b/packages/cli/test-setup.ts
+index 1a0947b95..d8ec04255 100644
+--- a/packages/cli/test-setup.ts
++++ b/packages/cli/test-setup.ts
+@@ -3,9 +3,14 @@
+  * Copyright 2025 Google LLC
+  * SPDX-License-Identifier: Apache-2.0
+  */
++import { File } from 'node:buffer';
++if (typeof globalThis.File === 'undefined') {
++  (globalThis as { File?: unknown }).File = File;
++}
+ 
+ import { vi, beforeEach, afterEach } from 'vitest';
+ import { format } from 'node:util';
++
+ import { coreEvents, debugLogger } from '@google/gemini-cli-core';
+ import { themeManager } from './src/ui/themes/theme-manager.js';
+ import { mockInkSpinner } from './src/test-utils/mockSpinner.js';

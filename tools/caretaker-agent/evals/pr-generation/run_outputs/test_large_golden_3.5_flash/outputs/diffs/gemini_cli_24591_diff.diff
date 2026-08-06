@@ -1,0 +1,315 @@
+diff --git a/packages/cli/index.ts b/packages/cli/index.ts
+index d857831fb..cf472e9ba 100644
+--- a/packages/cli/index.ts
++++ b/packages/cli/index.ts
+@@ -9,6 +9,7 @@
+ import { spawn } from 'node:child_process';
+ import os from 'node:os';
+ import v8 from 'node:v8';
++import { getScriptArgs, getSpawnConfig } from './src/utils/processUtils.js';
+ 
+ // --- Global Entry Point ---
+ 
+@@ -74,17 +75,9 @@ async function run() {
+     // --- Lightweight Parent Process / Daemon ---
+     // We avoid importing heavy dependencies here to save ~1.5s of startup time.
+ 
+-    const nodeArgs: string[] = [...process.execArgv];
+-    const scriptArgs = process.argv.slice(2);
+-
++    const scriptArgs = getScriptArgs();
+     const memoryArgs = await getMemoryNodeArgs();
+-    nodeArgs.push(...memoryArgs);
+-
+-    const script = process.argv[1];
+-    nodeArgs.push(script);
+-    nodeArgs.push(...scriptArgs);
+-
+-    const newEnv = { ...process.env, GEMINI_CLI_NO_RELAUNCH: 'true' };
++    const { spawnArgs, newEnv } = getSpawnConfig(memoryArgs, scriptArgs);
+     const RELAUNCH_EXIT_CODE = 199;
+     let latestAdminSettings: unknown = undefined;
+ 
+@@ -97,7 +90,7 @@ async function run() {
+     const runner = () => {
+       process.stdin.pause();
+ 
+-      const child = spawn(process.execPath, nodeArgs, {
++      const child = spawn(process.execPath, spawnArgs, {
+         stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+         env: newEnv,
+       });
+diff --git a/packages/cli/src/utils/processUtils.test.ts b/packages/cli/src/utils/processUtils.test.ts
+index 3e6b7913e..07ac60240 100644
+--- a/packages/cli/src/utils/processUtils.test.ts
++++ b/packages/cli/src/utils/processUtils.test.ts
+@@ -9,6 +9,11 @@ import {
+   RELAUNCH_EXIT_CODE,
+   relaunchApp,
+   _resetRelaunchStateForTesting,
++  isSeaEnvironment,
++  isStandardSea,
++  getScriptArgs,
++  getSpawnConfig,
++  type ProcessWithSea,
+ } from './processUtils.js';
+ import * as cleanup from './cleanup.js';
+ import * as handleAutoUpdate from './handleAutoUpdate.js';
+@@ -35,4 +40,119 @@ describe('processUtils', () => {
+     expect(runExitCleanup).toHaveBeenCalledTimes(1);
+     expect(processExit).toHaveBeenCalledWith(RELAUNCH_EXIT_CODE);
+   });
++
++  describe('SEA and standard Node mode detection and configuration', () => {
++    let originalArgv: string[];
++    let originalEnv: NodeJS.ProcessEnv;
++    let originalExecArgv: string[];
++    let originalIsSea: (() => boolean) | undefined;
++
++    beforeEach(() => {
++      originalArgv = [...process.argv];
++      originalEnv = { ...process.env };
++      originalExecArgv = [...process.execArgv];
++      originalIsSea = (process as ProcessWithSea).isSea;
++    });
++
++    afterEach(() => {
++      process.argv = originalArgv;
++      Object.keys(process.env).forEach((key) => {
++        delete process.env[key];
++      });
++      Object.assign(process.env, originalEnv);
++      Object.defineProperty(process, 'execArgv', {
++        value: originalExecArgv,
++        configurable: true,
++      });
++      if (originalIsSea === undefined) {
++        delete (process as ProcessWithSea).isSea;
++      } else {
++        (process as ProcessWithSea).isSea = originalIsSea;
++      }
++    });
++
++    it('isSeaEnvironment should return true when IS_BINARY is true or process.isSea is true', () => {
++      delete process.env['IS_BINARY'];
++      delete (process as ProcessWithSea).isSea;
++      expect(isSeaEnvironment()).toBe(false);
++
++      process.env['IS_BINARY'] = 'true';
++      expect(isSeaEnvironment()).toBe(true);
++
++      delete process.env['IS_BINARY'];
++      (process as ProcessWithSea).isSea = () => true;
++      expect(isSeaEnvironment()).toBe(true);
++    });
++
++    it('isStandardSea should return true when argv[0] !== argv[1] and isSeaEnvironment is true', () => {
++      process.env['IS_BINARY'] = 'true';
++      process.argv = ['/path/to/bin', 'arg1'];
++      expect(isStandardSea()).toBe(true);
++
++      process.argv = ['/path/to/bin', '/path/to/bin'];
++      expect(isStandardSea()).toBe(false);
++
++      delete process.env['IS_BINARY'];
++      delete (process as ProcessWithSea).isSea;
++      process.argv = ['/path/to/bin', 'arg1'];
++      expect(isStandardSea()).toBe(false);
++    });
++
++    it('getScriptArgs should return process.argv.slice(1) in standard SEA, and process.argv.slice(2) otherwise', () => {
++      // Standard SEA
++      process.env['IS_BINARY'] = 'true';
++      process.argv = ['/path/to/bin', 'arg1', 'arg2'];
++      expect(getScriptArgs()).toEqual(['arg1', 'arg2']);
++
++      // Relaunched SEA (argv[0] === argv[1])
++      process.argv = ['/path/to/bin', '/path/to/bin', 'arg1', 'arg2'];
++      expect(getScriptArgs()).toEqual(['arg1', 'arg2']);
++
++      // Non-SEA standard Node
++      delete process.env['IS_BINARY'];
++      process.argv = ['node', 'index.js', 'arg1', 'arg2'];
++      expect(getScriptArgs()).toEqual(['arg1', 'arg2']);
++    });
++
++    it('getSpawnConfig in standard Node mode should build standard argv/execArgv-based spawn parameters', () => {
++      delete process.env['IS_BINARY'];
++      delete (process as ProcessWithSea).isSea;
++      process.argv = ['node', 'index.js', 'arg1'];
++      Object.defineProperty(process, 'execArgv', {
++        value: ['--inspect'],
++        configurable: true,
++      });
++
++      const { spawnArgs, newEnv } = getSpawnConfig(['--max-old-space-size=2048'], ['arg1']);
++      expect(spawnArgs).toEqual(['--inspect', '--max-old-space-size=2048', 'index.js', 'arg1']);
++      expect(newEnv['GEMINI_CLI_NO_RELAUNCH']).toBe('true');
++    });
++
++    it('getSpawnConfig in SEA mode should append node args to NODE_OPTIONS and use process.execPath for script', () => {
++      process.env['IS_BINARY'] = 'true';
++      process.env['NODE_OPTIONS'] = '--existing-option';
++
++      const { spawnArgs, newEnv } = getSpawnConfig(['--max-old-space-size=2048'], ['arg1']);
++      expect(spawnArgs).toEqual([process.execPath, 'arg1']);
++      expect(newEnv['NODE_OPTIONS']).toBe('--existing-option --max-old-space-size=2048');
++      expect(newEnv['GEMINI_CLI_NO_RELAUNCH']).toBe('true');
++    });
++
++    it('getSpawnConfig in SEA mode should initialize NODE_OPTIONS if empty', () => {
++      process.env['IS_BINARY'] = 'true';
++      delete process.env['NODE_OPTIONS'];
++
++      const { spawnArgs, newEnv } = getSpawnConfig(['--max-old-space-size=2048'], ['arg1']);
++      expect(spawnArgs).toEqual([process.execPath, 'arg1']);
++      expect(newEnv['NODE_OPTIONS']).toBe('--max-old-space-size=2048');
++    });
++
++    it('getSpawnConfig in SEA mode should throw if node option has spaces, quotes, or backslashes', () => {
++      process.env['IS_BINARY'] = 'true';
++
++      expect(() => getSpawnConfig(['--invalid option'], [])).toThrow();
++      expect(() => getSpawnConfig(["--invalid='option'"], [])).toThrow();
++      expect(() => getSpawnConfig(['--invalid=\\option'], [])).toThrow();
++    });
++  });
+ });
+diff --git a/packages/cli/src/utils/processUtils.ts b/packages/cli/src/utils/processUtils.ts
+index c43f5c54f..5c4f70f50 100644
+--- a/packages/cli/src/utils/processUtils.ts
++++ b/packages/cli/src/utils/processUtils.ts
+@@ -29,3 +29,64 @@ export async function relaunchApp(): Promise<void> {
+   await runExitCleanup();
+   process.exit(RELAUNCH_EXIT_CODE);
+ }
++
++export interface ProcessWithSea extends NodeJS.Process {
++  isSea?: () => boolean;
++}
++
++export function isSeaEnvironment(): boolean {
++  return (
++    process.env['IS_BINARY'] === 'true' ||
++    (process as ProcessWithSea).isSea?.() === true
++  );
++}
++
++export function isStandardSea(): boolean {
++  return process.argv[0] !== process.argv[1] && isSeaEnvironment();
++}
++
++export function getScriptArgs(): string[] {
++  return isStandardSea() ? process.argv.slice(1) : process.argv.slice(2);
++}
++
++export function getSpawnConfig(
++  nodeArgs: string[],
++  scriptArgs: string[],
++): {
++  spawnArgs: string[];
++  newEnv: NodeJS.ProcessEnv;
++} {
++  const newEnv: NodeJS.ProcessEnv = { ...process.env, GEMINI_CLI_NO_RELAUNCH: 'true' };
++
++  if (isSeaEnvironment()) {
++    for (const arg of nodeArgs) {
++      if (/[\s'"\\]/.test(arg)) {
++        throw new Error(
++          `Invalid Node option passed in SEA mode: "${arg}". Options must not contain spaces, quotes, or backslashes.`,
++        );
++      }
++    }
++    const existingNodeOptions = process.env['NODE_OPTIONS'];
++    if (nodeArgs.length > 0) {
++      const nodeOptionsStr = nodeArgs.join(' ');
++      newEnv['NODE_OPTIONS'] = existingNodeOptions
++        ? `${existingNodeOptions} ${nodeOptionsStr}`
++        : nodeOptionsStr;
++    }
++    return {
++      spawnArgs: [process.execPath, ...scriptArgs],
++      newEnv,
++    };
++  } else {
++    return {
++      spawnArgs: [
++        ...process.execArgv,
++        ...nodeArgs,
++        process.argv[1],
++        ...scriptArgs,
++      ],
++      newEnv,
++    };
++  }
++}
++
+diff --git a/packages/cli/src/utils/relaunch.ts b/packages/cli/src/utils/relaunch.ts
+index 7e287e456..49b135bf4 100644
+--- a/packages/cli/src/utils/relaunch.ts
++++ b/packages/cli/src/utils/relaunch.ts
+@@ -5,7 +5,11 @@
+  */
+ 
+ import { spawn } from 'node:child_process';
+-import { RELAUNCH_EXIT_CODE } from './processUtils.js';
++import {
++  RELAUNCH_EXIT_CODE,
++  getScriptArgs,
++  getSpawnConfig,
++} from './processUtils.js';
+ import {
+   writeToStderr,
+   type AdminControlsSettings,
+@@ -43,24 +47,16 @@ export async function relaunchAppInChildProcess(
+   let latestAdminSettings = remoteAdminSettings;
+ 
+   const runner = () => {
+-    // process.argv is [node, script, ...args]
+-    // We want to construct [ ...nodeArgs, script, ...scriptArgs]
+-    const script = process.argv[1];
+-    const scriptArgs = process.argv.slice(2);
+-
+-    const nodeArgs = [
+-      ...process.execArgv,
+-      ...additionalNodeArgs,
+-      script,
+-      ...additionalScriptArgs,
+-      ...scriptArgs,
+-    ];
+-    const newEnv = { ...process.env, GEMINI_CLI_NO_RELAUNCH: 'true' };
++    const scriptArgs = [...additionalScriptArgs, ...getScriptArgs()];
++    const { spawnArgs, newEnv } = getSpawnConfig(
++      additionalNodeArgs,
++      scriptArgs,
++    );
+ 
+     // The parent process should not be reading from stdin while the child is running.
+     process.stdin.pause();
+ 
+-    const child = spawn(process.execPath, nodeArgs, {
++    const child = spawn(process.execPath, spawnArgs, {
+       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+       env: newEnv,
+     });
+diff --git a/packages/cli/test-setup.ts b/packages/cli/test-setup.ts
+index e64e553ed..957334152 100644
+--- a/packages/cli/test-setup.ts
++++ b/packages/cli/test-setup.ts
+@@ -4,6 +4,16 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
++if (typeof global.File === 'undefined') {
++  Object.defineProperty(global, 'File', {
++    value: class DummyFile {
++      name = '';
++    },
++    writable: true,
++    configurable: true,
++  });
++}
++
+ import { vi, beforeEach, afterEach } from 'vitest';
+ import { format } from 'node:util';
+ import { coreEvents, debugLogger } from '@google/gemini-cli-core';

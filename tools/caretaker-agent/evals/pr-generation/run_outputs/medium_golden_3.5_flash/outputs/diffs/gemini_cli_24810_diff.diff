@@ -1,0 +1,277 @@
+diff --git a/packages/cli/src/ui/utils/updateCheck.test.ts b/packages/cli/src/ui/utils/updateCheck.test.ts
+index 17b6c6212..07447463e 100644
+--- a/packages/cli/src/ui/utils/updateCheck.test.ts
++++ b/packages/cli/src/ui/utils/updateCheck.test.ts
+@@ -8,13 +8,32 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+ import { checkForUpdates } from './updateCheck.js';
+ import type { LoadedSettings } from '../../config/settings.js';
+ 
++const getChannelFromVersion = vi.hoisted(() => (version: string) => {
++  if (version.includes('nightly') || version === '') {
++    return 'nightly';
++  } else if (version.includes('preview')) {
++    return 'preview';
++  } else {
++    return 'stable';
++  }
++});
++
++const RELEASE_CHANNEL_STABILITY = vi.hoisted(() => ({
++  nightly: 0,
++  preview: 1,
++  stable: 2,
++}));
++
+ const getPackageJson = vi.hoisted(() => vi.fn());
+ const debugLogger = vi.hoisted(() => ({
+   warn: vi.fn(),
+ }));
++
+ vi.mock('@google/gemini-cli-core', () => ({
+   getPackageJson,
+   debugLogger,
++  getChannelFromVersion,
++  RELEASE_CHANNEL_STABILITY,
+ }));
+ 
+ const latestVersion = vi.hoisted(() => vi.fn());
+@@ -152,4 +171,51 @@ describe('checkForUpdates', () => {
+       expect(result?.update.latest).toBe('1.2.3-nightly.2');
+     });
+   });
++
++  describe('stability channel filtering', () => {
++    it('should return null when current version is stable and target is nightly', async () => {
++      getPackageJson.mockResolvedValue({
++        name: 'test-package',
++        version: '1.0.0',
++      });
++      latestVersion.mockResolvedValue('1.1.0-nightly.1');
++
++      const result = await checkForUpdates(mockSettings);
++      expect(result).toBeNull();
++    });
++
++    it('should return null when current version is stable and target is preview', async () => {
++      getPackageJson.mockResolvedValue({
++        name: 'test-package',
++        version: '1.0.0',
++      });
++      latestVersion.mockResolvedValue('1.1.0-preview.1');
++
++      const result = await checkForUpdates(mockSettings);
++      expect(result).toBeNull();
++    });
++
++    it('should return null when current version is preview and target is nightly', async () => {
++      getPackageJson.mockResolvedValue({
++        name: 'test-package',
++        version: '1.0.0-preview.1',
++      });
++      latestVersion.mockResolvedValue('1.1.0-nightly.1');
++
++      const result = await checkForUpdates(mockSettings);
++      expect(result).toBeNull();
++    });
++
++    it('should return update when current version is preview and target is stable', async () => {
++      getPackageJson.mockResolvedValue({
++        name: 'test-package',
++        version: '1.0.0-preview.1',
++      });
++      latestVersion.mockResolvedValue('1.1.0');
++
++      const result = await checkForUpdates(mockSettings);
++      expect(result).not.toBeNull();
++      expect(result?.update.latest).toBe('1.1.0');
++    });
++  });
+ });
+diff --git a/packages/cli/src/ui/utils/updateCheck.ts b/packages/cli/src/ui/utils/updateCheck.ts
+index 9f80beee0..95c302ef2 100644
+--- a/packages/cli/src/ui/utils/updateCheck.ts
++++ b/packages/cli/src/ui/utils/updateCheck.ts
+@@ -6,7 +6,7 @@
+ 
+ import latestVersion from 'latest-version';
+ import semver from 'semver';
+-import { getPackageJson, debugLogger } from '@google/gemini-cli-core';
++import { getPackageJson, debugLogger, getChannelFromVersion, RELEASE_CHANNEL_STABILITY } from '@google/gemini-cli-core';
+ import type { LoadedSettings } from '../../config/settings.js';
+ import { fileURLToPath } from 'node:url';
+ import path from 'node:path';
+@@ -65,6 +65,7 @@ export async function checkForUpdates(
+     }
+ 
+     const { name, version: currentVersion } = packageJson;
++    const currentChannel = getChannelFromVersion(currentVersion);
+     const isNightly = currentVersion.includes('nightly');
+ 
+     if (isNightly) {
+@@ -76,6 +77,11 @@ export async function checkForUpdates(
+       const bestUpdate = getBestAvailableUpdate(nightlyUpdate, latestUpdate);
+ 
+       if (bestUpdate && semver.gt(bestUpdate, currentVersion)) {
++        const targetChannel = getChannelFromVersion(bestUpdate);
++        if (RELEASE_CHANNEL_STABILITY[targetChannel] < RELEASE_CHANNEL_STABILITY[currentChannel]) {
++          return null;
++        }
++
+         const message = `A new version of Gemini CLI is available! ${currentVersion} → ${bestUpdate}`;
+         const type = semver.diff(bestUpdate, currentVersion) || undefined;
+         return {
+@@ -92,6 +98,11 @@ export async function checkForUpdates(
+       const latestUpdate = await latestVersion(name);
+ 
+       if (latestUpdate && semver.gt(latestUpdate, currentVersion)) {
++        const targetChannel = getChannelFromVersion(latestUpdate);
++        if (RELEASE_CHANNEL_STABILITY[targetChannel] < RELEASE_CHANNEL_STABILITY[currentChannel]) {
++          return null;
++        }
++
+         const message = `Gemini CLI update available! ${currentVersion} → ${latestUpdate}`;
+         const type = semver.diff(latestUpdate, currentVersion) || undefined;
+         return {
+diff --git a/packages/cli/src/utils/handleAutoUpdate.test.ts b/packages/cli/src/utils/handleAutoUpdate.test.ts
+index 198e19c5b..cdd41486b 100644
+--- a/packages/cli/src/utils/handleAutoUpdate.test.ts
++++ b/packages/cli/src/utils/handleAutoUpdate.test.ts
+@@ -28,6 +28,32 @@ import {
+ } from './handleAutoUpdate.js';
+ import { MessageType } from '../ui/types.js';
+ 
++const getChannelFromVersion = vi.hoisted(() => (version: string) => {
++  if (version.includes('nightly') || version === '') {
++    return 'nightly';
++  } else if (version.includes('preview')) {
++    return 'preview';
++  } else {
++    return 'stable';
++  }
++});
++
++const RELEASE_CHANNEL_STABILITY = vi.hoisted(() => ({
++  nightly: 0,
++  preview: 1,
++  stable: 2,
++}));
++
++vi.mock('@google/gemini-cli-core', () => ({
++  debugLogger: {
++    log: vi.fn(),
++    warn: vi.fn(),
++  },
++  isGitRepository: vi.fn(),
++  getChannelFromVersion,
++  RELEASE_CHANNEL_STABILITY,
++}));
++
+ vi.mock('./installationInfo.js', async () => {
+   const actual = await vi.importActual('./installationInfo.js');
+   return {
+@@ -334,6 +360,7 @@ describe('handleAutoUpdate', () => {
+       ...mockUpdateInfo,
+       update: {
+         ...mockUpdateInfo.update,
++        current: '1.0.0-nightly',
+         latest: '2.0.0-nightly',
+       },
+     };
+@@ -356,6 +383,27 @@ describe('handleAutoUpdate', () => {
+     );
+   });
+ 
++  it('should abort auto update if the target channel is less stable than the current channel', async () => {
++    mockUpdateInfo = {
++      ...mockUpdateInfo,
++      update: {
++        ...mockUpdateInfo.update,
++        current: '1.0.0',
++        latest: '2.0.0-nightly',
++      },
++    };
++    mockGetInstallationInfo.mockReturnValue({
++      updateCommand: 'npm i -g @google/gemini-cli@latest',
++      updateMessage: 'This is an additional message.',
++      isGlobal: false,
++      packageManager: PackageManager.NPM,
++    });
++
++    handleAutoUpdate(mockUpdateInfo, mockSettings, '/root', mockSpawn);
++
++    expect(mockSpawn).not.toHaveBeenCalled();
++  });
++
+   it('should emit "update-success" when the update process succeeds', async () => {
+     await new Promise<void>((resolve) => {
+       mockGetInstallationInfo.mockReturnValue({
+diff --git a/packages/cli/src/utils/handleAutoUpdate.ts b/packages/cli/src/utils/handleAutoUpdate.ts
+index cdd3f6ed1..e8c23eeb3 100644
+--- a/packages/cli/src/utils/handleAutoUpdate.ts
++++ b/packages/cli/src/utils/handleAutoUpdate.ts
+@@ -11,7 +11,7 @@ import { updateEventEmitter } from './updateEventEmitter.js';
+ import { MessageType, type HistoryItem } from '../ui/types.js';
+ import { spawnWrapper } from './spawnWrapper.js';
+ import type { spawn } from 'node:child_process';
+-import { debugLogger } from '@google/gemini-cli-core';
++import { debugLogger, getChannelFromVersion, RELEASE_CHANNEL_STABILITY } from '@google/gemini-cli-core';
+ 
+ let _updateInProgress = false;
+ 
+@@ -70,6 +70,13 @@ export function handleAutoUpdate(
+     return;
+   }
+ 
++  const currentChannel = getChannelFromVersion(info.update.current);
++  const targetChannel = getChannelFromVersion(info.update.latest);
++
++  if (RELEASE_CHANNEL_STABILITY[targetChannel] < RELEASE_CHANNEL_STABILITY[currentChannel]) {
++    return;
++  }
++
+   if (settings.merged.tools.sandbox || process.env['GEMINI_SANDBOX']) {
+     updateEventEmitter.emit('update-info', {
+       message: `${info.message}\nAutomatic update is not available in sandbox mode.`,
+diff --git a/packages/core/src/utils/channel.ts b/packages/core/src/utils/channel.ts
+index 09b654b76..9ea8c1c6e 100644
+--- a/packages/core/src/utils/channel.ts
++++ b/packages/core/src/utils/channel.ts
+@@ -12,6 +12,22 @@ export enum ReleaseChannel {
+   STABLE = 'stable',
+ }
+ 
++export const RELEASE_CHANNEL_STABILITY = {
++  [ReleaseChannel.NIGHTLY]: 0,
++  [ReleaseChannel.PREVIEW]: 1,
++  [ReleaseChannel.STABLE]: 2,
++};
++
++export function getChannelFromVersion(version: string): ReleaseChannel {
++  if (version.includes('nightly') || version === '') {
++    return ReleaseChannel.NIGHTLY;
++  } else if (version.includes('preview')) {
++    return ReleaseChannel.PREVIEW;
++  } else {
++    return ReleaseChannel.STABLE;
++  }
++}
++
+ const cache = new Map<string, ReleaseChannel>();
+ 
+ /**
+@@ -30,14 +46,7 @@ export async function getReleaseChannel(cwd: string): Promise<ReleaseChannel> {
+   const packageJson = await getPackageJson(cwd);
+   const version = packageJson?.version ?? '';
+ 
+-  let channel: ReleaseChannel;
+-  if (version.includes('nightly') || version === '') {
+-    channel = ReleaseChannel.NIGHTLY;
+-  } else if (version.includes('preview')) {
+-    channel = ReleaseChannel.PREVIEW;
+-  } else {
+-    channel = ReleaseChannel.STABLE;
+-  }
++  const channel = getChannelFromVersion(version);
+   cache.set(cwd, channel);
+   return channel;
+ }

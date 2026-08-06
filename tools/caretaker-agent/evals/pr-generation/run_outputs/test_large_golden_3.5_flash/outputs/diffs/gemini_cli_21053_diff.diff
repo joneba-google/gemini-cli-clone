@@ -1,0 +1,210 @@
+diff --git a/packages/core/src/tools/mcp-client.test.ts b/packages/core/src/tools/mcp-client.test.ts
+index 544908bd3..6f89c7a38 100644
+--- a/packages/core/src/tools/mcp-client.test.ts
++++ b/packages/core/src/tools/mcp-client.test.ts
+@@ -32,7 +32,7 @@ import type { DiscoveredMCPTool } from './mcp-tool.js';
+ import { WorkspaceContext } from '../utils/workspaceContext.js';
+ import {
+   connectToMcpServer,
+-  createTransport,
++  createTransport as originalCreateTransport,
+   hasNetworkTransport,
+   isEnabled,
+   McpClient,
+@@ -40,6 +40,16 @@ import {
+   discoverPrompts,
+   type McpContext,
+ } from './mcp-client.js';
++import { McpComplianceTransport } from './mcp-compliance-transport.js';
++
++// Local wrapper to keep tests written for the underlying transport happy
++const createTransport = async (
++  ...args: Parameters<typeof originalCreateTransport>
++) => {
++  const transport = await originalCreateTransport(...args);
++  return transport instanceof McpComplianceTransport ? transport.transport : transport;
++};
++
+ import type { ToolRegistry } from './tool-registry.js';
+ import type { ResourceRegistry } from '../resources/resource-registry.js';
+ import * as fs from 'node:fs';
+@@ -2842,7 +2852,7 @@ describe('connectToMcpServer with OAuth', () => {
+     let capturedTransport: TestableTransport | undefined;
+     vi.mocked(mockedClient.connect).mockImplementationOnce(
+       async (transport) => {
+-        capturedTransport = transport as unknown as TestableTransport;
++        capturedTransport = (transport instanceof McpComplianceTransport ? transport.transport : transport) as unknown as TestableTransport;
+         return Promise.resolve();
+       },
+     );
+@@ -2887,7 +2897,7 @@ describe('connectToMcpServer with OAuth', () => {
+     let capturedTransport: TestableTransport | undefined;
+     vi.mocked(mockedClient.connect).mockImplementationOnce(
+       async (transport) => {
+-        capturedTransport = transport as unknown as TestableTransport;
++        capturedTransport = (transport instanceof McpComplianceTransport ? transport.transport : transport) as unknown as TestableTransport;
+         return Promise.resolve();
+       },
+     );
+diff --git a/packages/core/src/tools/mcp-client.ts b/packages/core/src/tools/mcp-client.ts
+index 1bf73c2b2..cb924903f 100644
+--- a/packages/core/src/tools/mcp-client.ts
++++ b/packages/core/src/tools/mcp-client.ts
+@@ -49,7 +49,7 @@ import {
+ import { GoogleCredentialProvider } from '../mcp/google-auth-provider.js';
+ import { ServiceAccountImpersonationProvider } from '../mcp/sa-impersonation-provider.js';
+ import { DiscoveredMCPTool } from './mcp-tool.js';
+-import { XcodeMcpBridgeFixTransport } from './xcode-mcp-fix-transport.js';
++import { McpComplianceTransport } from './mcp-compliance-transport.js';
+ 
+ import type { CallableTool, FunctionCall, Part, Tool } from '@google/genai';
+ import { basename } from 'node:path';
+@@ -1055,7 +1055,7 @@ async function createTransportWithOAuth(
+   mcpServerConfig: MCPServerConfig,
+   accessToken: string,
+   cliConfig: McpContext,
+-): Promise<StreamableHTTPClientTransport | SSEClientTransport | null> {
++): Promise<Transport | null> {
+   try {
+     const headers: Record<string, string> = {
+       Authorization: `Bearer ${accessToken}`,
+@@ -1070,7 +1070,8 @@ async function createTransportWithOAuth(
+       ),
+     };
+ 
+-    return createUrlTransport(mcpServerName, mcpServerConfig, transportOptions);
++    const urlTransport = createUrlTransport(mcpServerName, mcpServerConfig, transportOptions);
++    return new McpComplianceTransport(urlTransport);
+   } catch (error) {
+     cliConfig.emitMcpDiagnostic(
+       'error',
+@@ -2318,7 +2319,9 @@ export async function createTransport(
+       authProvider,
+     };
+ 
+-    return createUrlTransport(mcpServerName, mcpServerConfig, transportOptions);
++    return new McpComplianceTransport(
++      createUrlTransport(mcpServerName, mcpServerConfig, transportOptions),
++    );
+   }
+ 
+   if (mcpServerConfig.command) {
+@@ -2362,24 +2365,16 @@ export async function createTransport(
+       stderr: 'pipe',
+     });
+ 
+-    // Fix for Xcode 26.3 mcpbridge non-compliant responses
+-    // It returns JSON in `content` instead of `structuredContent`
+-    if (
+-      mcpServerConfig.command === 'xcrun' &&
+-      mcpServerConfig.args?.includes('mcpbridge')
+-    ) {
+-      transport = new XcodeMcpBridgeFixTransport(transport);
+-    }
++    transport = new McpComplianceTransport(transport);
+ 
+     if (debugMode) {
+-      // The `XcodeMcpBridgeFixTransport` wrapper hides the underlying `StdioClientTransport`,
++      // The `McpComplianceTransport` wrapper hides the underlying `StdioClientTransport`,
+       // which exposes `stderr` for debug logging. We need to unwrap it to attach the listener.
+ 
+       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+       const underlyingTransport =
+-        transport instanceof XcodeMcpBridgeFixTransport
+-          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion
+-            (transport as any).transport
++        transport instanceof McpComplianceTransport
++          ? transport.transport
+           : transport;
+ 
+       if (
+diff --git a/packages/core/src/tools/xcode-mcp-fix-transport.test.ts b/packages/core/src/tools/mcp-compliance-transport.test.ts
+similarity index 82%
+rename from packages/core/src/tools/xcode-mcp-fix-transport.test.ts
+rename to packages/core/src/tools/mcp-compliance-transport.test.ts
+index 76cd21864..79c9e4354 100644
+--- a/packages/core/src/tools/xcode-mcp-fix-transport.test.ts
++++ b/packages/core/src/tools/mcp-compliance-transport.test.ts
+@@ -5,12 +5,12 @@
+  */
+ import { describe, it, expect } from 'vitest';
+ import { EventEmitter } from 'node:events';
+-import { XcodeMcpBridgeFixTransport } from './xcode-mcp-fix-transport.js';
++import { McpComplianceTransport } from './mcp-compliance-transport.js';
+ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+ import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+ 
+-// Mock Transport that simulates the mcpbridge behavior
+-class MockBadMcpBridgeTransport extends EventEmitter implements Transport {
++// Mock Transport that simulates non-compliant behavior
++class MockBadMcpTransport extends EventEmitter implements Transport {
+   onclose?: () => void;
+   onerror?: (error: Error) => void;
+   onmessage?: (message: JSONRPCMessage) => void;
+@@ -25,10 +25,10 @@ class MockBadMcpBridgeTransport extends EventEmitter implements Transport {
+   }
+ }
+ 
+-describe('Xcode MCP Bridge Fix', () => {
+-  it('intercepts and fixes the non-compliant mcpbridge response', async () => {
+-    const mockTransport = new MockBadMcpBridgeTransport();
+-    const fixTransport = new XcodeMcpBridgeFixTransport(mockTransport);
++describe('McpComplianceTransport', () => {
++  it('intercepts and fixes the non-compliant response', async () => {
++    const mockTransport = new MockBadMcpTransport();
++    const fixTransport = new McpComplianceTransport(mockTransport);
+ 
+     // We need to capture what the fixTransport emits to its listeners
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+@@ -39,7 +39,7 @@ describe('Xcode MCP Bridge Fix', () => {
+ 
+     await fixTransport.start();
+ 
+-    // SCENARIO 1: Bad response from Xcode
++    // SCENARIO 1: Bad response from MCP server
+     // It has `content` stringified JSON, but misses `structuredContent`
+     const badPayload = {
+       jsonrpc: '2.0',
+@@ -84,8 +84,8 @@ describe('Xcode MCP Bridge Fix', () => {
+   });
+ 
+   it('ignores responses that cannot be parsed as JSON', async () => {
+-    const mockTransport = new MockBadMcpBridgeTransport();
+-    const fixTransport = new XcodeMcpBridgeFixTransport(mockTransport);
++    const mockTransport = new MockBadMcpTransport();
++    const fixTransport = new McpComplianceTransport(mockTransport);
+ 
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     const messages: any[] = [];
+diff --git a/packages/core/src/tools/xcode-mcp-fix-transport.ts b/packages/core/src/tools/mcp-compliance-transport.ts
+similarity index 89%
+rename from packages/core/src/tools/xcode-mcp-fix-transport.ts
+rename to packages/core/src/tools/mcp-compliance-transport.ts
+index 665d54136..7874124d0 100644
+--- a/packages/core/src/tools/xcode-mcp-fix-transport.ts
++++ b/packages/core/src/tools/mcp-compliance-transport.ts
+@@ -12,19 +12,19 @@ import type {
+ import { EventEmitter } from 'node:events';
+ 
+ /**
+- * A wrapper transport that intercepts messages from Xcode's mcpbridge and fixes
++ * A wrapper transport that intercepts messages from MCP servers and fixes
+  * non-compliant responses.
+  *
+- * Issue: Xcode 26.3's mcpbridge returns tool results in `content` but misses
+- * `structuredContent` when the tool has an output schema.
++ * Issue: When MCP servers (or HTTP/SSE transports) return JSON payloads in `content`
++ * without `structuredContent`, outputSchema validation fails in the MCP SDK.
+  *
+  * Fix: Parse the text content as JSON and populate `structuredContent`.
+  */
+-export class XcodeMcpBridgeFixTransport
++export class McpComplianceTransport
+   extends EventEmitter
+   implements Transport
+ {
+-  constructor(private readonly transport: Transport) {
++  constructor(readonly transport: Transport) {
+     super();
+ 
+     // Forward messages from the underlying transport

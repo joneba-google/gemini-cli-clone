@@ -88,7 +88,7 @@ async def test_evaluate_single_diff_score_3(mock_agent_runner_cls, mock_fetch_di
     }
 
     result = await evaluate_single_diff(
-        "gemini_cli_25693", "+ proposed change", doc_dict, "{{PROPOSED_DIFF}} {{TRUE_DIFF}}", "gemini-3.5-flash"
+        "gemini_cli_25693", "+ proposed change", doc_dict, "{{PROPOSED_DIFF}} {{TRUE_DIFF}}", "gemini-3.6-flash"
     )
 
     assert result["overall_score"] == 6
@@ -96,6 +96,27 @@ async def test_evaluate_single_diff_score_3(mock_agent_runner_cls, mock_fetch_di
     assert result["quality_score"] == 3
     assert "identical in functionality" in result["verdict_description"]
     assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_evaluate_single_diff_non_ok_qualities():
+    """Tests evaluating non-OK qualities (FEATURE, NEEDS_INFO, SPAM_EMPTY) where PR generation was skipped."""
+    for quality in ["FEATURE", "NEEDS_INFO", "SPAM_EMPTY"]:
+        doc_dict = {
+            "expected_quality": quality,
+            "github_metadata": {"owner": "google-gemini", "repo": "gemini-cli", "issue_number": 12345},
+        }
+
+        result = await evaluate_single_diff(
+            "gemini_cli_12345", "", doc_dict, "{{PROPOSED_DIFF}} {{TRUE_DIFF}}", "gemini-3.6-flash"
+        )
+
+        assert result["overall_score"] == 6
+        assert result["functional_score"] == 3
+        assert result["quality_score"] == 3
+        assert "PR generation skipped" in result["verdict_description"]
+        assert quality in result["verdict_description"]
+        assert result["success"] is True
 
 
 @pytest.mark.asyncio
@@ -124,7 +145,7 @@ async def test_evaluate_single_diff_score_0(mock_agent_runner_cls, mock_fetch_di
     }
 
     result = await evaluate_single_diff(
-        "gemini_cli_25693", "+ broken code", doc_dict, "{{PROPOSED_DIFF}} {{TRUE_DIFF}}", "gemini-3.5-flash"
+        "gemini_cli_25693", "+ broken code", doc_dict, "{{PROPOSED_DIFF}} {{TRUE_DIFF}}", "gemini-3.6-flash"
     )
 
     assert result["overall_score"] == 0
@@ -218,7 +239,7 @@ async def test_eval_oversized_diff_feedback_prefix(mock_eval_single_diff, tmp_pa
         status_map,
         error_map,
         prompt_template="prompt",
-        model="gemini-3.5-flash",
+        model="gemini-3.6-flash",
     )
 
     assert len(results) == 1

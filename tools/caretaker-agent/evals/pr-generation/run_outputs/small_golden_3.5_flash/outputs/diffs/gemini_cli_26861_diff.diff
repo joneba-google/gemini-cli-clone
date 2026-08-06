@@ -1,0 +1,121 @@
+diff --git a/packages/cli/src/ui/components/SessionSummaryDisplay.test.tsx b/packages/cli/src/ui/components/SessionSummaryDisplay.test.tsx
+index 9de9e1385..e83e4d700 100644
+--- a/packages/cli/src/ui/components/SessionSummaryDisplay.test.tsx
++++ b/packages/cli/src/ui/components/SessionSummaryDisplay.test.tsx
+@@ -186,8 +186,8 @@ describe('<SessionSummaryDisplay />', () => {
+       );
+       const output = lastFrame();
+ 
+-      // PowerShell doesn't wrap UUID in quotes by default, but we wrap it in double quotes on Windows.
+-      expect(output).toContain('gemini --resume "1234-abcd-5678-efgh"');
++      // PowerShell doesn't wrap UUID in quotes by default, and we no longer add redundant double quotes on Windows.
++      expect(output).toContain('gemini --resume 1234-abcd-5678-efgh');
+       unmount();
+     });
+ 
+diff --git a/packages/cli/src/ui/components/SessionSummaryDisplay.tsx b/packages/cli/src/ui/components/SessionSummaryDisplay.tsx
+index 55ef50c74..88d6b4f32 100644
+--- a/packages/cli/src/ui/components/SessionSummaryDisplay.tsx
++++ b/packages/cli/src/ui/components/SessionSummaryDisplay.tsx
+@@ -11,7 +11,6 @@ import { useConfig } from '../contexts/ConfigContext.js';
+ import {
+   escapeShellArg,
+   getShellConfiguration,
+-  isWindows,
+ } from '@google/gemini-cli-core';
+ 
+ interface SessionSummaryDisplayProps {
+@@ -28,12 +27,7 @@ export const SessionSummaryDisplay: React.FC<SessionSummaryDisplayProps> = ({
+   const worktreeSettings = config.getWorktreeSettings();
+ 
+   const escapedSessionId = escapeShellArg(stats.sessionId, shell);
+-  const footerSessionId =
+-    isWindows() &&
+-    !escapedSessionId.startsWith('"') &&
+-    !escapedSessionId.startsWith("'")
+-      ? `"${escapedSessionId}"`
+-      : escapedSessionId;
++  const footerSessionId = escapedSessionId;
+   let footer = `To resume this session: gemini --resume ${footerSessionId}`;
+ 
+   if (worktreeSettings) {
+diff --git a/packages/cli/src/utils/sessionUtils.test.ts b/packages/cli/src/utils/sessionUtils.test.ts
+index cfdadf795..41f95f437 100644
+--- a/packages/cli/src/utils/sessionUtils.test.ts
++++ b/packages/cli/src/utils/sessionUtils.test.ts
+@@ -317,6 +317,54 @@ describe('SessionSelector', () => {
+     expect(result.sessionData.messages[0].content).toBe('Test message');
+   });
+ 
++  it('should resolve session by UUID enclosed in single or double quotes', async () => {
++    const sessionId = randomUUID();
++
++    // Create test session files
++    const chatsDir = path.join(tmpDir, 'chats');
++    await fs.mkdir(chatsDir, { recursive: true });
++
++    const session = {
++      sessionId,
++      projectHash: 'test-hash',
++      startTime: '2024-01-01T10:00:00.000Z',
++      lastUpdated: '2024-01-01T10:30:00.000Z',
++      messages: [
++        {
++          type: 'user',
++          content: 'Test message',
++          id: 'msg1',
++          timestamp: '2024-01-01T10:00:00.000Z',
++        },
++      ],
++    };
++
++    await fs.writeFile(
++      path.join(
++        chatsDir,
++        `${SESSION_FILE_PREFIX}2024-01-01T10-00-${sessionId.slice(0, 8)}.json`,
++      ),
++      JSON.stringify(session, null, 2),
++    );
++
++    const sessionSelector = new SessionSelector(storage);
++
++    // Test resolving with double quotes
++    const resultDouble = await sessionSelector.resolveSession(`"${sessionId}"`);
++    expect(resultDouble.sessionData.sessionId).toBe(sessionId);
++    expect(resultDouble.sessionData.messages[0].content).toBe('Test message');
++
++    // Test resolving with single quotes
++    const resultSingle = await sessionSelector.resolveSession(`'${sessionId}'`);
++    expect(resultSingle.sessionData.sessionId).toBe(sessionId);
++    expect(resultSingle.sessionData.messages[0].content).toBe('Test message');
++
++    // Test resolving with nested / whitespaced quotes
++    const resultNested = await sessionSelector.resolveSession(`  "${sessionId}"  `);
++    expect(resultNested.sessionData.sessionId).toBe(sessionId);
++    expect(resultNested.sessionData.messages[0].content).toBe('Test message');
++  });
++
+   it('should deduplicate sessions by ID', async () => {
+     const sessionId = randomUUID();
+ 
+diff --git a/packages/cli/src/utils/sessionUtils.ts b/packages/cli/src/utils/sessionUtils.ts
+index a2918eae3..7c88bee8f 100644
+--- a/packages/cli/src/utils/sessionUtils.ts
++++ b/packages/cli/src/utils/sessionUtils.ts
+@@ -506,7 +506,15 @@ export class SessionSelector {
+    */
+   async resolveSession(resumeArg: string): Promise<SessionSelectionResult> {
+     let selectedSession: SessionInfo;
+-    const trimmedResumeArg = resumeArg.trim();
++    let trimmedResumeArg = resumeArg.trim();
++
++    // Strip matching enclosing single or double quotes if present
++    if (
++      (trimmedResumeArg.startsWith('"') && trimmedResumeArg.endsWith('"')) ||
++      (trimmedResumeArg.startsWith("'") && trimmedResumeArg.endsWith("'"))
++    ) {
++      trimmedResumeArg = trimmedResumeArg.slice(1, -1).trim();
++    }
+ 
+     if (trimmedResumeArg === RESUME_LATEST) {
+       const sessions = await this.listSessions();

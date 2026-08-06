@@ -1,0 +1,517 @@
+diff --git a/packages/core/src/tools/mcp-client.ts b/packages/core/src/tools/mcp-client.ts
+index 1bf73c2b2..7b7869d21 100644
+--- a/packages/core/src/tools/mcp-client.ts
++++ b/packages/core/src/tools/mcp-client.ts
+@@ -49,7 +49,7 @@ import {
+ import { GoogleCredentialProvider } from '../mcp/google-auth-provider.js';
+ import { ServiceAccountImpersonationProvider } from '../mcp/sa-impersonation-provider.js';
+ import { DiscoveredMCPTool } from './mcp-tool.js';
+-import { XcodeMcpBridgeFixTransport } from './xcode-mcp-fix-transport.js';
++import { McpComplianceTransport } from './mcp-compliance-transport.js';
+ 
+ import type { CallableTool, FunctionCall, Part, Tool } from '@google/genai';
+ import { basename } from 'node:path';
+@@ -1055,7 +1055,7 @@ async function createTransportWithOAuth(
+   mcpServerConfig: MCPServerConfig,
+   accessToken: string,
+   cliConfig: McpContext,
+-): Promise<StreamableHTTPClientTransport | SSEClientTransport | null> {
++): Promise<Transport | null> {
+   try {
+     const headers: Record<string, string> = {
+       Authorization: `Bearer ${accessToken}`,
+@@ -1070,7 +1070,8 @@ async function createTransportWithOAuth(
+       ),
+     };
+ 
+-    return createUrlTransport(mcpServerName, mcpServerConfig, transportOptions);
++    const transport = createUrlTransport(mcpServerName, mcpServerConfig, transportOptions);
++    return new McpComplianceTransport(transport);
+   } catch (error) {
+     cliConfig.emitMcpDiagnostic(
+       'error',
+@@ -2318,7 +2319,8 @@ export async function createTransport(
+       authProvider,
+     };
+ 
+-    return createUrlTransport(mcpServerName, mcpServerConfig, transportOptions);
++    const urlTransport = createUrlTransport(mcpServerName, mcpServerConfig, transportOptions);
++    return new McpComplianceTransport(urlTransport);
+   }
+ 
+   if (mcpServerConfig.command) {
+@@ -2354,7 +2356,7 @@ export async function createTransport(
+       }
+     }
+ 
+-    let transport: Transport = new StdioClientTransport({
++    const stdioTransport = new StdioClientTransport({
+       command: mcpServerConfig.command,
+       args: mcpServerConfig.args || [],
+       env: finalEnv,
+@@ -2362,24 +2364,15 @@ export async function createTransport(
+       stderr: 'pipe',
+     });
+ 
+-    // Fix for Xcode 26.3 mcpbridge non-compliant responses
+-    // It returns JSON in `content` instead of `structuredContent`
+-    if (
+-      mcpServerConfig.command === 'xcrun' &&
+-      mcpServerConfig.args?.includes('mcpbridge')
+-    ) {
+-      transport = new XcodeMcpBridgeFixTransport(transport);
+-    }
++    const transport = new McpComplianceTransport(stdioTransport);
+ 
+     if (debugMode) {
+-      // The `XcodeMcpBridgeFixTransport` wrapper hides the underlying `StdioClientTransport`,
++      // The `McpComplianceTransport` wrapper hides the underlying `StdioClientTransport`,
+       // which exposes `stderr` for debug logging. We need to unwrap it to attach the listener.
+ 
+-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+       const underlyingTransport =
+-        transport instanceof XcodeMcpBridgeFixTransport
+-          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion
+-            (transport as any).transport
++        transport instanceof McpComplianceTransport
++          ? transport.transport
+           : transport;
+ 
+       if (
+diff --git a/packages/core/src/tools/xcode-mcp-fix-transport.test.ts b/packages/core/src/tools/mcp-compliance-transport.test.ts
+similarity index 52%
+rename from packages/core/src/tools/xcode-mcp-fix-transport.test.ts
+rename to packages/core/src/tools/mcp-compliance-transport.test.ts
+index 76cd21864..34ff97764 100644
+--- a/packages/core/src/tools/xcode-mcp-fix-transport.test.ts
++++ b/packages/core/src/tools/mcp-compliance-transport.test.ts
+@@ -5,12 +5,12 @@
+  */
+ import { describe, it, expect } from 'vitest';
+ import { EventEmitter } from 'node:events';
+-import { XcodeMcpBridgeFixTransport } from './xcode-mcp-fix-transport.js';
++import { McpComplianceTransport } from './mcp-compliance-transport.js';
+ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+ import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+ 
+-// Mock Transport that simulates the mcpbridge behavior
+-class MockBadMcpBridgeTransport extends EventEmitter implements Transport {
++// Mock Transport that simulates MCP server connection behaviors
++class MockMcpTransport extends EventEmitter implements Transport {
+   onclose?: () => void;
+   onerror?: (error: Error) => void;
+   onmessage?: (message: JSONRPCMessage) => void;
+@@ -25,10 +25,10 @@ class MockBadMcpBridgeTransport extends EventEmitter implements Transport {
+   }
+ }
+ 
+-describe('Xcode MCP Bridge Fix', () => {
+-  it('intercepts and fixes the non-compliant mcpbridge response', async () => {
+-    const mockTransport = new MockBadMcpBridgeTransport();
+-    const fixTransport = new XcodeMcpBridgeFixTransport(mockTransport);
++describe('McpComplianceTransport', () => {
++  it('intercepts and fixes non-compliant responses with JSON in content but missing structuredContent', async () => {
++    const mockTransport = new MockMcpTransport();
++    const fixTransport = new McpComplianceTransport(mockTransport);
+ 
+     // We need to capture what the fixTransport emits to its listeners
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+@@ -39,10 +39,9 @@ describe('Xcode MCP Bridge Fix', () => {
+ 
+     await fixTransport.start();
+ 
+-    // SCENARIO 1: Bad response from Xcode
+-    // It has `content` stringified JSON, but misses `structuredContent`
++    // Bad response: It has `content` stringified JSON, but misses `structuredContent`
+     const badPayload = {
+-      jsonrpc: '2.0',
++      jsonrpc: '2.0' as const,
+       id: 1,
+       result: {
+         content: [
+@@ -66,10 +65,23 @@ describe('Xcode MCP Bridge Fix', () => {
+     expect(fixedMsg.result.structuredContent.windows[0].title).toBe(
+       'HelloWorld',
+     );
++  });
++
++  it('preserves already compliant responses with structuredContent, plain text non-JSON content, empty content, and error responses', async () => {
++    const mockTransport = new MockMcpTransport();
++    const fixTransport = new McpComplianceTransport(mockTransport);
++
++    // eslint-disable-next-line @typescript-eslint/no-explicit-any
++    const messages: any[] = [];
++    fixTransport.onmessage = (msg) => {
++      messages.push(msg);
++    };
++
++    await fixTransport.start();
+ 
+-    // SCENARIO 2: Good response (should be untouched)
++    // 1. Good response with structuredContent (should be untouched)
+     const goodPayload = {
+-      jsonrpc: '2.0',
++      jsonrpc: '2.0' as const,
+       id: 2,
+       result: {
+         content: [{ type: 'text', text: 'normal text' }],
+@@ -81,22 +93,10 @@ describe('Xcode MCP Bridge Fix', () => {
+     const goodMsg = messages.find((m) => m.id === 2);
+     expect(goodMsg).toBeDefined();
+     expect(goodMsg.result.structuredContent).toEqual({ some: 'data' });
+-  });
+ 
+-  it('ignores responses that cannot be parsed as JSON', async () => {
+-    const mockTransport = new MockBadMcpBridgeTransport();
+-    const fixTransport = new XcodeMcpBridgeFixTransport(mockTransport);
+-
+-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-    const messages: any[] = [];
+-    fixTransport.onmessage = (msg) => {
+-      messages.push(msg);
+-    };
+-
+-    await fixTransport.start();
+-
+-    const nonJsonPayload = {
+-      jsonrpc: '2.0',
++    // 2. Response with non-JSON plain text (should NOT get structuredContent populated)
++    const legacyTextPayload = {
++      jsonrpc: '2.0' as const,
+       id: 3,
+       result: {
+         content: [
+@@ -107,14 +107,46 @@ describe('Xcode MCP Bridge Fix', () => {
+         ],
+       },
+     };
++    mockTransport.emitMessage(legacyTextPayload);
+ 
+-    mockTransport.emitMessage(nonJsonPayload);
+-
+-    const msg = messages.find((m) => m.id === 3);
+-    expect(msg).toBeDefined();
+-    expect(msg.result.structuredContent).toBeUndefined();
+-    expect(msg.result.content[0].text).toBe(
++    const msgText = messages.find((m) => m.id === 3);
++    expect(msgText).toBeDefined();
++    expect(msgText.result.structuredContent).toBeUndefined();
++    expect(msgText.result.content[0].text).toBe(
+       "Just some plain text that isn't JSON",
+     );
++
++    // 3. Response with empty content (should be untouched)
++    const emptyPayload = {
++      jsonrpc: '2.0' as const,
++      id: 4,
++      result: {
++        content: [],
++      },
++    };
++    mockTransport.emitMessage(emptyPayload);
++
++    const emptyMsg = messages.find((m) => m.id === 4);
++    expect(emptyMsg).toBeDefined();
++    expect(emptyMsg.result.structuredContent).toBeUndefined();
++
++    // 4. Error response (should be untouched)
++    const errorPayload = {
++      jsonrpc: '2.0' as const,
++      id: 5,
++      error: {
++        code: -32600,
++        message: 'Invalid tool result',
++      },
++    };
++    mockTransport.emitMessage(errorPayload);
++
++    const errorMsg = messages.find((m) => m.id === 5);
++    expect(errorMsg).toBeDefined();
++    expect(errorMsg.result).toBeUndefined();
++    expect(errorMsg.error).toEqual({
++      code: -32600,
++      message: 'Invalid tool result',
++    });
+   });
+ });
+diff --git a/packages/core/src/tools/mcp-compliance-transport.ts b/packages/core/src/tools/mcp-compliance-transport.ts
+new file mode 100644
+index 000000000..c4859e25b
+--- /dev/null
++++ b/packages/core/src/tools/mcp-compliance-transport.ts
+@@ -0,0 +1,165 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
++import type {
++  JSONRPCMessage,
++  JSONRPCResponse,
++} from '@modelcontextprotocol/sdk/types.js';
++import { EventEmitter } from 'node:events';
++
++/**
++ * A wrapper transport that intercepts messages from MCP servers and fixes
++ * non-compliant responses.
++ *
++ * Issue: Some MCP servers (such as Xcode 26.3's mcpbridge) return tool results
++ * in `content` but miss `structuredContent` when the tool has an output schema.
++ *
++ * Fix: Parse the text content as JSON and populate `structuredContent`.
++ */
++export class McpComplianceTransport
++  extends EventEmitter
++  implements Transport
++{
++  static [Symbol.hasInstance](instance: unknown): boolean {
++    return (
++      instance !== null &&
++      typeof instance === 'object' &&
++      'transport' in instance
++    );
++  }
++
++  readonly transport: Transport;
++
++  constructor(transport: Transport) {
++    super();
++    this.transport = transport;
++
++    // Forward messages from the underlying transport
++    this.transport.onmessage = (message) => {
++      this.handleMessage(message);
++    };
++
++    this.transport.onclose = () => {
++      this.onclose?.();
++    };
++
++    this.transport.onerror = (error) => {
++      this.onerror?.(error);
++    };
++
++    // Return a Proxy to delegate properties and method calls to the underlying transport
++    return new Proxy(this, {
++      getPrototypeOf(target) {
++        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
++        return Object.getPrototypeOf(target.transport);
++      },
++      ownKeys(target) {
++        return [
++          ...Object.getOwnPropertyNames(target.transport),
++          ...Object.getOwnPropertySymbols(target.transport),
++        ];
++      },
++      getOwnPropertyDescriptor(target, prop) {
++        return Object.getOwnPropertyDescriptor(target.transport, prop);
++      },
++      get(target, prop, _receiver) {
++        if (prop in target) {
++          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-unsafe-assignment
++          const value = (target as any)[prop];
++          if (typeof value === 'function') {
++            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
++            return (value as (...args: unknown[]) => unknown).bind(target);
++          }
++          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
++          return value;
++        }
++        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-unsafe-assignment
++        const value = (target.transport as any)[prop];
++        if (typeof value === 'function') {
++          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
++          return (value as (...args: unknown[]) => unknown).bind(target.transport);
++        }
++        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
++        return value;
++      },
++      set(target, prop, value, _receiver) {
++        if (prop in target) {
++          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-unsafe-assignment
++          (target as any)[prop] = value;
++          return true;
++        }
++        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-unsafe-assignment
++        (target.transport as any)[prop] = value;
++        return true;
++      },
++      has(target, prop) {
++        return prop in target || prop in target.transport;
++      },
++    });
++  }
++
++  // Transport interface implementation
++  onclose?: () => void;
++  onerror?: (error: Error) => void;
++  onmessage?: (message: JSONRPCMessage) => void;
++
++  async start(): Promise<void> {
++    await this.transport.start();
++  }
++
++  async close(): Promise<void> {
++    await this.transport.close();
++  }
++
++  async send(message: JSONRPCMessage): Promise<void> {
++    await this.transport.send(message);
++  }
++
++  private handleMessage(message: JSONRPCMessage) {
++    if (this.isJsonResponse(message)) {
++      this.fixStructuredContent(message);
++    }
++    this.onmessage?.(message);
++  }
++
++  private isJsonResponse(message: JSONRPCMessage): message is JSONRPCResponse {
++    return 'result' in message || 'error' in message;
++  }
++
++  private fixStructuredContent(response: JSONRPCResponse) {
++    if (!('result' in response)) return;
++
++    // We can cast because we verified 'result' is in response,
++    // but TS might still be picky if the type is a strict union.
++    // Let's treat it safely.
++    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-unsafe-assignment
++    const result = response.result as any;
++
++    // Check if we have content but missing structuredContent
++    if (
++      result.content &&
++      Array.isArray(result.content) &&
++      result.content.length > 0 &&
++      !result.structuredContent
++    ) {
++      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
++      const firstItem = result.content[0];
++      if (firstItem.type === 'text' && typeof firstItem.text === 'string') {
++        try {
++          // Attempt to parse the text as JSON
++          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
++          const parsed = JSON.parse(firstItem.text);
++          // If successful, populate structuredContent
++          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
++          result.structuredContent = parsed;
++        } catch {
++          // No-op: Content is likely plain text, not JSON.
++        }
++      }
++    }
++  }
++}
+diff --git a/packages/core/src/tools/xcode-mcp-fix-transport.ts b/packages/core/src/tools/xcode-mcp-fix-transport.ts
+deleted file mode 100644
+index 665d54136..000000000
+--- a/packages/core/src/tools/xcode-mcp-fix-transport.ts
++++ /dev/null
+@@ -1,104 +0,0 @@
+-/**
+- * @license
+- * Copyright 2025 Google LLC
+- * SPDX-License-Identifier: Apache-2.0
+- */
+-
+-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+-import type {
+-  JSONRPCMessage,
+-  JSONRPCResponse,
+-} from '@modelcontextprotocol/sdk/types.js';
+-import { EventEmitter } from 'node:events';
+-
+-/**
+- * A wrapper transport that intercepts messages from Xcode's mcpbridge and fixes
+- * non-compliant responses.
+- *
+- * Issue: Xcode 26.3's mcpbridge returns tool results in `content` but misses
+- * `structuredContent` when the tool has an output schema.
+- *
+- * Fix: Parse the text content as JSON and populate `structuredContent`.
+- */
+-export class XcodeMcpBridgeFixTransport
+-  extends EventEmitter
+-  implements Transport
+-{
+-  constructor(private readonly transport: Transport) {
+-    super();
+-
+-    // Forward messages from the underlying transport
+-    this.transport.onmessage = (message) => {
+-      this.handleMessage(message);
+-    };
+-
+-    this.transport.onclose = () => {
+-      this.onclose?.();
+-    };
+-
+-    this.transport.onerror = (error) => {
+-      this.onerror?.(error);
+-    };
+-  }
+-
+-  // Transport interface implementation
+-  onclose?: () => void;
+-  onerror?: (error: Error) => void;
+-  onmessage?: (message: JSONRPCMessage) => void;
+-
+-  async start(): Promise<void> {
+-    await this.transport.start();
+-  }
+-
+-  async close(): Promise<void> {
+-    await this.transport.close();
+-  }
+-
+-  async send(message: JSONRPCMessage): Promise<void> {
+-    await this.transport.send(message);
+-  }
+-
+-  private handleMessage(message: JSONRPCMessage) {
+-    if (this.isJsonResponse(message)) {
+-      this.fixStructuredContent(message);
+-    }
+-    this.onmessage?.(message);
+-  }
+-
+-  private isJsonResponse(message: JSONRPCMessage): message is JSONRPCResponse {
+-    return 'result' in message || 'error' in message;
+-  }
+-
+-  private fixStructuredContent(response: JSONRPCResponse) {
+-    if (!('result' in response)) return;
+-
+-    // We can cast because we verified 'result' is in response,
+-    // but TS might still be picky if the type is a strict union.
+-    // Let's treat it safely.
+-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion, @typescript-eslint/no-unsafe-assignment
+-    const result = response.result as any;
+-
+-    // Check if we have content but missing structuredContent
+-    if (
+-      result.content &&
+-      Array.isArray(result.content) &&
+-      result.content.length > 0 &&
+-      !result.structuredContent
+-    ) {
+-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+-      const firstItem = result.content[0];
+-      if (firstItem.type === 'text' && typeof firstItem.text === 'string') {
+-        try {
+-          // Attempt to parse the text as JSON
+-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+-          const parsed = JSON.parse(firstItem.text);
+-          // If successful, populate structuredContent
+-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+-          result.structuredContent = parsed;
+-        } catch {
+-          // Ignored: Content is likely plain text, not JSON.
+-        }
+-      }
+-    }
+-  }
+-}

@@ -1,0 +1,140 @@
+diff --git a/esbuild.config.js b/esbuild.config.js
+index 983ca263c..f2ded9fc0 100644
+--- a/esbuild.config.js
++++ b/esbuild.config.js
+@@ -102,6 +102,8 @@ const cliConfig = {
+   plugins: createWasmPlugins(),
+   alias: {
+     'is-in-ci': path.resolve(__dirname, 'packages/cli/src/patches/is-in-ci.ts'),
++    'http-proxy-agent': path.resolve(__dirname, 'packages/cli/src/patches/http-proxy-agent.ts'),
++    'https-proxy-agent': path.resolve(__dirname, 'packages/cli/src/patches/https-proxy-agent.ts'),
+     ...commonAliases,
+   },
+   metafile: true,
+diff --git a/packages/cli/src/patches/http-proxy-agent.ts b/packages/cli/src/patches/http-proxy-agent.ts
+new file mode 100644
+index 000000000..87879c4c9
+--- /dev/null
++++ b/packages/cli/src/patches/http-proxy-agent.ts
+@@ -0,0 +1,8 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++// eslint-disable-next-line import/no-relative-packages
++export { HttpProxyAgent } from '../../../../node_modules/http-proxy-agent/dist/index.js';
+diff --git a/packages/cli/src/patches/https-proxy-agent.ts b/packages/cli/src/patches/https-proxy-agent.ts
+new file mode 100644
+index 000000000..675ceaf6c
+--- /dev/null
++++ b/packages/cli/src/patches/https-proxy-agent.ts
+@@ -0,0 +1,8 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++// eslint-disable-next-line import/no-relative-packages
++export { HttpsProxyAgent } from '../../../../node_modules/https-proxy-agent/dist/index.js';
+diff --git a/scripts/tests/proxy-agent-bundle.test.ts b/scripts/tests/proxy-agent-bundle.test.ts
+new file mode 100644
+index 000000000..998cd6253
+--- /dev/null
++++ b/scripts/tests/proxy-agent-bundle.test.ts
+@@ -0,0 +1,93 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import { describe, expect, it, afterAll, vi } from 'vitest';
++
++vi.unmock('fs');
++
++import { writeFileSync, rmSync, existsSync } from 'node:fs';
++import { fileURLToPath, pathToFileURL } from 'node:url';
++import { dirname, join, resolve } from 'node:path';
++import esbuild from 'esbuild';
++
++const __filename = fileURLToPath(import.meta.url);
++const __dirname = dirname(__filename);
++const rootDir = resolve(__dirname, '../..');
++
++describe('proxy-agent-bundle', () => {
++  const entryPath = join(__dirname, 'proxy-agent-test-entry.ts');
++  const outDir = join(__dirname, 'proxy-agent-test-dist');
++
++  afterAll(() => {
++    if (existsSync(entryPath)) {
++      rmSync(entryPath, { force: true });
++    }
++    if (existsSync(outDir)) {
++      rmSync(outDir, { recursive: true, force: true });
++    }
++  });
++
++  it('preserves constructable named exports for proxy-agents when bundled/split', async () => {
++    // 1. Create a test entry utilizing dynamic imports so splitting creates chunks
++    const entryCode = `
++      export async function loadHttp() {
++        return import('http-proxy-agent');
++      }
++      export async function loadHttps() {
++        return import('https-proxy-agent');
++      }
++    `;
++    writeFileSync(entryPath, entryCode, 'utf-8');
++
++    // 2. Define aliases as in cliConfig mapping
++    const alias = {
++      'http-proxy-agent': resolve(rootDir, 'packages/cli/src/patches/http-proxy-agent.ts'),
++      'https-proxy-agent': resolve(rootDir, 'packages/cli/src/patches/https-proxy-agent.ts'),
++    };
++
++    // 3. Build using esbuild with splitting and ESM
++    await esbuild.build({
++      entryPoints: [entryPath],
++      bundle: true,
++      platform: 'node',
++      format: 'esm',
++      splitting: true,
++      outdir: outDir,
++      alias,
++      logLevel: 'error',
++    });
++
++    const bundledFile = join(outDir, 'proxy-agent-test-entry.js');
++    expect(existsSync(bundledFile)).toBe(true);
++
++    // 4. Import the generated bundle output via file URL
++    const bundleUrl = `${pathToFileURL(bundledFile).toString()}?t=${Date.now()}`;
++    const bundle = await import(bundleUrl);
++
++    // Load proxy agents
++    const httpModule = await bundle.loadHttp();
++    const httpsModule = await bundle.loadHttps();
++
++    // 5. Verify constructors exist as functions
++    expect(typeof httpModule.HttpProxyAgent).toBe('function');
++    expect(typeof httpsModule.HttpsProxyAgent).toBe('function');
++
++    // 6. Verify instantiation compiles/runs and does not throw TypeError (or any exception)
++    let httpAgent: unknown;
++    let httpsAgent: unknown;
++
++    expect(() => {
++      httpAgent = new httpModule.HttpProxyAgent('http://127.0.0.1:9');
++    }).not.toThrow();
++
++    expect(() => {
++      httpsAgent = new httpsModule.HttpsProxyAgent('http://127.0.0.1:9');
++    }).not.toThrow();
++
++    expect(httpAgent).toBeDefined();
++    expect(httpsAgent).toBeDefined();
++  });
++});

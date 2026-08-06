@@ -1,0 +1,137 @@
+diff --git a/integration-tests/plan-mode-transition.responses b/integration-tests/plan-mode-transition.responses
+new file mode 100644
+index 000000000..a74578eac
+--- /dev/null
++++ b/integration-tests/plan-mode-transition.responses
+@@ -0,0 +1,2 @@
++{"method":"generateContentStream","response":[{"candidates":[{"content":{"parts":[{"text":"Based on our tasks, I have written down a plan in `test-plan-exit.md`. I will now call the `exit_plan_mode` tool to submit the plan for approval.","thought":true}],"role":"model"},"index":0}]},{"candidates":[{"content":{"parts":[{"functionCall":{"name":"exit_plan_mode","args":{"plan_filename":"test-plan-exit.md"}}}],"role":"model"},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":50,"totalTokenCount":150}}]}
++{"method":"generateContentStream","response":[{"candidates":[{"content":{"parts":[{"text":"The plan is approved. Let's get started.","thought":true}],"role":"model"},"index":0}]},{"candidates":[{"content":{"parts":[{"text":"Plan approved. Let's implement!"}],"role":"model"},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":200,"candidatesTokenCount":20,"totalTokenCount":220}}]}
+diff --git a/integration-tests/plan-mode.test.ts b/integration-tests/plan-mode.test.ts
+index 977a754f1..160f4a69f 100644
+--- a/integration-tests/plan-mode.test.ts
++++ b/integration-tests/plan-mode.test.ts
+@@ -5,6 +5,8 @@
+  */
+ 
+ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
++import * as fs from 'node:fs';
++import { join } from 'node:path';
+ import { TestRig, checkModelOutputContent } from './test-helper.js';
+ 
+ describe('Plan Mode', () => {
+@@ -227,4 +229,88 @@ describe('Plan Mode', () => {
+       `Expected write_file to succeed, but it failed with error: ${planWrite?.toolRequest.error}`,
+     ).toBe(true);
+   });
++
++  it('should switch model to flash immediately after exiting plan mode', async () => {
++    const plansDir = '.gemini/tmp/foo/plans-model-switch';
++    const testName = 'should switch model to flash immediately after exiting plan mode';
++
++    await rig.setup(testName, {
++      fakeResponsesPath: join(import.meta.dirname, 'plan-mode-transition.responses'),
++      settings: {
++        model: {
++          name: 'auto-gemini-2.5',
++        },
++        experimental: { plan: true },
++        tools: {
++          core: ['write_file', 'read_file', 'list_directory', 'exit_plan_mode'],
++        },
++        general: {
++          defaultApprovalMode: 'plan',
++          plan: {
++            directory: plansDir,
++          },
++        },
++      },
++    });
++
++    // Create a plan file first
++    const planFilename = 'test-plan-exit.md';
++    const fullPlansDir = join(rig.testDir!, plansDir);
++    fs.mkdirSync(fullPlansDir, { recursive: true });
++    fs.writeFileSync(join(fullPlansDir, planFilename), '# Executing some awesome planned task');
++
++    // Start in plan mode and trigger the plan confirmation / exit
++    const run = await rig.runInteractive({
++      approvalMode: 'plan',
++      env: {
++        GEMINI_MODEL: 'auto-gemini-2.5',
++      },
++    });
++
++    // Send the prompt to approve the plan
++    await run.type(`Approve and execute the plan ${planFilename}`);
++    await run.type('\r');
++
++    // Wait for the confirmation prompt to appear
++    await run.expectText('Ready to start implementation?', 15000);
++
++    // Approve the confirmation
++    await run.type('y');
++    await run.type('\r');
++
++    // Wait for the exit_plan_mode tool or model response
++    await run.expectText('Plan approved', 15000);
++
++    // Send Ctrl+C twice to exit gracefully and flush telemetry logs
++    await run.sendKeys('\x03');
++    await run.expectText('Press Ctrl+C again to exit', 5000);
++    await run.sendKeys('\x03');
++    await run.expectExit(15000);
++
++    // Parse the telemetry log to verify the API request models used
++    const logFilePath = join(rig.homeDir!, 'telemetry.log');
++    expect(fs.existsSync(logFilePath), 'Telemetry log file should exist').toBe(true);
++
++    const apiRequests = rig.readAllApiRequest();
++
++    // Filter proRequests and flashRequests
++    const proRequests = apiRequests.filter((req) => {
++      const model = (req.attributes as Record<string, unknown> | undefined)?.model;
++      return typeof model === 'string' && model.toLowerCase().includes('pro');
++    });
++
++    const flashRequests = apiRequests.filter((req) => {
++      const model = (req.attributes as Record<string, unknown> | undefined)?.model;
++      return typeof model === 'string' && model.toLowerCase().includes('flash');
++    });
++
++    console.log('--- INTERACTIVE RUN OUTPUT ---');
++    console.log(run.output);
++    console.log('------------------------------');
++
++    console.log('API requests models found:', apiRequests.map((req) => (req.attributes as Record<string, unknown> | undefined)?.model));
++
++    expect(proRequests.length, 'Expected at least one pro model request during plan mode').toBeGreaterThanOrEqual(1);
++    expect(flashRequests.length, 'Expected at least one flash model request after exiting plan mode').toBeGreaterThanOrEqual(1);
++  });
+ });
+diff --git a/packages/core/src/config/config.ts b/packages/core/src/config/config.ts
+index e727881a0..70ac02e22 100644
+--- a/packages/core/src/config/config.ts
++++ b/packages/core/src/config/config.ts
+@@ -2413,6 +2413,7 @@ export class Config implements McpContext, AgentLoopContext {
+ 
+     if (isPlanModeTransition || isYoloModeTransition) {
+       if (this._geminiClient?.isInitialized()) {
++        this._geminiClient.clearCurrentSequenceModel();
+         this._geminiClient.setTools().catch((err) => {
+           debugLogger.error('Failed to update tools', err);
+         });
+diff --git a/packages/core/src/core/client.ts b/packages/core/src/core/client.ts
+index b37d4ad91..8922c977f 100644
+--- a/packages/core/src/core/client.ts
++++ b/packages/core/src/core/client.ts
+@@ -132,6 +132,10 @@ export class GeminiClient {
+     this.updateSystemInstruction();
+   };
+ 
++  clearCurrentSequenceModel(): void {
++    this.currentSequenceModel = null;
++  }
++
+   // Hook state to deduplicate BeforeAgent calls and track response for
+   // AfterAgent
+   private hookStateMap = new Map<

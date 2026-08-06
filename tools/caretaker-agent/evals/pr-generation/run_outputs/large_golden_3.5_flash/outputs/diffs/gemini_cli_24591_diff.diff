@@ -1,0 +1,350 @@
+diff --git a/packages/cli/index.ts b/packages/cli/index.ts
+index d857831fb..3e0582f8f 100644
+--- a/packages/cli/index.ts
++++ b/packages/cli/index.ts
+@@ -9,6 +9,7 @@
+ import { spawn } from 'node:child_process';
+ import os from 'node:os';
+ import v8 from 'node:v8';
++import { getScriptArgs, getSpawnConfig } from './src/utils/processUtils.js';
+ 
+ // --- Global Entry Point ---
+ 
+@@ -74,17 +75,10 @@ async function run() {
+     // --- Lightweight Parent Process / Daemon ---
+     // We avoid importing heavy dependencies here to save ~1.5s of startup time.
+ 
+-    const nodeArgs: string[] = [...process.execArgv];
+-    const scriptArgs = process.argv.slice(2);
+-
++    const scriptArgs = getScriptArgs();
+     const memoryArgs = await getMemoryNodeArgs();
+-    nodeArgs.push(...memoryArgs);
+-
+-    const script = process.argv[1];
+-    nodeArgs.push(script);
+-    nodeArgs.push(...scriptArgs);
++    const { spawnArgs, env: newEnv } = getSpawnConfig(memoryArgs, scriptArgs);
+ 
+-    const newEnv = { ...process.env, GEMINI_CLI_NO_RELAUNCH: 'true' };
+     const RELAUNCH_EXIT_CODE = 199;
+     let latestAdminSettings: unknown = undefined;
+ 
+@@ -97,7 +91,7 @@ async function run() {
+     const runner = () => {
+       process.stdin.pause();
+ 
+-      const child = spawn(process.execPath, nodeArgs, {
++      const child = spawn(process.execPath, spawnArgs, {
+         stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+         env: newEnv,
+       });
+diff --git a/packages/cli/polyfill.js b/packages/cli/polyfill.js
+new file mode 100644
+index 000000000..66959beb5
+--- /dev/null
++++ b/packages/cli/polyfill.js
+@@ -0,0 +1,17 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++if (typeof globalThis.File === 'undefined') {
++  globalThis.File = class File extends globalThis.Blob {
++    name;
++    lastModified;
++    constructor(parts, name, options) {
++      super(parts, options);
++      this.name = name;
++      this.lastModified = options?.lastModified ?? Date.now();
++    }
++  };
++}
+diff --git a/packages/cli/src/utils/processUtils.test.ts b/packages/cli/src/utils/processUtils.test.ts
+index 3e6b7913e..844b64dd0 100644
+--- a/packages/cli/src/utils/processUtils.test.ts
++++ b/packages/cli/src/utils/processUtils.test.ts
+@@ -4,12 +4,17 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
+-import { vi } from 'vitest';
++import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+ import {
+   RELAUNCH_EXIT_CODE,
+   relaunchApp,
+   _resetRelaunchStateForTesting,
++  isSeaEnvironment,
++  isStandardSea,
++  getScriptArgs,
++  getSpawnConfig,
+ } from './processUtils.js';
++import type { ProcessWithSea } from './processUtils.js';
+ import * as cleanup from './cleanup.js';
+ import * as handleAutoUpdate from './handleAutoUpdate.js';
+ 
+@@ -23,11 +28,27 @@ describe('processUtils', () => {
+     .mockReturnValue(undefined as never);
+   const runExitCleanup = vi.spyOn(cleanup, 'runExitCleanup');
+ 
++  let originalEnv: NodeJS.ProcessEnv;
++  let originalArgv: string[];
++  let originalIsSea: (() => boolean) | undefined;
++
+   beforeEach(() => {
+     _resetRelaunchStateForTesting();
++    originalEnv = { ...process.env };
++    originalArgv = [...process.argv];
++    originalIsSea = (process as ProcessWithSea).isSea;
+   });
+ 
+-  afterEach(() => vi.clearAllMocks());
++  afterEach(() => {
++    vi.clearAllMocks();
++    process.env = originalEnv;
++    process.argv = originalArgv;
++    if (originalIsSea === undefined) {
++      delete (process as ProcessWithSea).isSea;
++    } else {
++      (process as ProcessWithSea).isSea = originalIsSea;
++    }
++  });
+ 
+   it('should wait for updates, run cleanup, and exit with the relaunch code', async () => {
+     await relaunchApp();
+@@ -35,4 +56,99 @@ describe('processUtils', () => {
+     expect(runExitCleanup).toHaveBeenCalledTimes(1);
+     expect(processExit).toHaveBeenCalledWith(RELAUNCH_EXIT_CODE);
+   });
++
++  describe('isSeaEnvironment', () => {
++    it('returns true when IS_BINARY is "true"', () => {
++      process.env.IS_BINARY = 'true';
++      expect(isSeaEnvironment()).toBe(true);
++    });
++
++    it('returns true when process.isSea() returns true', () => {
++      process.env.IS_BINARY = 'false';
++      (process as ProcessWithSea).isSea = () => true;
++      expect(isSeaEnvironment()).toBe(true);
++    });
++
++    it('returns false when neither are set', () => {
++      process.env.IS_BINARY = 'false';
++      delete (process as ProcessWithSea).isSea;
++      expect(isSeaEnvironment()).toBe(false);
++    });
++  });
++
++  describe('isStandardSea', () => {
++    it('returns true when argv[0] !== argv[1] and in SEA environment', () => {
++      process.env.IS_BINARY = 'true';
++      process.argv = ['/path/to/node', '/path/to/script', 'arg1'];
++      expect(isStandardSea()).toBe(true);
++    });
++
++    it('returns false when argv[0] === argv[1] even in SEA environment', () => {
++      process.env.IS_BINARY = 'true';
++      process.argv = ['/path/to/binary', '/path/to/binary', 'arg1'];
++      expect(isStandardSea()).toBe(false);
++    });
++
++    it('returns false when not in SEA environment', () => {
++      process.env.IS_BINARY = 'false';
++      process.argv = ['/path/to/node', '/path/to/script', 'arg1'];
++      expect(isStandardSea()).toBe(false);
++    });
++  });
++
++  describe('getScriptArgs', () => {
++    it('slices argv from index 1 for standard SEA', () => {
++      process.env.IS_BINARY = 'true';
++      process.argv = ['/path/to/node', '/path/to/script', 'arg1', 'arg2'];
++      expect(getScriptArgs()).toEqual(['/path/to/script', 'arg1', 'arg2']);
++    });
++
++    it('slices argv from index 2 for non-standard or standard Node mode', () => {
++      process.env.IS_BINARY = 'false';
++      process.argv = ['/path/to/node', '/path/to/script', 'arg1', 'arg2'];
++      expect(getScriptArgs()).toEqual(['arg1', 'arg2']);
++    });
++  });
++
++  describe('getSpawnConfig', () => {
++    it('sets correct spawnArgs and env for standard Node mode', () => {
++      process.env.IS_BINARY = 'false';
++      const nodeArgs = ['--inspect'];
++      const scriptArgs = ['arg1', 'arg2'];
++      const originalExecArgv = [...process.execArgv];
++      const originalArgv1 = process.argv[1];
++
++      const config = getSpawnConfig(nodeArgs, scriptArgs);
++      expect(config.spawnArgs).toEqual([
++        ...originalExecArgv,
++        ...nodeArgs,
++        originalArgv1,
++        ...scriptArgs,
++      ]);
++      expect(config.env.GEMINI_CLI_NO_RELAUNCH).toBe('true');
++    });
++
++    it('populates NODE_OPTIONS when IS_BINARY is set and uses process.execPath for spawnArgs', () => {
++      process.env.IS_BINARY = 'true';
++      process.env.NODE_OPTIONS = '--test-opt';
++      const nodeArgs = ['--max-old-space-size=4096'];
++      const scriptArgs = ['arg1', 'arg2'];
++
++      const config = getSpawnConfig(nodeArgs, scriptArgs);
++      expect(config.spawnArgs).toEqual([process.execPath, ...scriptArgs]);
++      expect(config.env.NODE_OPTIONS).toBe('--test-opt --max-old-space-size=4096');
++      expect(config.env.GEMINI_CLI_NO_RELAUNCH).toBe('true');
++    });
++
++    it('throws an error if complex or unescaped arguments are passed in nodeArgs in SEA mode', () => {
++      process.env.IS_BINARY = 'true';
++      const badNodeArgs = ['--option="bad value"', '--another bad'];
++
++      for (const arg of badNodeArgs) {
++        expect(() => getSpawnConfig([arg], [])).toThrow(
++          /Invalid character in Node\/SEA argument/,
++        );
++      }
++    });
++  });
+ });
+diff --git a/packages/cli/src/utils/processUtils.ts b/packages/cli/src/utils/processUtils.ts
+index c43f5c54f..d9d2a9a60 100644
+--- a/packages/cli/src/utils/processUtils.ts
++++ b/packages/cli/src/utils/processUtils.ts
+@@ -29,3 +29,67 @@ export async function relaunchApp(): Promise<void> {
+   await runExitCleanup();
+   process.exit(RELAUNCH_EXIT_CODE);
+ }
++
++export interface ProcessWithSea extends NodeJS.Process {
++  isSea?: () => boolean;
++}
++
++export function isSeaEnvironment(): boolean {
++  return (
++    process.env.IS_BINARY === 'true' ||
++    (process as ProcessWithSea).isSea?.() === true
++  );
++}
++
++export function isStandardSea(): boolean {
++  return process.argv[0] !== process.argv[1] && isSeaEnvironment();
++}
++
++export function getScriptArgs(): string[] {
++  return process.argv.slice(isStandardSea() ? 1 : 2);
++}
++
++export interface SpawnConfig {
++  spawnArgs: string[];
++  env: NodeJS.ProcessEnv;
++}
++
++export function getSpawnConfig(
++  nodeArgs: string[],
++  scriptArgs: string[],
++): SpawnConfig {
++  const newEnv = { ...process.env, GEMINI_CLI_NO_RELAUNCH: 'true' };
++  let spawnArgs: string[];
++
++  if (isSeaEnvironment()) {
++    for (const arg of nodeArgs) {
++      if (/[\s'"\\]/.test(arg)) {
++        throw new Error(
++          `Invalid character in Node/SEA argument. Node options containing spaces, quotes, or backslashes are not supported in NODE_OPTIONS during SEA relaunch. Got: "${arg}"`,
++        );
++      }
++    }
++
++    const currentOptions = process.env.NODE_OPTIONS || '';
++    const additionalOptions = nodeArgs.join(' ');
++    const combinedOptions = [currentOptions, additionalOptions]
++      .filter(Boolean)
++      .join(' ');
++
++    if (combinedOptions) {
++      newEnv.NODE_OPTIONS = combinedOptions;
++    }
++
++    spawnArgs = [process.execPath, ...scriptArgs];
++  } else {
++    spawnArgs = [
++      ...process.execArgv,
++      ...nodeArgs,
++      process.argv[1],
++      ...scriptArgs,
++    ];
++  }
++
++  return { spawnArgs, env: newEnv };
++}
++
+diff --git a/packages/cli/src/utils/relaunch.ts b/packages/cli/src/utils/relaunch.ts
+index 7e287e456..0d5a5fd37 100644
+--- a/packages/cli/src/utils/relaunch.ts
++++ b/packages/cli/src/utils/relaunch.ts
+@@ -5,7 +5,7 @@
+  */
+ 
+ import { spawn } from 'node:child_process';
+-import { RELAUNCH_EXIT_CODE } from './processUtils.js';
++import { RELAUNCH_EXIT_CODE, getScriptArgs, getSpawnConfig } from './processUtils.js';
+ import {
+   writeToStderr,
+   type AdminControlsSettings,
+@@ -45,22 +45,13 @@ export async function relaunchAppInChildProcess(
+   const runner = () => {
+     // process.argv is [node, script, ...args]
+     // We want to construct [ ...nodeArgs, script, ...scriptArgs]
+-    const script = process.argv[1];
+-    const scriptArgs = process.argv.slice(2);
+-
+-    const nodeArgs = [
+-      ...process.execArgv,
+-      ...additionalNodeArgs,
+-      script,
+-      ...additionalScriptArgs,
+-      ...scriptArgs,
+-    ];
+-    const newEnv = { ...process.env, GEMINI_CLI_NO_RELAUNCH: 'true' };
++    const scriptArgs = [...additionalScriptArgs, ...getScriptArgs()];
++    const { spawnArgs, env: newEnv } = getSpawnConfig(additionalNodeArgs, scriptArgs);
+ 
+     // The parent process should not be reading from stdin while the child is running.
+     process.stdin.pause();
+ 
+-    const child = spawn(process.execPath, nodeArgs, {
++    const child = spawn(process.execPath, spawnArgs, {
+       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+       env: newEnv,
+     });
+diff --git a/packages/cli/test-setup.ts b/packages/cli/test-setup.ts
+index e64e553ed..81c17930e 100644
+--- a/packages/cli/test-setup.ts
++++ b/packages/cli/test-setup.ts
+@@ -4,6 +4,18 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
++if (typeof globalThis.File === 'undefined') {
++  globalThis.File = class File extends Blob {
++    name: string;
++    lastModified: number;
++    constructor(parts: BlobPart[], name: string, options?: FilePropertyBag) {
++      super(parts, options);
++      this.name = name;
++      this.lastModified = options?.lastModified ?? Date.now();
++    }
++  } as unknown as typeof File;
++}
++
+ import { vi, beforeEach, afterEach } from 'vitest';
+ import { format } from 'node:util';
+ import { coreEvents, debugLogger } from '@google/gemini-cli-core';

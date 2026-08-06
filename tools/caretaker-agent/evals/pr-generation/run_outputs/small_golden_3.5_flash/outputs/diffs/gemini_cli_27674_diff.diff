@@ -1,0 +1,90 @@
+diff --git a/packages/core/src/utils/environmentContext.test.ts b/packages/core/src/utils/environmentContext.test.ts
+index 2bec3774c..af931d6da 100644
+--- a/packages/core/src/utils/environmentContext.test.ts
++++ b/packages/core/src/utils/environmentContext.test.ts
+@@ -121,6 +121,7 @@ describe('getEnvironmentContext', () => {
+     expect(context).toContain('</session_context>');
+     expect(getFolderStructure).toHaveBeenCalledWith('/test/dir', {
+       fileService: undefined,
++      showIgnoredFolders: false,
+     });
+   });
+ 
+diff --git a/packages/core/src/utils/environmentContext.ts b/packages/core/src/utils/environmentContext.ts
+index 2e1f742be..75084655d 100644
+--- a/packages/core/src/utils/environmentContext.ts
++++ b/packages/core/src/utils/environmentContext.ts
+@@ -27,6 +27,7 @@ export async function getDirectoryContextString(
+     workspaceDirectories.map((dir) =>
+       getFolderStructure(dir, {
+         fileService: config.getFileService(),
++        showIgnoredFolders: false,
+       }),
+     ),
+   );
+diff --git a/packages/core/src/utils/getFolderStructure.test.ts b/packages/core/src/utils/getFolderStructure.test.ts
+index 5a9a077e9..ded6a7144 100644
+--- a/packages/core/src/utils/getFolderStructure.test.ts
++++ b/packages/core/src/utils/getFolderStructure.test.ts
+@@ -271,6 +271,30 @@ ${testRootDir}${path.sep}
+       expect(structure).toContain('file1.txt');
+     });
+ 
++    it('should completely omit ignored folders when showIgnoredFolders is false', async () => {
++      await fsPromises.writeFile(
++        path.join(testRootDir, '.gitignore'),
++        'ignored.txt\nnode_modules/\n.gemini/*\n!/.gemini/config.yaml',
++      );
++      await createTestFile('file1.txt');
++      await createTestFile('node_modules', 'some-package', 'index.js');
++      await createTestFile('ignored.txt');
++      await createTestFile(GEMINI_DIR, 'config.yaml');
++      await createTestFile(GEMINI_DIR, 'logs.json');
++
++      const fileService = new FileDiscoveryService(testRootDir);
++      const structure = await getFolderStructure(testRootDir, {
++        fileService,
++        showIgnoredFolders: false,
++      });
++
++      expect(structure).not.toContain('ignored.txt');
++      expect(structure).not.toContain('node_modules');
++      expect(structure).not.toContain('logs.json');
++      expect(structure).toContain('config.yaml');
++      expect(structure).toContain('file1.txt');
++    });
++
+     it('should not ignore files if respectGitIgnore is false', async () => {
+       await fsPromises.writeFile(
+         path.join(testRootDir, '.gitignore'),
+diff --git a/packages/core/src/utils/getFolderStructure.ts b/packages/core/src/utils/getFolderStructure.ts
+index 5e7adc9d5..cf1ec1f40 100644
+--- a/packages/core/src/utils/getFolderStructure.ts
++++ b/packages/core/src/utils/getFolderStructure.ts
+@@ -41,6 +41,8 @@ interface FolderStructureOptions {
+   fileService?: FileDiscoveryService;
+   /** File filtering ignore options. */
+   fileFilteringOptions?: FileFilteringOptions;
++  /** Whether to output ignored folders in the structure. Defaults to true. */
++  showIgnoredFolders?: boolean;
+ }
+ // Define a type for the merged options where fileIncludePattern remains optional
+ type MergedFolderStructureOptions = Required<
+@@ -186,6 +188,9 @@ async function readFullStructure(
+           ) ?? false;
+ 
+         if (options.ignoredFolders.has(subFolderName) || isIgnored) {
++          if (!options.showIgnoredFolders) {
++            continue;
++          }
+           const ignoredSubFolder: FullFolderInfo = {
+             name: subFolderName,
+             path: subFolderPath,
+@@ -315,6 +320,7 @@ export async function getFolderStructure(
+     fileService: options?.fileService,
+     fileFilteringOptions:
+       options?.fileFilteringOptions ?? DEFAULT_FILE_FILTERING_OPTIONS,
++    showIgnoredFolders: options?.showIgnoredFolders ?? true,
+   };
+ 
+   try {

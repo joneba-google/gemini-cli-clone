@@ -1,0 +1,161 @@
+diff --git a/packages/core/src/config/defaultModelConfigs.ts b/packages/core/src/config/defaultModelConfigs.ts
+index 219003f66..a943af3f5 100644
+--- a/packages/core/src/config/defaultModelConfigs.ts
++++ b/packages/core/src/config/defaultModelConfigs.ts
+@@ -65,6 +65,24 @@ export const DEFAULT_MODEL_CONFIGS: ModelConfigServiceConfig = {
+         model: 'gemini-3-pro-preview',
+       },
+     },
++    'gemini-3.1-pro-preview': {
++      extends: 'chat-base-3',
++      modelConfig: {
++        model: 'gemini-3.1-pro-preview',
++      },
++    },
++    'gemini-3.1-pro-preview-customtools': {
++      extends: 'chat-base-3',
++      modelConfig: {
++        model: 'gemini-3.1-pro-preview-customtools',
++      },
++    },
++    'gemini-3.1-flash-lite-preview': {
++      extends: 'chat-base-3',
++      modelConfig: {
++        model: 'gemini-3.1-flash-lite-preview',
++      },
++    },
+     'gemini-3-flash-preview': {
+       extends: 'chat-base-3',
+       modelConfig: {
+diff --git a/packages/core/src/config/models.test.ts b/packages/core/src/config/models.test.ts
+index d49f3305c..46baa4317 100644
+--- a/packages/core/src/config/models.test.ts
++++ b/packages/core/src/config/models.test.ts
+@@ -672,3 +672,19 @@ describe('isActiveModel', () => {
+     ).toBe(false);
+   });
+ });
++
++describe('modelConfigService.getResolvedConfig for 3.1 models', () => {
++  it('should resolve with a defined thinkingLevel inside the thinkingConfig of generateContentConfig', () => {
++    const models = [
++      PREVIEW_GEMINI_3_1_MODEL,
++      PREVIEW_GEMINI_3_1_CUSTOM_TOOLS_MODEL,
++      PREVIEW_GEMINI_3_1_FLASH_LITE_MODEL,
++    ];
++
++    for (const model of models) {
++      const resolved = modelConfigService.getResolvedConfig({ model });
++      expect(resolved.generateContentConfig?.thinkingConfig?.thinkingLevel).toBeDefined();
++      expect(resolved.generateContentConfig?.thinkingConfig?.thinkingLevel).toBe('HIGH');
++    }
++  });
++});
+diff --git a/packages/core/src/services/test-data/resolved-aliases-retry.golden.json b/packages/core/src/services/test-data/resolved-aliases-retry.golden.json
+index bab67caed..f4c0b73d5 100644
+--- a/packages/core/src/services/test-data/resolved-aliases-retry.golden.json
++++ b/packages/core/src/services/test-data/resolved-aliases-retry.golden.json
+@@ -49,6 +49,42 @@
+       "topK": 64
+     }
+   },
++  "gemini-3.1-pro-preview": {
++    "model": "gemini-3.1-pro-preview",
++    "generateContentConfig": {
++      "temperature": 1,
++      "topP": 0.95,
++      "thinkingConfig": {
++        "includeThoughts": true,
++        "thinkingLevel": "HIGH"
++      },
++      "topK": 64
++    }
++  },
++  "gemini-3.1-pro-preview-customtools": {
++    "model": "gemini-3.1-pro-preview-customtools",
++    "generateContentConfig": {
++      "temperature": 1,
++      "topP": 0.95,
++      "thinkingConfig": {
++        "includeThoughts": true,
++        "thinkingLevel": "HIGH"
++      },
++      "topK": 64
++    }
++  },
++  "gemini-3.1-flash-lite-preview": {
++    "model": "gemini-3.1-flash-lite-preview",
++    "generateContentConfig": {
++      "temperature": 1,
++      "topP": 0.95,
++      "thinkingConfig": {
++        "includeThoughts": true,
++        "thinkingLevel": "HIGH"
++      },
++      "topK": 64
++    }
++  },
+   "gemini-3-flash-preview": {
+     "model": "gemini-3-flash-preview",
+     "generateContentConfig": {
+@@ -296,4 +332,4 @@
+     "model": "gemini-3-flash-preview",
+     "generateContentConfig": {}
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/packages/core/src/services/test-data/resolved-aliases.golden.json b/packages/core/src/services/test-data/resolved-aliases.golden.json
+index bab67caed..f4c0b73d5 100644
+--- a/packages/core/src/services/test-data/resolved-aliases.golden.json
++++ b/packages/core/src/services/test-data/resolved-aliases.golden.json
+@@ -49,6 +49,42 @@
+       "topK": 64
+     }
+   },
++  "gemini-3.1-pro-preview": {
++    "model": "gemini-3.1-pro-preview",
++    "generateContentConfig": {
++      "temperature": 1,
++      "topP": 0.95,
++      "thinkingConfig": {
++        "includeThoughts": true,
++        "thinkingLevel": "HIGH"
++      },
++      "topK": 64
++    }
++  },
++  "gemini-3.1-pro-preview-customtools": {
++    "model": "gemini-3.1-pro-preview-customtools",
++    "generateContentConfig": {
++      "temperature": 1,
++      "topP": 0.95,
++      "thinkingConfig": {
++        "includeThoughts": true,
++        "thinkingLevel": "HIGH"
++      },
++      "topK": 64
++    }
++  },
++  "gemini-3.1-flash-lite-preview": {
++    "model": "gemini-3.1-flash-lite-preview",
++    "generateContentConfig": {
++      "temperature": 1,
++      "topP": 0.95,
++      "thinkingConfig": {
++        "includeThoughts": true,
++        "thinkingLevel": "HIGH"
++      },
++      "topK": 64
++    }
++  },
+   "gemini-3-flash-preview": {
+     "model": "gemini-3-flash-preview",
+     "generateContentConfig": {
+@@ -296,4 +332,4 @@
+     "model": "gemini-3-flash-preview",
+     "generateContentConfig": {}
+   }
+-}
++}
+\ No newline at end of file

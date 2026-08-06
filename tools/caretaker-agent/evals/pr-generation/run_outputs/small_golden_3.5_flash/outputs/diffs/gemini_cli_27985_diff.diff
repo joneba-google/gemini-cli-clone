@@ -1,0 +1,178 @@
+diff --git a/packages/cli/src/acp/acpSession.test.ts b/packages/cli/src/acp/acpSession.test.ts
+index 6d21971c7..6c464eca3 100644
+--- a/packages/cli/src/acp/acpSession.test.ts
++++ b/packages/cli/src/acp/acpSession.test.ts
+@@ -1033,4 +1033,44 @@ describe('Session', () => {
+       );
+     });
+   });
++
++  it('reports token usage in the standard ACP usage field (incl. cached and thought tokens)', async () => {
++    mockSendMessageStream.mockImplementation(() => {
++      async function* customStream() {
++        yield {
++          type: GeminiEventType.Content,
++          value: 'Hello',
++        };
++        yield {
++          type: GeminiEventType.Finished,
++          value: {
++            reason: FinishReason.STOP,
++            usageMetadata: {
++              promptTokenCount: 1000,
++              candidatesTokenCount: 200,
++              cachedContentTokenCount: 800,
++              thoughtsTokenCount: 50,
++            },
++          },
++        };
++      }
++      return customStream();
++    });
++
++    const result = await session.prompt({
++      sessionId: 'session-1',
++      prompt: [{ type: 'text', text: 'Hi' }],
++    });
++
++    expect(result).toMatchObject({
++      stopReason: 'end_turn',
++      usage: {
++        inputTokens: 1000,
++        outputTokens: 200,
++        cachedReadTokens: 800,
++        thoughtTokens: 50,
++        totalTokens: 1250,
++      },
++    });
++  });
+ });
+diff --git a/packages/cli/src/acp/acpSession.ts b/packages/cli/src/acp/acpSession.ts
+index 430670d49..6471a9614 100644
+--- a/packages/cli/src/acp/acpSession.ts
++++ b/packages/cli/src/acp/acpSession.ts
+@@ -313,6 +313,19 @@ export class Session {
+     const pendingSend = new AbortController();
+     this.pendingPrompt = pendingSend;
+ 
++    let totalInputTokens = 0;
++    let totalOutputTokens = 0;
++    let totalCachedTokens = 0;
++    let totalThoughtTokens = 0;
++
++    const buildUsage = (): acp.Usage => ({
++      inputTokens: totalInputTokens,
++      outputTokens: totalOutputTokens,
++      cachedReadTokens: totalCachedTokens,
++      thoughtTokens: totalThoughtTokens,
++      totalTokens: totalInputTokens + totalOutputTokens + totalThoughtTokens,
++    });
++
+     await this.context.config.waitForMcpInit();
+ 
+     const promptId = Math.random().toString(16).slice(2);
+@@ -349,6 +362,7 @@ export class Session {
+       if (handled) {
+         return {
+           stopReason: 'end_turn',
++          usage: buildUsage(),
+           _meta: {
+             quota: {
+               token_count: { input_tokens: 0, output_tokens: 0 },
+@@ -359,8 +373,6 @@ export class Session {
+       }
+     }
+ 
+-    let totalInputTokens = 0;
+-    let totalOutputTokens = 0;
+     const modelUsageMap = new Map<string, { input: number; output: number }>();
+ 
+     let currentParts: Part[] = parts;
+@@ -372,6 +384,7 @@ export class Session {
+       if (maxTurns >= 0 && turnCount > maxTurns) {
+         return {
+           stopReason: 'max_turn_requests',
++          usage: buildUsage(),
+           _meta: {
+             quota: {
+               token_count: {
+@@ -393,7 +406,7 @@ export class Session {
+       }
+ 
+       if (pendingSend.signal.aborted) {
+-        return { stopReason: 'cancelled' };
++        return { stopReason: 'cancelled', usage: buildUsage() };
+       }
+ 
+       const toolCallRequests: ToolCallRequestInfo[] = [];
+@@ -401,6 +414,8 @@ export class Session {
+       let turnModelId = this.context.config.getModel();
+       let turnInputTokens = 0;
+       let turnOutputTokens = 0;
++      let turnCachedTokens = 0;
++      let turnThoughtTokens = 0;
+ 
+       try {
+         const responseStream = this.context.geminiClient.sendMessageStream(
+@@ -411,7 +426,7 @@ export class Session {
+ 
+         for await (const event of responseStream) {
+           if (pendingSend.signal.aborted) {
+-            return { stopReason: 'cancelled' };
++            return { stopReason: 'cancelled', usage: buildUsage() };
+           }
+ 
+           switch (event.type) {
+@@ -447,6 +462,10 @@ export class Session {
+                 turnInputTokens = usage.promptTokenCount ?? turnInputTokens;
+                 turnOutputTokens =
+                   usage.candidatesTokenCount ?? turnOutputTokens;
++                turnCachedTokens =
++                  usage.cachedContentTokenCount ?? turnCachedTokens;
++                turnThoughtTokens =
++                  usage.thoughtsTokenCount ?? turnThoughtTokens;
+               }
+               break;
+             }
+@@ -495,7 +514,7 @@ export class Session {
+           pendingSend.signal.aborted ||
+           (error instanceof Error && error.name === 'AbortError')
+         ) {
+-          return { stopReason: 'cancelled' };
++          return { stopReason: 'cancelled', usage: buildUsage() };
+         }
+ 
+         if (error instanceof acp.RequestError) {
+@@ -516,6 +535,7 @@ export class Session {
+           // Treat this as a graceful end to the model's turn rather than a crash.
+           return {
+             stopReason: 'end_turn',
++            usage: buildUsage(),
+             _meta: {
+               quota: {
+                 token_count: {
+@@ -544,6 +564,8 @@ export class Session {
+ 
+       totalInputTokens += turnInputTokens;
+       totalOutputTokens += turnOutputTokens;
++      totalCachedTokens += turnCachedTokens;
++      totalThoughtTokens += turnThoughtTokens;
+ 
+       if (turnInputTokens > 0 || turnOutputTokens > 0) {
+         const existing = modelUsageMap.get(turnModelId) ?? {
+@@ -558,6 +580,7 @@ export class Session {
+       if (stopReason !== 'end_turn') {
+         return {
+           stopReason,
++          usage: buildUsage(),
+           _meta: {
+             quota: {
+               token_count: {
+@@ -609,6 +632,7 @@ export class Session {
+ 
+     return {
+       stopReason: 'end_turn',
++      usage: buildUsage(),
+       _meta: {
+         quota: {
+           token_count: {

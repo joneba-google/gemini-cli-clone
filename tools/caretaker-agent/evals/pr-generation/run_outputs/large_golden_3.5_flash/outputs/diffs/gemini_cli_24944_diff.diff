@@ -1,0 +1,824 @@
+diff --git a/packages/cli/src/ui/components/messages/ToolGroupMessage.tsx b/packages/cli/src/ui/components/messages/ToolGroupMessage.tsx
+index 3a37f3ff5..d4ecca869 100644
+--- a/packages/cli/src/ui/components/messages/ToolGroupMessage.tsx
++++ b/packages/cli/src/ui/components/messages/ToolGroupMessage.tsx
+@@ -22,8 +22,7 @@ import { theme } from '../../semantic-colors.js';
+ import { useConfig } from '../../contexts/ConfigContext.js';
+ import { isShellTool } from './ToolShared.js';
+ import {
+-  shouldHideToolCall,
+-  CoreToolCallStatus,
++  isVisibleInToolGroup,
+   Kind,
+   EDIT_DISPLAY_NAME,
+   GLOB_DISPLAY_NAME,
+@@ -36,6 +35,7 @@ import {
+   READ_MANY_FILES_DISPLAY_NAME,
+   isFileDiff,
+ } from '@google/gemini-cli-core';
++import { buildToolVisibilityContextFromDisplay } from '../../utils/historyUtils.js';
+ import { useUIState } from '../../contexts/UIStateContext.js';
+ import { getToolGroupBorderAppearance } from '../../utils/borderStyles.js';
+ import { useSettings } from '../../contexts/SettingsContext.js';
+@@ -125,40 +125,12 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
+   // Filter out tool calls that should be hidden (e.g. in-progress Ask User, or Plan Mode operations).
+   const visibleToolCalls = useMemo(
+     () =>
+-      allToolCalls.filter((t) => {
+-        // Hide internal errors unless full verbosity
+-        if (
+-          isLowErrorVerbosity &&
+-          t.status === CoreToolCallStatus.Error &&
+-          !t.isClientInitiated
+-        ) {
+-          return false;
+-        }
+-        // Standard hiding logic (e.g. Plan Mode internal edits)
+-        if (
+-          shouldHideToolCall({
+-            displayName: t.name,
+-            status: t.status,
+-            approvalMode: t.approvalMode,
+-            hasResultDisplay: !!t.resultDisplay,
+-            parentCallId: t.parentCallId,
+-          })
+-        ) {
+-          return false;
+-        }
+-
+-        // We HIDE tools that are still in pre-execution states (Confirming, Pending)
+-        // from the History log. They live in the Global Queue or wait for their turn.
+-        // Only show tools that are actually running or finished.
+-        const displayStatus = mapCoreStatusToDisplayStatus(t.status);
+-
+-        // We hide Confirming tools from the history log because they are
+-        // currently being rendered in the interactive ToolConfirmationQueue.
+-        // We show everything else, including Pending (waiting to run) and
+-        // Canceled (rejected by user), to ensure the history is complete
+-        // and to avoid tools "vanishing" after approval.
+-        return displayStatus !== ToolCallStatus.Confirming;
+-      }),
++      allToolCalls.filter((t) =>
++        isVisibleInToolGroup(
++          buildToolVisibilityContextFromDisplay(t),
++          isLowErrorVerbosity ? 'low' : 'full',
++        ),
++      ),
+     [allToolCalls, isLowErrorVerbosity],
+   );
+ 
+diff --git a/packages/cli/src/ui/hooks/useGeminiStream.ts b/packages/cli/src/ui/hooks/useGeminiStream.ts
+index c0e3fcdd0..eee0241a5 100644
+--- a/packages/cli/src/ui/hooks/useGeminiStream.ts
++++ b/packages/cli/src/ui/hooks/useGeminiStream.ts
+@@ -39,7 +39,8 @@ import {
+   isBackgroundExecutionData,
+   Kind,
+   ACTIVATE_SKILL_TOOL_NAME,
+-  shouldHideToolCall,
++  isRenderedInHistory,
++  buildToolVisibilityContext,
+   UPDATE_TOPIC_TOOL_NAME,
+   UPDATE_TOPIC_DISPLAY_NAME,
+ } from '@google/gemini-cli-core';
+@@ -647,29 +648,8 @@ export const useGeminiStream = (
+       toolCalls.every((tc) => pushedToolCallIds.has(tc.request.callId));
+ 
+     const isToolVisible = (tc: TrackedToolCall) => {
+-      const displayName = tc.tool?.displayName ?? tc.request.name;
+-
+-      let hasResultDisplay = false;
+-      if (
+-        tc.status === CoreToolCallStatus.Success ||
+-        tc.status === CoreToolCallStatus.Error ||
+-        tc.status === CoreToolCallStatus.Cancelled
+-      ) {
+-        hasResultDisplay = !!tc.response?.resultDisplay;
+-      } else if (tc.status === CoreToolCallStatus.Executing) {
+-        hasResultDisplay = !!tc.liveOutput;
+-      }
+-
+       // AskUser tools and Plan Mode write/edit are handled by this logic
+-      if (
+-        shouldHideToolCall({
+-          displayName,
+-          status: tc.status,
+-          approvalMode: tc.approvalMode,
+-          hasResultDisplay,
+-          parentCallId: tc.request.parentCallId,
+-        })
+-      ) {
++      if (!isRenderedInHistory(buildToolVisibilityContext(tc))) {
+         return false;
+       }
+ 
+diff --git a/packages/cli/src/ui/utils/confirmingTool.ts b/packages/cli/src/ui/utils/confirmingTool.ts
+index c7edf8d79..03f5557ee 100644
+--- a/packages/cli/src/ui/utils/confirmingTool.ts
++++ b/packages/cli/src/ui/utils/confirmingTool.ts
+@@ -4,12 +4,12 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
+-import { CoreToolCallStatus } from '@google/gemini-cli-core';
++import { CoreToolCallStatus, belongsInConfirmationQueue } from '@google/gemini-cli-core';
+ import {
+   type HistoryItemWithoutId,
+   type IndividualToolCallDisplay,
+ } from '../types.js';
+-import { getAllToolCalls } from './historyUtils.js';
++import { getAllToolCalls, buildToolVisibilityContextFromDisplay } from './historyUtils.js';
+ 
+ export interface ConfirmingToolState {
+   tool: IndividualToolCallDisplay;
+@@ -23,7 +23,9 @@ export interface ConfirmingToolState {
+ export function getConfirmingToolState(
+   pendingHistoryItems: HistoryItemWithoutId[],
+ ): ConfirmingToolState | null {
+-  const allPendingTools = getAllToolCalls(pendingHistoryItems);
++  const allPendingTools = getAllToolCalls(pendingHistoryItems).filter((tool) =>
++    belongsInConfirmationQueue(buildToolVisibilityContextFromDisplay(tool)),
++  );
+ 
+   const confirmingTools = allPendingTools.filter(
+     (tool) => tool.status === CoreToolCallStatus.AwaitingApproval,
+diff --git a/packages/cli/src/ui/utils/historyUtils.ts b/packages/cli/src/ui/utils/historyUtils.ts
+index ee607dca9..24dd58c3f 100644
+--- a/packages/cli/src/ui/utils/historyUtils.ts
++++ b/packages/cli/src/ui/utils/historyUtils.ts
+@@ -11,6 +11,7 @@ import type {
+   HistoryItemToolGroup,
+   IndividualToolCallDisplay,
+ } from '../types.js';
++import { type ToolVisibilityContext } from '@google/gemini-cli-core';
+ 
+ export function getLastTurnToolCallIds(
+   history: HistoryItem[],
+@@ -81,3 +82,18 @@ export function getAllToolCalls(
+     .filter((item): item is HistoryItemToolGroup => item.type === 'tool_group')
+     .flatMap((group) => group.tools);
+ }
++
++export function buildToolVisibilityContextFromDisplay(
++  tool: IndividualToolCallDisplay,
++): ToolVisibilityContext {
++  return {
++    name: tool.originalRequestName ?? '',
++    displayName: tool.name,
++    status: tool.status,
++    approvalMode: tool.approvalMode,
++    hasResultDisplay: !!tool.resultDisplay,
++    parentCallId: tool.parentCallId,
++    isClientInitiated: tool.isClientInitiated,
++  };
++}
++
+diff --git a/packages/core/src/index.ts b/packages/core/src/index.ts
+index 04456a296..c80ba9564 100644
+--- a/packages/core/src/index.ts
++++ b/packages/core/src/index.ts
+@@ -99,6 +99,7 @@ export {
+   ApprovalMode,
+   PRIORITY_YOLO_ALLOW_ALL,
+ } from './policy/types.js';
++export * from './utils/tool-visibility.js';
+ export * from './utils/tool-utils.js';
+ export * from './utils/terminalSerializer.js';
+ export * from './utils/systemEncoding.js';
+diff --git a/packages/core/src/utils/tool-utils.test.ts b/packages/core/src/utils/tool-utils.test.ts
+index cddbec66b..d161f908f 100644
+--- a/packages/core/src/utils/tool-utils.test.ts
++++ b/packages/core/src/utils/tool-utils.test.ts
+@@ -8,109 +8,14 @@ import { expect, describe, it } from 'vitest';
+ import {
+   doesToolInvocationMatch,
+   getToolSuggestion,
+-  shouldHideToolCall,
+ } from './tool-utils.js';
+ import {
+   ReadFileTool,
+-  ApprovalMode,
+-  CoreToolCallStatus,
+-  ASK_USER_DISPLAY_NAME,
+-  WRITE_FILE_DISPLAY_NAME,
+-  EDIT_DISPLAY_NAME,
+-  READ_FILE_DISPLAY_NAME,
+   type AnyToolInvocation,
+   type Config,
+ } from '../index.js';
+ import { createMockMessageBus } from '../test-utils/mock-message-bus.js';
+ 
+-describe('shouldHideToolCall', () => {
+-  it.each([
+-    {
+-      status: CoreToolCallStatus.Scheduled,
+-      hasResult: true,
+-      shouldHide: true,
+-    },
+-    {
+-      status: CoreToolCallStatus.Executing,
+-      hasResult: true,
+-      shouldHide: true,
+-    },
+-    {
+-      status: CoreToolCallStatus.AwaitingApproval,
+-      hasResult: true,
+-      shouldHide: true,
+-    },
+-    {
+-      status: CoreToolCallStatus.Validating,
+-      hasResult: true,
+-      shouldHide: true,
+-    },
+-    {
+-      status: CoreToolCallStatus.Success,
+-      hasResult: true,
+-      shouldHide: false,
+-    },
+-    {
+-      status: CoreToolCallStatus.Error,
+-      hasResult: false,
+-      shouldHide: true,
+-    },
+-    {
+-      status: CoreToolCallStatus.Error,
+-      hasResult: true,
+-      shouldHide: false,
+-    },
+-  ])(
+-    'AskUser: status=$status, hasResult=$hasResult -> hide=$shouldHide',
+-    ({ status, hasResult, shouldHide }) => {
+-      expect(
+-        shouldHideToolCall({
+-          displayName: ASK_USER_DISPLAY_NAME,
+-          status,
+-          hasResultDisplay: hasResult,
+-        }),
+-      ).toBe(shouldHide);
+-    },
+-  );
+-
+-  it.each([
+-    {
+-      name: WRITE_FILE_DISPLAY_NAME,
+-      mode: ApprovalMode.PLAN,
+-      visible: false,
+-    },
+-    { name: EDIT_DISPLAY_NAME, mode: ApprovalMode.PLAN, visible: false },
+-    {
+-      name: WRITE_FILE_DISPLAY_NAME,
+-      mode: ApprovalMode.DEFAULT,
+-      visible: true,
+-    },
+-    { name: READ_FILE_DISPLAY_NAME, mode: ApprovalMode.PLAN, visible: true },
+-  ])(
+-    'Plan Mode: tool=$name, mode=$mode -> visible=$visible',
+-    ({ name, mode, visible }) => {
+-      expect(
+-        shouldHideToolCall({
+-          displayName: name,
+-          status: CoreToolCallStatus.Success,
+-          approvalMode: mode,
+-          hasResultDisplay: true,
+-        }),
+-      ).toBe(!visible);
+-    },
+-  );
+-
+-  it('hides tool calls with a parentCallId', () => {
+-    expect(
+-      shouldHideToolCall({
+-        displayName: 'any_tool',
+-        status: CoreToolCallStatus.Success,
+-        hasResultDisplay: true,
+-        parentCallId: 'some-parent',
+-      }),
+-    ).toBe(true);
+-  });
+-});
+ 
+ describe('getToolSuggestion', () => {
+   it('should suggest the top N closest tool names for a typo', () => {
+diff --git a/packages/core/src/utils/tool-utils.ts b/packages/core/src/utils/tool-utils.ts
+index 591df6a87..d825d0a61 100644
+--- a/packages/core/src/utils/tool-utils.ts
++++ b/packages/core/src/utils/tool-utils.ts
+@@ -11,16 +11,7 @@ import {
+ } from '../index.js';
+ import { SHELL_TOOL_NAMES } from './shell-utils.js';
+ import levenshtein from 'fast-levenshtein';
+-import { ApprovalMode } from '../policy/types.js';
+-import {
+-  CoreToolCallStatus,
+-  type ToolCallResponseInfo,
+-} from '../scheduler/types.js';
+-import {
+-  ASK_USER_DISPLAY_NAME,
+-  WRITE_FILE_DISPLAY_NAME,
+-  EDIT_DISPLAY_NAME,
+-} from '../tools/tool-names.js';
++import { type ToolCallResponseInfo } from '../scheduler/types.js';
+ 
+ /**
+  * Validates if an object is a ToolCallResponseInfo.
+@@ -36,61 +27,6 @@ export function isToolCallResponseInfo(
+   );
+ }
+ 
+-/**
+- * Options for determining if a tool call should be hidden in the CLI history.
+- */
+-export interface ShouldHideToolCallParams {
+-  /** The display name of the tool. */
+-  displayName: string;
+-  /** The current status of the tool call. */
+-  status: CoreToolCallStatus;
+-  /** The approval mode active when the tool was called. */
+-  approvalMode?: ApprovalMode;
+-  /** Whether the tool has produced a result for display. */
+-  hasResultDisplay: boolean;
+-  /** The ID of the parent tool call, if any. */
+-  parentCallId?: string;
+-}
+-
+-/**
+- * Determines if a tool call should be hidden from the standard tool history UI.
+- *
+- * We hide tools in several cases:
+- * 1. Tool calls that have a parent, as they are "internal" to another tool (e.g. subagent).
+- * 2. Ask User tools that are in progress, displayed via specialized UI.
+- * 3. Ask User tools that errored without result display, typically param
+- *    validation errors that the agent automatically recovers from.
+- * 4. WriteFile and Edit tools when in Plan Mode, redundant because the
+- *    resulting plans are displayed separately upon exiting plan mode.
+- */
+-export function shouldHideToolCall(params: ShouldHideToolCallParams): boolean {
+-  const { displayName, status, approvalMode, hasResultDisplay, parentCallId } =
+-    params;
+-
+-  if (parentCallId) {
+-    return true;
+-  }
+-
+-  switch (displayName) {
+-    case ASK_USER_DISPLAY_NAME:
+-      switch (status) {
+-        case CoreToolCallStatus.Scheduled:
+-        case CoreToolCallStatus.Validating:
+-        case CoreToolCallStatus.Executing:
+-        case CoreToolCallStatus.AwaitingApproval:
+-          return true;
+-        case CoreToolCallStatus.Error:
+-          return !hasResultDisplay;
+-        default:
+-          return false;
+-      }
+-    case WRITE_FILE_DISPLAY_NAME:
+-    case EDIT_DISPLAY_NAME:
+-      return approvalMode === ApprovalMode.PLAN;
+-    default:
+-      return false;
+-  }
+-}
+ 
+ /**
+  * Generates a suggestion string for a tool name that was not found in the registry.
+diff --git a/packages/core/src/utils/tool-visibility.test.ts b/packages/core/src/utils/tool-visibility.test.ts
+new file mode 100644
+index 000000000..4c4ee5709
+--- /dev/null
++++ b/packages/core/src/utils/tool-visibility.test.ts
+@@ -0,0 +1,224 @@
++/**
++ * @license
++ * Copyright 2026 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import { describe, it, expect } from 'vitest';
++import { ApprovalMode } from '../policy/types.js';
++import { CoreToolCallStatus } from '../scheduler/types.js';
++import {
++  UPDATE_TOPIC_TOOL_NAME,
++  UPDATE_TOPIC_DISPLAY_NAME,
++  ASK_USER_DISPLAY_NAME,
++  WRITE_FILE_DISPLAY_NAME,
++} from '../tools/tool-names.js';
++import {
++  isRenderedInHistory,
++  belongsInConfirmationQueue,
++  isVisibleInToolGroup,
++  buildToolVisibilityContext,
++} from './tool-visibility.js';
++
++describe('tool-visibility', () => {
++  describe('belongsInConfirmationQueue', () => {
++    it('should return false for update_topic tool name or display name', () => {
++      expect(
++        belongsInConfirmationQueue({
++          name: UPDATE_TOPIC_TOOL_NAME,
++          displayName: 'UpdateTopic',
++          status: CoreToolCallStatus.AwaitingApproval,
++          hasResultDisplay: false,
++        }),
++      ).toBe(false);
++
++      expect(
++        belongsInConfirmationQueue({
++          name: 'some_other_name',
++          displayName: UPDATE_TOPIC_DISPLAY_NAME,
++          status: CoreToolCallStatus.AwaitingApproval,
++          hasResultDisplay: false,
++        }),
++      ).toBe(false);
++    });
++
++    it('should return true for standard tools', () => {
++      expect(
++        belongsInConfirmationQueue({
++          name: 'write_file',
++          displayName: WRITE_FILE_DISPLAY_NAME,
++          status: CoreToolCallStatus.AwaitingApproval,
++          hasResultDisplay: false,
++        }),
++      ).toBe(true);
++    });
++  });
++
++  describe('isRenderedInHistory', () => {
++    it('should return false when parentCallId is set', () => {
++      expect(
++        isRenderedInHistory({
++          name: 'write_file',
++          displayName: WRITE_FILE_DISPLAY_NAME,
++          status: CoreToolCallStatus.Success,
++          hasResultDisplay: true,
++          parentCallId: 'parent-123',
++        }),
++      ).toBe(false);
++    });
++
++    it('should handle Ask User correctly based on status and hasResultDisplay', () => {
++      // Pending statuses of Ask User should not be rendered
++      const pendingStatuses = [
++        CoreToolCallStatus.Scheduled,
++        CoreToolCallStatus.Validating,
++        CoreToolCallStatus.Executing,
++        CoreToolCallStatus.AwaitingApproval,
++      ];
++      for (const status of pendingStatuses) {
++        expect(
++          isRenderedInHistory({
++            name: 'ask_user',
++            displayName: ASK_USER_DISPLAY_NAME,
++            status,
++            hasResultDisplay: false,
++          }),
++        ).toBe(false);
++      }
++
++      // Successful/completed should be rendered
++      expect(
++        isRenderedInHistory({
++          name: 'ask_user',
++          displayName: ASK_USER_DISPLAY_NAME,
++          status: CoreToolCallStatus.Success,
++          hasResultDisplay: true,
++        }),
++      ).toBe(true);
++
++      // Error with result display should be rendered
++      expect(
++        isRenderedInHistory({
++          name: 'ask_user',
++          displayName: ASK_USER_DISPLAY_NAME,
++          status: CoreToolCallStatus.Error,
++          hasResultDisplay: true,
++        }),
++      ).toBe(true);
++
++      // Error without result display should NOT be rendered
++      expect(
++        isRenderedInHistory({
++          name: 'ask_user',
++          displayName: ASK_USER_DISPLAY_NAME,
++          status: CoreToolCallStatus.Error,
++          hasResultDisplay: false,
++        }),
++      ).toBe(false);
++    });
++
++    it('should check Plan Mode for WriteFile and Edit', () => {
++      expect(
++        isRenderedInHistory({
++          name: 'write_file',
++          displayName: WRITE_FILE_DISPLAY_NAME,
++          status: CoreToolCallStatus.Success,
++          approvalMode: ApprovalMode.PLAN,
++          hasResultDisplay: true,
++        }),
++      ).toBe(false);
++
++      expect(
++        isRenderedInHistory({
++          name: 'write_file',
++          displayName: WRITE_FILE_DISPLAY_NAME,
++          status: CoreToolCallStatus.Success,
++          approvalMode: ApprovalMode.DEFAULT,
++          hasResultDisplay: true,
++        }),
++      ).toBe(true);
++    });
++  });
++
++  describe('isVisibleInToolGroup', () => {
++    it('should hide internal errors under low verbosity', () => {
++      expect(
++        isVisibleInToolGroup(
++          {
++            name: 'write_file',
++            displayName: WRITE_FILE_DISPLAY_NAME,
++            status: CoreToolCallStatus.Error,
++            hasResultDisplay: true,
++            isClientInitiated: false,
++          },
++          'low',
++        ),
++      ).toBe(false);
++
++      expect(
++        isVisibleInToolGroup(
++          {
++            name: 'write_file',
++            displayName: WRITE_FILE_DISPLAY_NAME,
++            status: CoreToolCallStatus.Error,
++            hasResultDisplay: true,
++            isClientInitiated: true,
++          },
++          'low',
++        ),
++      ).toBe(true);
++
++      expect(
++        isVisibleInToolGroup(
++          {
++            name: 'write_file',
++            displayName: WRITE_FILE_DISPLAY_NAME,
++            status: CoreToolCallStatus.Error,
++            hasResultDisplay: true,
++            isClientInitiated: false,
++          },
++          'full',
++        ),
++      ).toBe(true);
++    });
++
++    it('should hide tools that are awaiting approval from group history', () => {
++      expect(
++        isVisibleInToolGroup(
++          {
++            name: 'write_file',
++            displayName: WRITE_FILE_DISPLAY_NAME,
++            status: CoreToolCallStatus.AwaitingApproval,
++            hasResultDisplay: false,
++          },
++          'full',
++        ),
++      ).toBe(false);
++    });
++  });
++
++  describe('buildToolVisibilityContext', () => {
++    it('should map from core tc structure', () => {
++      const tc = {
++        status: CoreToolCallStatus.Success,
++        approvalMode: ApprovalMode.DEFAULT,
++        request: {
++          name: 'write_file',
++          originalRequestName: 'write_file',
++        },
++        tool: {
++          displayName: WRITE_FILE_DISPLAY_NAME,
++        },
++        response: {
++          resultDisplay: 'file written',
++        },
++      };
++
++      const ctx = buildToolVisibilityContext(tc);
++      expect(ctx.name).toBe('write_file');
++      expect(ctx.displayName).toBe(WRITE_FILE_DISPLAY_NAME);
++      expect(ctx.status).toBe(CoreToolCallStatus.Success);
++      expect(ctx.hasResultDisplay).toBe(true);
++    });
++  });
++});
+diff --git a/packages/core/src/utils/tool-visibility.ts b/packages/core/src/utils/tool-visibility.ts
+new file mode 100644
+index 000000000..e223e89a2
+--- /dev/null
++++ b/packages/core/src/utils/tool-visibility.ts
+@@ -0,0 +1,134 @@
++/**
++ * @license
++ * Copyright 2026 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import { ApprovalMode } from '../policy/types.js';
++import { CoreToolCallStatus } from '../scheduler/types.js';
++import {
++  UPDATE_TOPIC_TOOL_NAME,
++  UPDATE_TOPIC_DISPLAY_NAME,
++  ASK_USER_DISPLAY_NAME,
++  WRITE_FILE_DISPLAY_NAME,
++  EDIT_DISPLAY_NAME,
++} from '../tools/tool-names.js';
++
++export interface ToolVisibilityContext {
++  name: string;
++  displayName: string;
++  status: CoreToolCallStatus;
++  approvalMode?: ApprovalMode;
++  hasResultDisplay: boolean;
++  parentCallId?: string;
++  isClientInitiated?: boolean;
++}
++
++export function buildToolVisibilityContext(tc: {
++  status: CoreToolCallStatus;
++  approvalMode?: ApprovalMode;
++  request?: {
++    name: string;
++    parentCallId?: string;
++    originalRequestName?: string;
++    isClientInitiated?: boolean;
++  };
++  tool?: {
++    displayName: string;
++  };
++  response?: {
++    resultDisplay?: unknown;
++  };
++  liveOutput?: unknown;
++  isClientInitiated?: boolean;
++}): ToolVisibilityContext {
++  const name = tc.request?.originalRequestName ?? tc.request?.name ?? '';
++  const displayName = tc.tool?.displayName ?? name;
++  const status = tc.status;
++  const approvalMode = tc.approvalMode;
++  const parentCallId = tc.request?.parentCallId;
++  const isClientInitiated = tc.isClientInitiated ?? tc.request?.isClientInitiated;
++
++  let hasResultDisplay = false;
++  if (
++    status === CoreToolCallStatus.Success ||
++    status === CoreToolCallStatus.Error ||
++    status === CoreToolCallStatus.Cancelled
++  ) {
++    hasResultDisplay = !!tc.response?.resultDisplay;
++  } else if (status === CoreToolCallStatus.Executing) {
++    hasResultDisplay = !!tc.liveOutput;
++  }
++
++  return {
++    name,
++    displayName,
++    status,
++    approvalMode,
++    hasResultDisplay,
++    parentCallId,
++    isClientInitiated,
++  };
++}
++
++export function isRenderedInHistory(ctx: ToolVisibilityContext): boolean {
++  if (ctx.parentCallId) {
++    return false;
++  }
++
++  switch (ctx.displayName) {
++    case ASK_USER_DISPLAY_NAME:
++      switch (ctx.status) {
++        case CoreToolCallStatus.Scheduled:
++        case CoreToolCallStatus.Validating:
++        case CoreToolCallStatus.Executing:
++        case CoreToolCallStatus.AwaitingApproval:
++          return false;
++        case CoreToolCallStatus.Error:
++          return ctx.hasResultDisplay;
++        default:
++          return true;
++      }
++    case WRITE_FILE_DISPLAY_NAME:
++    case EDIT_DISPLAY_NAME:
++      return ctx.approvalMode !== ApprovalMode.PLAN;
++    default:
++      return true;
++  }
++}
++
++export function belongsInConfirmationQueue(ctx: ToolVisibilityContext): boolean {
++  if (
++    ctx.name === UPDATE_TOPIC_TOOL_NAME ||
++    ctx.displayName === UPDATE_TOPIC_DISPLAY_NAME
++  ) {
++    return false;
++  }
++  return true;
++}
++
++export function isVisibleInToolGroup(
++  ctx: ToolVisibilityContext,
++  verbosity: 'low' | 'full',
++): boolean {
++  // Hide internal errors under low verbosity
++  if (
++    verbosity === 'low' &&
++    ctx.status === CoreToolCallStatus.Error &&
++    !ctx.isClientInitiated
++  ) {
++    return false;
++  }
++
++  // Standard hiding logic (e.g. Plan Mode internal edits)
++  if (!isRenderedInHistory(ctx)) {
++    return false;
++  }
++
++  // We HIDE tools that are still in pre-execution/confirming states from history log
++  if (ctx.status === CoreToolCallStatus.AwaitingApproval) {
++    return false;
++  }
++
++  return true;
++}
+diff --git a/packages/core/test-setup.ts b/packages/core/test-setup.ts
+index d73036957..d4b4d6e6e 100644
+--- a/packages/core/test-setup.ts
++++ b/packages/core/test-setup.ts
+@@ -9,6 +9,18 @@ if (process.env.NO_COLOR !== undefined) {
+   delete process.env.NO_COLOR;
+ }
+ 
++if (typeof File === 'undefined') {
++  global.File = class File extends Blob {
++    name: string;
++    lastModified: number;
++    constructor(parts: BlobPart[], name: string, options?: FilePropertyBag) {
++      super(parts, options);
++      this.name = name;
++      this.lastModified = options?.lastModified ?? Date.now();
++    }
++  } as unknown as typeof File;
++}
++
+ import { setSimulate429 } from './src/utils/testUtils.js';
+ import { vi, afterEach } from 'vitest';
+ import { coreEvents } from './src/utils/events.js';
+diff --git a/scripts/build.js b/scripts/build.js
+index e6aa14faa..4c9e6ac92 100644
+--- a/scripts/build.js
++++ b/scripts/build.js
+@@ -22,6 +22,18 @@ import { existsSync } from 'node:fs';
+ import { dirname, join } from 'node:path';
+ import { fileURLToPath } from 'node:url';
+ 
++if (typeof File === 'undefined') {
++  global.File = class File extends Blob {
++    name;
++    lastModified;
++    constructor(parts, name, options) {
++      super(parts, options);
++      this.name = name;
++      this.lastModified = options?.lastModified ?? Date.now();
++    }
++  };
++}
++
+ const __dirname = dirname(fileURLToPath(import.meta.url));
+ const root = join(__dirname, '..');
+ 
+diff --git a/scripts/build_package.js b/scripts/build_package.js
+index 279e46fa9..1639ba7c2 100644
+--- a/scripts/build_package.js
++++ b/scripts/build_package.js
+@@ -21,6 +21,18 @@ import { execSync } from 'node:child_process';
+ import { writeFileSync, existsSync, cpSync } from 'node:fs';
+ import { join, basename } from 'node:path';
+ 
++if (typeof File === 'undefined') {
++  global.File = class File extends Blob {
++    name;
++    lastModified;
++    constructor(parts, name, options) {
++      super(parts, options);
++      this.name = name;
++      this.lastModified = options?.lastModified ?? Date.now();
++    }
++  };
++}
++
+ if (!process.cwd().includes('packages')) {
+   console.error('must be invoked from a package directory');
+   process.exit(1);

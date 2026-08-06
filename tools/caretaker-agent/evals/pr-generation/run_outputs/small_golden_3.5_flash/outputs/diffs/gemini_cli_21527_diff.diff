@@ -1,0 +1,103 @@
+diff --git a/packages/core/polyfill.cjs b/packages/core/polyfill.cjs
+new file mode 100644
+index 000000000..e651e1cdc
+--- /dev/null
++++ b/packages/core/polyfill.cjs
+@@ -0,0 +1,4 @@
++const { File } = require('node:buffer');
++if (!globalThis.File) {
++  globalThis.File = File;
++}
+diff --git a/packages/core/src/tools/read-many-files.test.ts b/packages/core/src/tools/read-many-files.test.ts
+index 249a9970a..c0a17fdeb 100644
+--- a/packages/core/src/tools/read-many-files.test.ts
++++ b/packages/core/src/tools/read-many-files.test.ts
+@@ -712,6 +712,24 @@ Content of file[1]
+         'Successfully read and concatenated content from **1 file(s)**',
+       );
+     });
++
++    it('should ignore directories cleanly when targeted as existence candidates', async () => {
++      const dirPath = 'some-folder';
++      fs.mkdirSync(path.join(tempRootDir, dirPath), { recursive: true });
++
++      const params = { include: [dirPath] };
++      const invocation = tool.build(params);
++      const result = await invocation.execute({
++        abortSignal: new AbortController().signal,
++      });
++
++      expect(result.llmContent).toEqual([
++        'No files matching the criteria were found or all were skipped.',
++      ]);
++      expect((result.returnDisplay as ReadManyFilesResult).summary).toContain(
++        'No files were read and concatenated based on the criteria.',
++      );
++    });
+   });
+ 
+   describe('Error handling', () => {
+diff --git a/packages/core/src/tools/read-many-files.ts b/packages/core/src/tools/read-many-files.ts
+index f97bb7773..bb570e568 100644
+--- a/packages/core/src/tools/read-many-files.ts
++++ b/packages/core/src/tools/read-many-files.ts
+@@ -199,8 +199,8 @@ ${finalExclusionPatternsForDescription
+           const fullPath = path.join(dir, normalizedP);
+           let exists = false;
+           try {
+-            await fsPromises.access(fullPath);
+-            exists = true;
++            const st = await fsPromises.stat(fullPath);
++            exists = st.isFile();
+           } catch {
+             exists = false;
+           }
+diff --git a/packages/core/src/utils/fileUtils.test.ts b/packages/core/src/utils/fileUtils.test.ts
+index 5e7c6d3df..fa7811087 100644
+--- a/packages/core/src/utils/fileUtils.test.ts
++++ b/packages/core/src/utils/fileUtils.test.ts
+@@ -305,6 +305,10 @@ describe('fileUtils', () => {
+       actualNodeFs.writeFileSync(filePathForBinaryTest, binaryContent);
+       expect(await isBinaryFile(filePathForBinaryTest)).toBe(true);
+     });
++
++    it('should return false for a directory', async () => {
++      expect(await isBinaryFile(directoryPath)).toBe(false);
++    });
+   });
+ 
+   describe('BOM detection and encoding', () => {
+diff --git a/packages/core/src/utils/fileUtils.ts b/packages/core/src/utils/fileUtils.ts
+index 52191171a..0d8e41f53 100644
+--- a/packages/core/src/utils/fileUtils.ts
++++ b/packages/core/src/utils/fileUtils.ts
+@@ -350,7 +350,11 @@ export async function isEmpty(filePath: string): Promise<boolean> {
+  */
+ export async function isBinaryFile(filePath: string): Promise<boolean> {
+   try {
+-    return await isBinaryFileCheck(filePath);
++    const stats = await fsPromises.stat(filePath);
++    if (!stats.isFile()) {
++      return false;
++    }
++    return await isBinaryFileCheck(filePath, stats.size);
+   } catch (error) {
+     debugLogger.warn(
+       `Failed to check if file is binary: ${filePath}`,
+diff --git a/packages/core/test-setup.ts b/packages/core/test-setup.ts
+index d73036957..73dfeb5fe 100644
+--- a/packages/core/test-setup.ts
++++ b/packages/core/test-setup.ts
+@@ -9,6 +9,12 @@ if (process.env.NO_COLOR !== undefined) {
+   delete process.env.NO_COLOR;
+ }
+ 
++import { File } from 'node:buffer';
++
++if (!globalThis.File) {
++  globalThis.File = File;
++}
++
+ import { setSimulate429 } from './src/utils/testUtils.js';
+ import { vi, afterEach } from 'vitest';
+ import { coreEvents } from './src/utils/events.js';

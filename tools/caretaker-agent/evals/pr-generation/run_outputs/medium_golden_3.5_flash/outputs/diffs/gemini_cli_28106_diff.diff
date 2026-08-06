@@ -1,0 +1,170 @@
+diff --git a/packages/cli/src/ui/editors/editorSettingsManager.test.ts b/packages/cli/src/ui/editors/editorSettingsManager.test.ts
+new file mode 100644
+index 000000000..204876e22
+--- /dev/null
++++ b/packages/cli/src/ui/editors/editorSettingsManager.test.ts
+@@ -0,0 +1,128 @@
++/**
++ * @license
++ * Copyright 2026 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++
++const mockHasValidEditorCommand = vi.hoisted(() => vi.fn());
++const mockAllowEditorTypeInSandbox = vi.hoisted(() => vi.fn());
++
++vi.mock('@google/gemini-cli-core', async (importOriginal) => {
++  const actual =
++    await importOriginal<typeof import('@google/gemini-cli-core')>();
++  return {
++    ...actual,
++    hasValidEditorCommand: mockHasValidEditorCommand,
++    allowEditorTypeInSandbox: mockAllowEditorTypeInSandbox,
++  };
++});
++
++import {
++  EditorSettingsManager,
++  editorSettingsManager,
++} from './editorSettingsManager.js';
++import { EDITOR_DISPLAY_NAMES, type EditorType } from '@google/gemini-cli-core';
++
++describe('EditorSettingsManager', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++  });
++
++  afterEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  it('must not run editor validation on import / instantiation', () => {
++    // Assert that the default exported instance did not trigger mock calls on import
++    expect(editorSettingsManager).toBeDefined();
++    expect(mockHasValidEditorCommand).not.toHaveBeenCalled();
++    expect(mockAllowEditorTypeInSandbox).not.toHaveBeenCalled();
++
++    // Assert that manual creation of another constructor also does not eagerly run them
++    const manager = new EditorSettingsManager();
++    expect(manager).toBeDefined();
++    expect(mockHasValidEditorCommand).not.toHaveBeenCalled();
++    expect(mockAllowEditorTypeInSandbox).not.toHaveBeenCalled();
++  });
++
++  it('computes on the first call to getAvailableEditorDisplays and caches results', () => {
++    // Setup mock returns
++    // Assume all editors exist and are allowed in sandbox by default
++    mockHasValidEditorCommand.mockReturnValue(true);
++    mockAllowEditorTypeInSandbox.mockReturnValue(true);
++
++    const manager = new EditorSettingsManager();
++
++    // Call once
++    const firstResult = manager.getAvailableEditorDisplays();
++
++    // Assert that mock checking functions are now called
++    expect(mockHasValidEditorCommand).toHaveBeenCalled();
++    expect(mockAllowEditorTypeInSandbox).toHaveBeenCalled();
++
++    const expectedEditorCount = Object.keys(EDITOR_DISPLAY_NAMES).length;
++    // Each editor is checked once
++    expect(mockHasValidEditorCommand).toHaveBeenCalledTimes(expectedEditorCount);
++    expect(mockAllowEditorTypeInSandbox).toHaveBeenCalledTimes(expectedEditorCount);
++
++    // Call a second time
++    vi.clearAllMocks();
++    const secondResult = manager.getAvailableEditorDisplays();
++
++    // Assert that no further mock calls are made
++    expect(mockHasValidEditorCommand).not.toHaveBeenCalled();
++    expect(mockAllowEditorTypeInSandbox).not.toHaveBeenCalled();
++
++    // Assert that the exact same array reference (cache) is returned
++    expect(secondResult).toBe(firstResult);
++  });
++
++  it('correctly formats and flags editors based on installation/sandbox status', () => {
++    // We want to test some specific cases:
++    // Case 1: editor is installed and allowed in sandbox
++    // Case 2: editor is NOT installed (hasValidEditorCommand returns false)
++    // Case 3: editor is not allowed in sandbox (allowEditorTypeInSandbox returns false)
++
++    const editorTypes = Object.keys(EDITOR_DISPLAY_NAMES).sort() as EditorType[];
++    const firstType = editorTypes[0];
++    const secondType = editorTypes[1];
++
++    mockHasValidEditorCommand.mockImplementation((type: EditorType) => {
++      if (type === firstType) {
++        return false; // not installed
++      }
++      return true;
++    });
++
++    mockAllowEditorTypeInSandbox.mockImplementation((type: EditorType) => {
++      if (type === secondType) {
++        return false; // not allowed in sandbox
++      }
++      return true;
++    });
++
++    const manager = new EditorSettingsManager();
++    const displays = manager.getAvailableEditorDisplays();
++
++    // 'None' is sorted first in the list
++    expect(displays[0]).toEqual({
++      name: 'None',
++      type: 'not_set',
++      disabled: false,
++    });
++
++    // Check firstType - not installed
++    const firstDisplay = displays.find((d) => d.type === firstType);
++    expect(firstDisplay).toBeDefined();
++    expect(firstDisplay?.name).toContain(' (Not installed)');
++    expect(firstDisplay?.disabled).toBe(true);
++
++    // Check secondType - not allowed in sandbox
++    const secondDisplay = displays.find((d) => d.type === secondType);
++    expect(secondDisplay).toBeDefined();
++    expect(secondDisplay?.name).toContain(' (Not available in sandbox)');
++    expect(secondDisplay?.disabled).toBe(true);
++  });
++});
+diff --git a/packages/cli/src/ui/editors/editorSettingsManager.ts b/packages/cli/src/ui/editors/editorSettingsManager.ts
+index d8aab97a6..e4a56a39b 100644
+--- a/packages/cli/src/ui/editors/editorSettingsManager.ts
++++ b/packages/cli/src/ui/editors/editorSettingsManager.ts
+@@ -17,15 +17,17 @@ export interface EditorDisplay {
+   disabled: boolean;
+ }
+ 
+-class EditorSettingsManager {
+-  private readonly availableEditors: EditorDisplay[];
++export class EditorSettingsManager {
++  private availableEditors: EditorDisplay[] | null = null;
+ 
+-  constructor() {
++  constructor() {}
++
++  private computeAvailableEditors(): EditorDisplay[] {
+     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+     const editorTypes = Object.keys(
+       EDITOR_DISPLAY_NAMES,
+     ).sort() as EditorType[];
+-    this.availableEditors = [
++    return [
+       {
+         name: 'None',
+         type: 'not_set',
+@@ -50,6 +52,9 @@ class EditorSettingsManager {
+   }
+ 
+   getAvailableEditorDisplays(): EditorDisplay[] {
++    if (this.availableEditors === null) {
++      this.availableEditors = this.computeAvailableEditors();
++    }
+     return this.availableEditors;
+   }
+ }

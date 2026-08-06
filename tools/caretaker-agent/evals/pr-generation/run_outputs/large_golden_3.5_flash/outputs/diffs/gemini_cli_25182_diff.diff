@@ -1,0 +1,499 @@
+diff --git a/packages/a2a-server/src/agent/executor.ts b/packages/a2a-server/src/agent/executor.ts
+index dbb826937..402e0d885 100644
+--- a/packages/a2a-server/src/agent/executor.ts
++++ b/packages/a2a-server/src/agent/executor.ts
+@@ -94,9 +94,15 @@ export class CoderAgentExecutor implements AgentExecutor {
+   ): Promise<Config> {
+     const workspaceRoot = setTargetDir(agentSettings);
+     loadEnvironment(); // Will override any global env with workspace envs
+-    const settings = loadSettings(workspaceRoot);
++    const isTrusted = agentSettings?.isTrusted;
++    const settings = loadSettings(workspaceRoot, isTrusted);
+     const extensions = loadExtensions(workspaceRoot);
+-    return loadConfig(settings, new SimpleExtensionLoader(extensions), taskId);
++    return loadConfig(
++      settings,
++      new SimpleExtensionLoader(extensions),
++      taskId,
++      isTrusted,
++    );
+   }
+ 
+   /**
+diff --git a/packages/a2a-server/src/config/config.test.ts b/packages/a2a-server/src/config/config.test.ts
+index c17de943e..08741b917 100644
+--- a/packages/a2a-server/src/config/config.test.ts
++++ b/packages/a2a-server/src/config/config.test.ts
+@@ -20,6 +20,7 @@ import {
+   FatalAuthenticationError,
+   PolicyDecision,
+   PRIORITY_YOLO_ALLOW_ALL,
++  createPolicyEngineConfig,
+ } from '@google/gemini-cli-core';
+ 
+ // Mock dependencies
+@@ -29,6 +30,22 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
+   return {
+     ...actual,
+     PRIORITY_YOLO_ALLOW_ALL: 998,
++    createPolicyEngineConfig: vi
++      .fn()
++      .mockImplementation(async (settings, approvalMode) => ({
++        rules:
++          approvalMode === actual.ApprovalMode.YOLO
++            ? [
++                {
++                  toolName: '*',
++                  decision: actual.PolicyDecision.ALLOW,
++                  priority: 998,
++                  modes: [actual.ApprovalMode.YOLO],
++                  allowRedirection: true,
++                },
++              ]
++            : [],
++      })),
+     Config: vi.fn().mockImplementation((params) => {
+       const mockConfig = {
+         ...params,
+@@ -399,6 +416,56 @@ describe('loadConfig', () => {
+       });
+     });
+ 
++    describe('Folder Trust', () => {
++      it('should respect the trusted parameter in loadConfig', async () => {
++        await loadConfig(mockSettings, mockExtensionLoader, taskId, true);
++        expect(Config).toHaveBeenCalledWith(
++          expect.objectContaining({
++            trustedFolder: true,
++          }),
++        );
++
++        await loadConfig(mockSettings, mockExtensionLoader, taskId, false);
++        expect(Config).toHaveBeenCalledWith(
++          expect.objectContaining({
++            trustedFolder: false,
++          }),
++        );
++      });
++    });
++
++    describe('Policy Engine Config', () => {
++      it('should invoke createPolicyEngineConfig with mapped tool settings and policy paths in non-YOLO mode', async () => {
++        vi.stubEnv('GEMINI_YOLO_MODE', 'false');
++        const settings: Settings = {
++          coreTools: ['core-tool-1'],
++          excludeTools: ['exclude-tool-1'],
++          allowedTools: ['allowed-tool-1'],
++          policyPaths: ['/path/to/policies'],
++          adminPolicyPaths: ['/path/to/admin/policies'],
++          mcpServers: {
++            'custom-mcp': { command: 'node' },
++          },
++        };
++        await loadConfig(settings, mockExtensionLoader, taskId);
++        expect(createPolicyEngineConfig).toHaveBeenCalledWith(
++          expect.objectContaining({
++            mcpServers: settings.mcpServers,
++            tools: {
++              core: ['core-tool-1'],
++              exclude: ['exclude-tool-1'],
++              allowed: ['allowed-tool-1'],
++            },
++            policyPaths: ['/path/to/policies'],
++            adminPolicyPaths: ['/path/to/admin/policies'],
++          }),
++          'default',
++          undefined,
++          true,
++        );
++      });
++    });
++
+     describe('authentication logic', () => {
+       const setupConfigMock = (refreshAuthMock: ReturnType<typeof vi.fn>) => {
+         vi.mocked(Config).mockImplementation(
+diff --git a/packages/a2a-server/src/config/config.ts b/packages/a2a-server/src/config/config.ts
+index 5e882b143..3fbdfc04c 100644
+--- a/packages/a2a-server/src/config/config.ts
++++ b/packages/a2a-server/src/config/config.ts
+@@ -23,11 +23,11 @@ import {
+   ExperimentFlags,
+   isHeadlessMode,
+   FatalAuthenticationError,
+-  PolicyDecision,
+-  PRIORITY_YOLO_ALLOW_ALL,
+   type TelemetryTarget,
+   type ConfigParameters,
+   type ExtensionLoader,
++  createPolicyEngineConfig,
++  type PolicySettings,
+ } from '@google/gemini-cli-core';
+ 
+ import { logger } from '../utils/logger.js';
+@@ -38,6 +38,7 @@ export async function loadConfig(
+   settings: Settings,
+   extensionLoader: ExtensionLoader,
+   taskId: string,
++  trusted: boolean = false,
+ ): Promise<Config> {
+   const workspaceDir = process.cwd();
+ 
+@@ -63,6 +64,24 @@ export async function loadConfig(
+       ? ApprovalMode.YOLO
+       : ApprovalMode.DEFAULT;
+ 
++  const policySettings: PolicySettings = {
++    mcpServers: settings.mcpServers,
++    tools: {
++      core: settings.coreTools || settings.tools?.core || undefined,
++      exclude: settings.excludeTools || settings.tools?.exclude || undefined,
++      allowed: settings.allowedTools || settings.tools?.allowed || undefined,
++    },
++    policyPaths: settings.policyPaths,
++    adminPolicyPaths: settings.adminPolicyPaths,
++  };
++
++  const policyEngineConfig = await createPolicyEngineConfig(
++    policySettings,
++    approvalMode,
++    undefined,
++    true,
++  );
++
+   const configParams: ConfigParameters = {
+     sessionId: taskId,
+     clientName: 'a2a-server',
+@@ -78,20 +97,7 @@ export async function loadConfig(
+     allowedTools: settings.allowedTools || settings.tools?.allowed || undefined,
+     showMemoryUsage: settings.showMemoryUsage || false,
+     approvalMode,
+-    policyEngineConfig: {
+-      rules:
+-        approvalMode === ApprovalMode.YOLO
+-          ? [
+-              {
+-                toolName: '*',
+-                decision: PolicyDecision.ALLOW,
+-                priority: PRIORITY_YOLO_ALLOW_ALL,
+-                modes: [ApprovalMode.YOLO],
+-                allowRedirection: true,
+-              },
+-            ]
+-          : [],
+-    },
++    policyEngineConfig,
+     mcpServers: settings.mcpServers,
+     cwd: workspaceDir,
+     telemetry: {
+@@ -118,7 +124,7 @@ export async function loadConfig(
+     },
+     ideMode: false,
+     folderTrust,
+-    trustedFolder: true,
++    trustedFolder: trusted,
+     extensionLoader,
+     checkpointing,
+     interactive: true,
+diff --git a/packages/a2a-server/src/config/settings.test.ts b/packages/a2a-server/src/config/settings.test.ts
+index ab80bced2..18291dbf3 100644
+--- a/packages/a2a-server/src/config/settings.test.ts
++++ b/packages/a2a-server/src/config/settings.test.ts
+@@ -146,7 +146,7 @@ describe('loadSettings', () => {
+     );
+     fs.writeFileSync(workspaceSettingsPath, JSON.stringify(workspaceSettings));
+ 
+-    const result = loadSettings(mockWorkspaceDir);
++    const result = loadSettings(mockWorkspaceDir, true);
+     // Primitive value overwritten
+     expect(result.showMemoryUsage).toBe(true);
+ 
+@@ -154,4 +154,48 @@ describe('loadSettings', () => {
+     expect(result.fileFiltering?.respectGitIgnore).toBe(false);
+     expect(result.fileFiltering?.enableRecursiveFileSearch).toBeUndefined();
+   });
++
++  it('should ignore workspace settings.json if the workspace is untrusted', () => {
++    const userSettings = {
++      showMemoryUsage: false,
++    };
++    fs.writeFileSync(USER_SETTINGS_PATH, JSON.stringify(userSettings));
++
++    const workspaceSettings = {
++      showMemoryUsage: true,
++    };
++    const workspaceSettingsPath = path.join(
++      mockGeminiWorkspaceDir,
++      'settings.json',
++    );
++    fs.writeFileSync(workspaceSettingsPath, JSON.stringify(workspaceSettings));
++
++    // loadSettings with isTrustedOverride = false
++    const result = loadSettings(mockWorkspaceDir, false);
++    expect(result.showMemoryUsage).toBe(false);
++  });
++
++  it('should prevent workspace override of policyPaths and adminPolicyPaths', () => {
++    const userSettings = {
++      policyPaths: ['user-policy-path'],
++      adminPolicyPaths: ['user-admin-policy-path'],
++    };
++    fs.writeFileSync(USER_SETTINGS_PATH, JSON.stringify(userSettings));
++
++    const workspaceSettings = {
++      policyPaths: ['workspace-policy-override'],
++      adminPolicyPaths: ['workspace-admin-policy-override'],
++    };
++    const workspaceSettingsPath = path.join(
++      mockGeminiWorkspaceDir,
++      'settings.json',
++    );
++    fs.writeFileSync(workspaceSettingsPath, JSON.stringify(workspaceSettings));
++
++    // Even if workspace is trusted, overrides of policies must be prevented
++    const result = loadSettings(mockWorkspaceDir, true);
++    expect(result.policyPaths).toEqual(['user-policy-path']);
++    expect(result.adminPolicyPaths).toEqual(['user-admin-policy-path']);
++  });
+ });
++
+diff --git a/packages/a2a-server/src/config/settings.ts b/packages/a2a-server/src/config/settings.ts
+index ced11a4da..a292454d0 100644
+--- a/packages/a2a-server/src/config/settings.ts
++++ b/packages/a2a-server/src/config/settings.ts
+@@ -14,6 +14,7 @@ import {
+   getErrorMessage,
+   type TelemetrySettings,
+   homedir,
++  checkPathTrust,
+ } from '@google/gemini-cli-core';
+ import stripJsonComments from 'strip-json-comments';
+ 
+@@ -40,6 +41,8 @@ export interface Settings {
+   general?: {
+     previewFeatures?: boolean;
+   };
++  policyPaths?: string[];
++  adminPolicyPaths?: string[];
+ 
+   // Git-aware file filtering settings
+   fileFiltering?: {
+@@ -70,7 +73,10 @@ export interface CheckpointingSettings {
+  * than `LoadedSettings` (unnecessary since we are not modifying users
+  * settings.json).
+  */
+-export function loadSettings(workspaceDir: string): Settings {
++export function loadSettings(
++  workspaceDir: string,
++  isTrustedOverride?: boolean,
++): Settings {
+   let userSettings: Settings = {};
+   let workspaceSettings: Settings = {};
+   const settingsErrors: SettingsError[] = [];
+@@ -92,6 +98,17 @@ export function loadSettings(workspaceDir: string): Settings {
+     });
+   }
+ 
++  // Determine trust level
++  let isTrusted = isTrustedOverride;
++  if (isTrusted === undefined) {
++    const isFolderTrustEnabled = userSettings.folderTrust ?? true;
++    const trustResult = checkPathTrust({
++      path: workspaceDir,
++      isFolderTrustEnabled,
++    });
++    isTrusted = trustResult.isTrusted === true;
++  }
++
+   const workspaceSettingsPath = path.join(
+     workspaceDir,
+     GEMINI_DIR,
+@@ -99,20 +116,22 @@ export function loadSettings(workspaceDir: string): Settings {
+   );
+ 
+   // Load workspace settings
+-  try {
+-    if (fs.existsSync(workspaceSettingsPath)) {
+-      const projectContent = fs.readFileSync(workspaceSettingsPath, 'utf-8');
+-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+-      const parsedWorkspaceSettings = JSON.parse(
+-        stripJsonComments(projectContent),
+-      ) as Settings;
+-      workspaceSettings = resolveEnvVarsInObject(parsedWorkspaceSettings);
++  if (isTrusted) {
++    try {
++      if (fs.existsSync(workspaceSettingsPath)) {
++        const projectContent = fs.readFileSync(workspaceSettingsPath, 'utf-8');
++        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
++        const parsedWorkspaceSettings = JSON.parse(
++          stripJsonComments(projectContent),
++        ) as Settings;
++        workspaceSettings = resolveEnvVarsInObject(parsedWorkspaceSettings);
++      }
++    } catch (error: unknown) {
++      settingsErrors.push({
++        message: getErrorMessage(error),
++        path: workspaceSettingsPath,
++      });
+     }
+-  } catch (error: unknown) {
+-    settingsErrors.push({
+-      message: getErrorMessage(error),
+-      path: workspaceSettingsPath,
+-    });
+   }
+ 
+   if (settingsErrors.length > 0) {
+@@ -128,6 +147,8 @@ export function loadSettings(workspaceDir: string): Settings {
+   return {
+     ...userSettings,
+     ...workspaceSettings,
++    policyPaths: userSettings.policyPaths,
++    adminPolicyPaths: userSettings.adminPolicyPaths,
+   };
+ }
+ 
+diff --git a/packages/a2a-server/src/http/app.ts b/packages/a2a-server/src/http/app.ts
+index 35ca48949..e4e574bfd 100644
+--- a/packages/a2a-server/src/http/app.ts
++++ b/packages/a2a-server/src/http/app.ts
+@@ -22,16 +22,19 @@ import type { AgentSettings } from '../types.js';
+ import { GCSTaskStore, NoOpTaskStore } from '../persistence/gcs.js';
+ import { CoderAgentExecutor } from '../agent/executor.js';
+ import { requestStorage } from './requestStorage.js';
++import * as fs from 'node:fs';
+ import { loadConfig, loadEnvironment, setTargetDir } from '../config/config.js';
+-import { loadSettings } from '../config/settings.js';
++import { loadSettings, USER_SETTINGS_PATH } from '../config/settings.js';
+ import { loadExtensions } from '../config/extension.js';
+ import { commandRegistry } from '../commands/command-registry.js';
+ import {
+   debugLogger,
+   SimpleExtensionLoader,
+   GitService,
++  checkPathTrust,
+ } from '@google/gemini-cli-core';
+ import type { Command, CommandArgument } from '../commands/types.js';
++import stripJsonComments from 'strip-json-comments';
+ 
+ type CommandResponse = {
+   name: string;
+@@ -197,12 +200,34 @@ export async function createApp() {
+     // Load the server configuration once on startup.
+     const workspaceRoot = setTargetDir(undefined);
+     loadEnvironment();
+-    const settings = loadSettings(workspaceRoot);
++
++    let isFolderTrustEnabled = true;
++    try {
++      if (fs.existsSync(USER_SETTINGS_PATH)) {
++        const userContent = fs.readFileSync(USER_SETTINGS_PATH, 'utf-8');
++        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
++        const parsed = JSON.parse(stripJsonComments(userContent)) as { folderTrust?: unknown };
++        if (parsed && typeof parsed === 'object' && 'folderTrust' in parsed) {
++          isFolderTrustEnabled = parsed.folderTrust !== false;
++        }
++      }
++    } catch {
++      // ignore, fall back to true
++    }
++
++    const { isTrusted } = checkPathTrust({
++      path: workspaceRoot,
++      isFolderTrustEnabled,
++    });
++    const isTrustedBool = isTrusted === true;
++
++    const settings = loadSettings(workspaceRoot, isTrustedBool);
+     const extensions = loadExtensions(workspaceRoot);
+     const config = await loadConfig(
+       settings,
+       new SimpleExtensionLoader(extensions),
+       'a2a-server',
++      isTrustedBool,
+     );
+ 
+     let git: GitService | undefined;
+diff --git a/packages/a2a-server/src/types.ts b/packages/a2a-server/src/types.ts
+index bce233c9d..b6f397140 100644
+--- a/packages/a2a-server/src/types.ts
++++ b/packages/a2a-server/src/types.ts
+@@ -47,6 +47,7 @@ export interface AgentSettings {
+   kind: CoderAgentEvent.StateAgentSettingsEvent;
+   workspacePath: string;
+   autoExecute?: boolean;
++  isTrusted?: boolean;
+ }
+ 
+ export interface ToolCallConfirmation {
+diff --git a/packages/a2a-server/vitest.config.ts b/packages/a2a-server/vitest.config.ts
+index a22fdc31a..7b993e683 100644
+--- a/packages/a2a-server/vitest.config.ts
++++ b/packages/a2a-server/vitest.config.ts
+@@ -6,12 +6,19 @@
+ 
+ /// <reference types="vitest" />
+ import { defineConfig } from 'vitest/config';
++import { File as NodeFile } from 'node:buffer';
++
++if (typeof globalThis.File === 'undefined') {
++  // eslint-disable-next-line @typescript-eslint/no-explicit-any
++  globalThis.File = NodeFile as any;
++}
+ 
+ export default defineConfig({
+   test: {
+     include: ['**/*.{test,spec}.?(c|m)[jt]s?(x)'],
+     exclude: ['**/node_modules/**', '**/dist/**'],
+     globals: true,
++    setupFiles: ['./vitest.setup.ts'],
+     reporters: ['default', 'junit'],
+     silent: true,
+     outputFile: {
+diff --git a/packages/a2a-server/vitest.setup.cjs b/packages/a2a-server/vitest.setup.cjs
+new file mode 100644
+index 000000000..678987530
+--- /dev/null
++++ b/packages/a2a-server/vitest.setup.cjs
+@@ -0,0 +1,5 @@
++const { File } = require('node:buffer');
++
++if (typeof globalThis.File === 'undefined') {
++  globalThis.File = File;
++}
+diff --git a/packages/a2a-server/vitest.setup.ts b/packages/a2a-server/vitest.setup.ts
+new file mode 100644
+index 000000000..9d5ee8200
+--- /dev/null
++++ b/packages/a2a-server/vitest.setup.ts
+@@ -0,0 +1,12 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import { File as NodeFile } from 'node:buffer';
++
++if (typeof globalThis.File === 'undefined') {
++  // eslint-disable-next-line @typescript-eslint/no-explicit-any
++  globalThis.File = NodeFile as any;
++}
+diff --git a/scripts/copy_bundle_assets.js b/scripts/copy_bundle_assets.js
+index 658c0a57c..80ff40b6f 100644
+--- a/scripts/copy_bundle_assets.js
++++ b/scripts/copy_bundle_assets.js
+@@ -125,4 +125,14 @@ if (existsSync(extensionExamplesSrc)) {
+   console.log('Copied extension examples to bundle/examples/');
+ }
+ 
++// 8. Copy default Policy definitions (.toml) into packages/a2a-server/dist/policies
++const a2aServerPoliciesDir = join(root, 'packages/a2a-server/dist/policies');
++if (!existsSync(a2aServerPoliciesDir)) {
++  mkdirSync(a2aServerPoliciesDir, { recursive: true });
++}
++for (const file of policyFiles) {
++  copyFileSync(join(root, file), join(a2aServerPoliciesDir, basename(file)));
++}
++console.log(`Copied ${policyFiles.length} policy files to packages/a2a-server/dist/policies/`);
++
+ console.log('Assets copied to bundle/');

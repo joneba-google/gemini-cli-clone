@@ -1,0 +1,1874 @@
+diff --git a/coverage/base.css b/coverage/base.css
+new file mode 100644
+index 000000000..f418035b4
+--- /dev/null
++++ b/coverage/base.css
+@@ -0,0 +1,224 @@
++body, html {
++  margin:0; padding: 0;
++  height: 100%;
++}
++body {
++    font-family: Helvetica Neue, Helvetica, Arial;
++    font-size: 14px;
++    color:#333;
++}
++.small { font-size: 12px; }
++*, *:after, *:before {
++  -webkit-box-sizing:border-box;
++     -moz-box-sizing:border-box;
++          box-sizing:border-box;
++  }
++h1 { font-size: 20px; margin: 0;}
++h2 { font-size: 14px; }
++pre {
++    font: 12px/1.4 Consolas, "Liberation Mono", Menlo, Courier, monospace;
++    margin: 0;
++    padding: 0;
++    -moz-tab-size: 2;
++    -o-tab-size:  2;
++    tab-size: 2;
++}
++a { color:#0074D9; text-decoration:none; }
++a:hover { text-decoration:underline; }
++.strong { font-weight: bold; }
++.space-top1 { padding: 10px 0 0 0; }
++.pad2y { padding: 20px 0; }
++.pad1y { padding: 10px 0; }
++.pad2x { padding: 0 20px; }
++.pad2 { padding: 20px; }
++.pad1 { padding: 10px; }
++.space-left2 { padding-left:55px; }
++.space-right2 { padding-right:20px; }
++.center { text-align:center; }
++.clearfix { display:block; }
++.clearfix:after {
++  content:'';
++  display:block;
++  height:0;
++  clear:both;
++  visibility:hidden;
++  }
++.fl { float: left; }
++@media only screen and (max-width:640px) {
++  .col3 { width:100%; max-width:100%; }
++  .hide-mobile { display:none!important; }
++}
++
++.quiet {
++  color: #7f7f7f;
++  color: rgba(0,0,0,0.5);
++}
++.quiet a { opacity: 0.7; }
++
++.fraction {
++  font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
++  font-size: 10px;
++  color: #555;
++  background: #E8E8E8;
++  padding: 4px 5px;
++  border-radius: 3px;
++  vertical-align: middle;
++}
++
++div.path a:link, div.path a:visited { color: #333; }
++table.coverage {
++  border-collapse: collapse;
++  margin: 10px 0 0 0;
++  padding: 0;
++}
++
++table.coverage td {
++  margin: 0;
++  padding: 0;
++  vertical-align: top;
++}
++table.coverage td.line-count {
++    text-align: right;
++    padding: 0 5px 0 20px;
++}
++table.coverage td.line-coverage {
++    text-align: right;
++    padding-right: 10px;
++    min-width:20px;
++}
++
++table.coverage td span.cline-any {
++    display: inline-block;
++    padding: 0 5px;
++    width: 100%;
++}
++.missing-if-branch {
++    display: inline-block;
++    margin-right: 5px;
++    border-radius: 3px;
++    position: relative;
++    padding: 0 4px;
++    background: #333;
++    color: yellow;
++}
++
++.skip-if-branch {
++    display: none;
++    margin-right: 10px;
++    position: relative;
++    padding: 0 4px;
++    background: #ccc;
++    color: white;
++}
++.missing-if-branch .typ, .skip-if-branch .typ {
++    color: inherit !important;
++}
++.coverage-summary {
++  border-collapse: collapse;
++  width: 100%;
++}
++.coverage-summary tr { border-bottom: 1px solid #bbb; }
++.keyline-all { border: 1px solid #ddd; }
++.coverage-summary td, .coverage-summary th { padding: 10px; }
++.coverage-summary tbody { border: 1px solid #bbb; }
++.coverage-summary td { border-right: 1px solid #bbb; }
++.coverage-summary td:last-child { border-right: none; }
++.coverage-summary th {
++  text-align: left;
++  font-weight: normal;
++  white-space: nowrap;
++}
++.coverage-summary th.file { border-right: none !important; }
++.coverage-summary th.pct { }
++.coverage-summary th.pic,
++.coverage-summary th.abs,
++.coverage-summary td.pct,
++.coverage-summary td.abs { text-align: right; }
++.coverage-summary td.file { white-space: nowrap;  }
++.coverage-summary td.pic { min-width: 120px !important;  }
++.coverage-summary tfoot td { }
++
++.coverage-summary .sorter {
++    height: 10px;
++    width: 7px;
++    display: inline-block;
++    margin-left: 0.5em;
++    background: url(sort-arrow-sprite.png) no-repeat scroll 0 0 transparent;
++}
++.coverage-summary .sorted .sorter {
++    background-position: 0 -20px;
++}
++.coverage-summary .sorted-desc .sorter {
++    background-position: 0 -10px;
++}
++.status-line {  height: 10px; }
++/* yellow */
++.cbranch-no { background: yellow !important; color: #111; }
++/* dark red */
++.red.solid, .status-line.low, .low .cover-fill { background:#C21F39 }
++.low .chart { border:1px solid #C21F39 }
++.highlighted,
++.highlighted .cstat-no, .highlighted .fstat-no, .highlighted .cbranch-no{
++  background: #C21F39 !important;
++}
++/* medium red */
++.cstat-no, .fstat-no, .cbranch-no, .cbranch-no { background:#F6C6CE }
++/* light red */
++.low, .cline-no { background:#FCE1E5 }
++/* light green */
++.high, .cline-yes { background:rgb(230,245,208) }
++/* medium green */
++.cstat-yes { background:rgb(161,215,106) }
++/* dark green */
++.status-line.high, .high .cover-fill { background:rgb(77,146,33) }
++.high .chart { border:1px solid rgb(77,146,33) }
++/* dark yellow (gold) */
++.status-line.medium, .medium .cover-fill { background: #f9cd0b; }
++.medium .chart { border:1px solid #f9cd0b; }
++/* light yellow */
++.medium { background: #fff4c2; }
++
++.cstat-skip { background: #ddd; color: #111; }
++.fstat-skip { background: #ddd; color: #111 !important; }
++.cbranch-skip { background: #ddd !important; color: #111; }
++
++span.cline-neutral { background: #eaeaea; }
++
++.coverage-summary td.empty {
++    opacity: .5;
++    padding-top: 4px;
++    padding-bottom: 4px;
++    line-height: 1;
++    color: #888;
++}
++
++.cover-fill, .cover-empty {
++  display:inline-block;
++  height: 12px;
++}
++.chart {
++  line-height: 0;
++}
++.cover-empty {
++    background: white;
++}
++.cover-full {
++    border-right: none !important;
++}
++pre.prettyprint {
++    border: none !important;
++    padding: 0 !important;
++    margin: 0 !important;
++}
++.com { color: #999 !important; }
++.ignore-none { color: #999; font-weight: normal; }
++
++.wrapper {
++  min-height: 100%;
++  height: auto !important;
++  height: 100%;
++  margin: 0 auto -48px;
++}
++.footer, .push {
++  height: 48px;
++}
+diff --git a/coverage/block-navigation.js b/coverage/block-navigation.js
+new file mode 100644
+index 000000000..530d1ed2b
+--- /dev/null
++++ b/coverage/block-navigation.js
+@@ -0,0 +1,87 @@
++/* eslint-disable */
++var jumpToCode = (function init() {
++    // Classes of code we would like to highlight in the file view
++    var missingCoverageClasses = ['.cbranch-no', '.cstat-no', '.fstat-no'];
++
++    // Elements to highlight in the file listing view
++    var fileListingElements = ['td.pct.low'];
++
++    // We don't want to select elements that are direct descendants of another match
++    var notSelector = ':not(' + missingCoverageClasses.join('):not(') + ') > '; // becomes `:not(a):not(b) > `
++
++    // Selector that finds elements on the page to which we can jump
++    var selector =
++        fileListingElements.join(', ') +
++        ', ' +
++        notSelector +
++        missingCoverageClasses.join(', ' + notSelector); // becomes `:not(a):not(b) > a, :not(a):not(b) > b`
++
++    // The NodeList of matching elements
++    var missingCoverageElements = document.querySelectorAll(selector);
++
++    var currentIndex;
++
++    function toggleClass(index) {
++        missingCoverageElements
++            .item(currentIndex)
++            .classList.remove('highlighted');
++        missingCoverageElements.item(index).classList.add('highlighted');
++    }
++
++    function makeCurrent(index) {
++        toggleClass(index);
++        currentIndex = index;
++        missingCoverageElements.item(index).scrollIntoView({
++            behavior: 'smooth',
++            block: 'center',
++            inline: 'center'
++        });
++    }
++
++    function goToPrevious() {
++        var nextIndex = 0;
++        if (typeof currentIndex !== 'number' || currentIndex === 0) {
++            nextIndex = missingCoverageElements.length - 1;
++        } else if (missingCoverageElements.length > 1) {
++            nextIndex = currentIndex - 1;
++        }
++
++        makeCurrent(nextIndex);
++    }
++
++    function goToNext() {
++        var nextIndex = 0;
++
++        if (
++            typeof currentIndex === 'number' &&
++            currentIndex < missingCoverageElements.length - 1
++        ) {
++            nextIndex = currentIndex + 1;
++        }
++
++        makeCurrent(nextIndex);
++    }
++
++    return function jump(event) {
++        if (
++            document.getElementById('fileSearch') === document.activeElement &&
++            document.activeElement != null
++        ) {
++            // if we're currently focused on the search input, we don't want to navigate
++            return;
++        }
++
++        switch (event.which) {
++            case 78: // n
++            case 74: // j
++                goToNext();
++                break;
++            case 66: // b
++            case 75: // k
++            case 80: // p
++                goToPrevious();
++                break;
++        }
++    };
++})();
++window.addEventListener('keydown', jumpToCode);
+diff --git a/coverage/cobertura-coverage.xml b/coverage/cobertura-coverage.xml
+new file mode 100644
+index 000000000..67f64b9ce
+--- /dev/null
++++ b/coverage/cobertura-coverage.xml
+@@ -0,0 +1,9 @@
++<?xml version="1.0" ?>
++<!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
++<coverage lines-valid="0" lines-covered="0" line-rate="NaN" branches-valid="0" branches-covered="0" branch-rate="NaN" timestamp="1786032305275" complexity="0" version="0.1">
++  <sources>
++    <source>/usr/local/google/home/joneba/ssr-prototype/gcli-intern-project/tools/caretaker-agent/evals/pr-generation/run_outputs/test_large_golden_3.5_flash/agent_environments/gemini_cli_25182/tmp/pr/gemini-cli</source>
++  </sources>
++  <packages>
++  </packages>
++</coverage>
+diff --git a/coverage/coverage-final.json b/coverage/coverage-final.json
+new file mode 100644
+index 000000000..0967ef424
+--- /dev/null
++++ b/coverage/coverage-final.json
+@@ -0,0 +1 @@
++{}
+diff --git a/coverage/coverage-summary.json b/coverage/coverage-summary.json
+new file mode 100644
+index 000000000..ef1ae37df
+--- /dev/null
++++ b/coverage/coverage-summary.json
+@@ -0,0 +1,2 @@
++{"total": {"lines":{"total":0,"covered":0,"skipped":0,"pct":"Unknown"},"statements":{"total":0,"covered":0,"skipped":0,"pct":"Unknown"},"functions":{"total":0,"covered":0,"skipped":0,"pct":"Unknown"},"branches":{"total":0,"covered":0,"skipped":0,"pct":"Unknown"},"branchesTrue":{"total":0,"covered":0,"skipped":0,"pct":"Unknown"}}
++}
+diff --git a/coverage/favicon.png b/coverage/favicon.png
+new file mode 100644
+index 000000000..c1525b811
+Binary files /dev/null and b/coverage/favicon.png differ
+diff --git a/coverage/full-text-summary.txt b/coverage/full-text-summary.txt
+new file mode 100644
+index 000000000..f1b798261
+--- /dev/null
++++ b/coverage/full-text-summary.txt
+@@ -0,0 +1,5 @@
++----------|---------|----------|---------|---------|-------------------
++File      | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
++----------|---------|----------|---------|---------|-------------------
++All files |       0 |        0 |       0 |       0 |                   
++----------|---------|----------|---------|---------|-------------------
+diff --git a/coverage/index.html b/coverage/index.html
+new file mode 100644
+index 000000000..ec8737b2c
+--- /dev/null
++++ b/coverage/index.html
+@@ -0,0 +1,101 @@
++
++<!doctype html>
++<html lang="en">
++
++<head>
++    <title>Code coverage report for All files</title>
++    <meta charset="utf-8" />
++    <link rel="stylesheet" href="prettify.css" />
++    <link rel="stylesheet" href="base.css" />
++    <link rel="shortcut icon" type="image/x-icon" href="favicon.png" />
++    <meta name="viewport" content="width=device-width, initial-scale=1" />
++    <style type='text/css'>
++        .coverage-summary .sorter {
++            background-image: url(sort-arrow-sprite.png);
++        }
++    </style>
++</head>
++    
++<body>
++<div class='wrapper'>
++    <div class='pad1'>
++        <h1>All files</h1>
++        <div class='clearfix'>
++            
++            <div class='fl pad1y space-right2'>
++                <span class="strong">Unknown% </span>
++                <span class="quiet">Statements</span>
++                <span class='fraction'>0/0</span>
++            </div>
++        
++            
++            <div class='fl pad1y space-right2'>
++                <span class="strong">Unknown% </span>
++                <span class="quiet">Branches</span>
++                <span class='fraction'>0/0</span>
++            </div>
++        
++            
++            <div class='fl pad1y space-right2'>
++                <span class="strong">Unknown% </span>
++                <span class="quiet">Functions</span>
++                <span class='fraction'>0/0</span>
++            </div>
++        
++            
++            <div class='fl pad1y space-right2'>
++                <span class="strong">Unknown% </span>
++                <span class="quiet">Lines</span>
++                <span class='fraction'>0/0</span>
++            </div>
++        
++            
++        </div>
++        <p class="quiet">
++            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
++        </p>
++        <template id="filterTemplate">
++            <div class="quiet">
++                Filter:
++                <input type="search" id="fileSearch">
++            </div>
++        </template>
++    </div>
++    <div class='status-line medium'></div>
++    <div class="pad1">
++<table class="coverage-summary">
++<thead>
++<tr>
++   <th data-col="file" data-fmt="html" data-html="true" class="file">File</th>
++   <th data-col="pic" data-type="number" data-fmt="html" data-html="true" class="pic"></th>
++   <th data-col="statements" data-type="number" data-fmt="pct" class="pct">Statements</th>
++   <th data-col="statements_raw" data-type="number" data-fmt="html" class="abs"></th>
++   <th data-col="branches" data-type="number" data-fmt="pct" class="pct">Branches</th>
++   <th data-col="branches_raw" data-type="number" data-fmt="html" class="abs"></th>
++   <th data-col="functions" data-type="number" data-fmt="pct" class="pct">Functions</th>
++   <th data-col="functions_raw" data-type="number" data-fmt="html" class="abs"></th>
++   <th data-col="lines" data-type="number" data-fmt="pct" class="pct">Lines</th>
++   <th data-col="lines_raw" data-type="number" data-fmt="html" class="abs"></th>
++</tr>
++</thead>
++<tbody></tbody>
++</table>
++</div>
++                <div class='push'></div><!-- for sticky footer -->
++            </div><!-- /wrapper -->
++            <div class='footer quiet pad2 space-top1 center small'>
++                Code coverage generated by
++                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
++                at 2026-08-06T16:05:05.261Z
++            </div>
++        <script src="prettify.js"></script>
++        <script>
++            window.onload = function () {
++                prettyPrint();
++            };
++        </script>
++        <script src="sorter.js"></script>
++        <script src="block-navigation.js"></script>
++    </body>
++</html>
++    
+\ No newline at end of file
+diff --git a/coverage/lcov-report/base.css b/coverage/lcov-report/base.css
+new file mode 100644
+index 000000000..f418035b4
+--- /dev/null
++++ b/coverage/lcov-report/base.css
+@@ -0,0 +1,224 @@
++body, html {
++  margin:0; padding: 0;
++  height: 100%;
++}
++body {
++    font-family: Helvetica Neue, Helvetica, Arial;
++    font-size: 14px;
++    color:#333;
++}
++.small { font-size: 12px; }
++*, *:after, *:before {
++  -webkit-box-sizing:border-box;
++     -moz-box-sizing:border-box;
++          box-sizing:border-box;
++  }
++h1 { font-size: 20px; margin: 0;}
++h2 { font-size: 14px; }
++pre {
++    font: 12px/1.4 Consolas, "Liberation Mono", Menlo, Courier, monospace;
++    margin: 0;
++    padding: 0;
++    -moz-tab-size: 2;
++    -o-tab-size:  2;
++    tab-size: 2;
++}
++a { color:#0074D9; text-decoration:none; }
++a:hover { text-decoration:underline; }
++.strong { font-weight: bold; }
++.space-top1 { padding: 10px 0 0 0; }
++.pad2y { padding: 20px 0; }
++.pad1y { padding: 10px 0; }
++.pad2x { padding: 0 20px; }
++.pad2 { padding: 20px; }
++.pad1 { padding: 10px; }
++.space-left2 { padding-left:55px; }
++.space-right2 { padding-right:20px; }
++.center { text-align:center; }
++.clearfix { display:block; }
++.clearfix:after {
++  content:'';
++  display:block;
++  height:0;
++  clear:both;
++  visibility:hidden;
++  }
++.fl { float: left; }
++@media only screen and (max-width:640px) {
++  .col3 { width:100%; max-width:100%; }
++  .hide-mobile { display:none!important; }
++}
++
++.quiet {
++  color: #7f7f7f;
++  color: rgba(0,0,0,0.5);
++}
++.quiet a { opacity: 0.7; }
++
++.fraction {
++  font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
++  font-size: 10px;
++  color: #555;
++  background: #E8E8E8;
++  padding: 4px 5px;
++  border-radius: 3px;
++  vertical-align: middle;
++}
++
++div.path a:link, div.path a:visited { color: #333; }
++table.coverage {
++  border-collapse: collapse;
++  margin: 10px 0 0 0;
++  padding: 0;
++}
++
++table.coverage td {
++  margin: 0;
++  padding: 0;
++  vertical-align: top;
++}
++table.coverage td.line-count {
++    text-align: right;
++    padding: 0 5px 0 20px;
++}
++table.coverage td.line-coverage {
++    text-align: right;
++    padding-right: 10px;
++    min-width:20px;
++}
++
++table.coverage td span.cline-any {
++    display: inline-block;
++    padding: 0 5px;
++    width: 100%;
++}
++.missing-if-branch {
++    display: inline-block;
++    margin-right: 5px;
++    border-radius: 3px;
++    position: relative;
++    padding: 0 4px;
++    background: #333;
++    color: yellow;
++}
++
++.skip-if-branch {
++    display: none;
++    margin-right: 10px;
++    position: relative;
++    padding: 0 4px;
++    background: #ccc;
++    color: white;
++}
++.missing-if-branch .typ, .skip-if-branch .typ {
++    color: inherit !important;
++}
++.coverage-summary {
++  border-collapse: collapse;
++  width: 100%;
++}
++.coverage-summary tr { border-bottom: 1px solid #bbb; }
++.keyline-all { border: 1px solid #ddd; }
++.coverage-summary td, .coverage-summary th { padding: 10px; }
++.coverage-summary tbody { border: 1px solid #bbb; }
++.coverage-summary td { border-right: 1px solid #bbb; }
++.coverage-summary td:last-child { border-right: none; }
++.coverage-summary th {
++  text-align: left;
++  font-weight: normal;
++  white-space: nowrap;
++}
++.coverage-summary th.file { border-right: none !important; }
++.coverage-summary th.pct { }
++.coverage-summary th.pic,
++.coverage-summary th.abs,
++.coverage-summary td.pct,
++.coverage-summary td.abs { text-align: right; }
++.coverage-summary td.file { white-space: nowrap;  }
++.coverage-summary td.pic { min-width: 120px !important;  }
++.coverage-summary tfoot td { }
++
++.coverage-summary .sorter {
++    height: 10px;
++    width: 7px;
++    display: inline-block;
++    margin-left: 0.5em;
++    background: url(sort-arrow-sprite.png) no-repeat scroll 0 0 transparent;
++}
++.coverage-summary .sorted .sorter {
++    background-position: 0 -20px;
++}
++.coverage-summary .sorted-desc .sorter {
++    background-position: 0 -10px;
++}
++.status-line {  height: 10px; }
++/* yellow */
++.cbranch-no { background: yellow !important; color: #111; }
++/* dark red */
++.red.solid, .status-line.low, .low .cover-fill { background:#C21F39 }
++.low .chart { border:1px solid #C21F39 }
++.highlighted,
++.highlighted .cstat-no, .highlighted .fstat-no, .highlighted .cbranch-no{
++  background: #C21F39 !important;
++}
++/* medium red */
++.cstat-no, .fstat-no, .cbranch-no, .cbranch-no { background:#F6C6CE }
++/* light red */
++.low, .cline-no { background:#FCE1E5 }
++/* light green */
++.high, .cline-yes { background:rgb(230,245,208) }
++/* medium green */
++.cstat-yes { background:rgb(161,215,106) }
++/* dark green */
++.status-line.high, .high .cover-fill { background:rgb(77,146,33) }
++.high .chart { border:1px solid rgb(77,146,33) }
++/* dark yellow (gold) */
++.status-line.medium, .medium .cover-fill { background: #f9cd0b; }
++.medium .chart { border:1px solid #f9cd0b; }
++/* light yellow */
++.medium { background: #fff4c2; }
++
++.cstat-skip { background: #ddd; color: #111; }
++.fstat-skip { background: #ddd; color: #111 !important; }
++.cbranch-skip { background: #ddd !important; color: #111; }
++
++span.cline-neutral { background: #eaeaea; }
++
++.coverage-summary td.empty {
++    opacity: .5;
++    padding-top: 4px;
++    padding-bottom: 4px;
++    line-height: 1;
++    color: #888;
++}
++
++.cover-fill, .cover-empty {
++  display:inline-block;
++  height: 12px;
++}
++.chart {
++  line-height: 0;
++}
++.cover-empty {
++    background: white;
++}
++.cover-full {
++    border-right: none !important;
++}
++pre.prettyprint {
++    border: none !important;
++    padding: 0 !important;
++    margin: 0 !important;
++}
++.com { color: #999 !important; }
++.ignore-none { color: #999; font-weight: normal; }
++
++.wrapper {
++  min-height: 100%;
++  height: auto !important;
++  height: 100%;
++  margin: 0 auto -48px;
++}
++.footer, .push {
++  height: 48px;
++}
+diff --git a/coverage/lcov-report/block-navigation.js b/coverage/lcov-report/block-navigation.js
+new file mode 100644
+index 000000000..530d1ed2b
+--- /dev/null
++++ b/coverage/lcov-report/block-navigation.js
+@@ -0,0 +1,87 @@
++/* eslint-disable */
++var jumpToCode = (function init() {
++    // Classes of code we would like to highlight in the file view
++    var missingCoverageClasses = ['.cbranch-no', '.cstat-no', '.fstat-no'];
++
++    // Elements to highlight in the file listing view
++    var fileListingElements = ['td.pct.low'];
++
++    // We don't want to select elements that are direct descendants of another match
++    var notSelector = ':not(' + missingCoverageClasses.join('):not(') + ') > '; // becomes `:not(a):not(b) > `
++
++    // Selector that finds elements on the page to which we can jump
++    var selector =
++        fileListingElements.join(', ') +
++        ', ' +
++        notSelector +
++        missingCoverageClasses.join(', ' + notSelector); // becomes `:not(a):not(b) > a, :not(a):not(b) > b`
++
++    // The NodeList of matching elements
++    var missingCoverageElements = document.querySelectorAll(selector);
++
++    var currentIndex;
++
++    function toggleClass(index) {
++        missingCoverageElements
++            .item(currentIndex)
++            .classList.remove('highlighted');
++        missingCoverageElements.item(index).classList.add('highlighted');
++    }
++
++    function makeCurrent(index) {
++        toggleClass(index);
++        currentIndex = index;
++        missingCoverageElements.item(index).scrollIntoView({
++            behavior: 'smooth',
++            block: 'center',
++            inline: 'center'
++        });
++    }
++
++    function goToPrevious() {
++        var nextIndex = 0;
++        if (typeof currentIndex !== 'number' || currentIndex === 0) {
++            nextIndex = missingCoverageElements.length - 1;
++        } else if (missingCoverageElements.length > 1) {
++            nextIndex = currentIndex - 1;
++        }
++
++        makeCurrent(nextIndex);
++    }
++
++    function goToNext() {
++        var nextIndex = 0;
++
++        if (
++            typeof currentIndex === 'number' &&
++            currentIndex < missingCoverageElements.length - 1
++        ) {
++            nextIndex = currentIndex + 1;
++        }
++
++        makeCurrent(nextIndex);
++    }
++
++    return function jump(event) {
++        if (
++            document.getElementById('fileSearch') === document.activeElement &&
++            document.activeElement != null
++        ) {
++            // if we're currently focused on the search input, we don't want to navigate
++            return;
++        }
++
++        switch (event.which) {
++            case 78: // n
++            case 74: // j
++                goToNext();
++                break;
++            case 66: // b
++            case 75: // k
++            case 80: // p
++                goToPrevious();
++                break;
++        }
++    };
++})();
++window.addEventListener('keydown', jumpToCode);
+diff --git a/coverage/lcov-report/favicon.png b/coverage/lcov-report/favicon.png
+new file mode 100644
+index 000000000..c1525b811
+Binary files /dev/null and b/coverage/lcov-report/favicon.png differ
+diff --git a/coverage/lcov-report/index.html b/coverage/lcov-report/index.html
+new file mode 100644
+index 000000000..20fa74ffc
+--- /dev/null
++++ b/coverage/lcov-report/index.html
+@@ -0,0 +1,101 @@
++
++<!doctype html>
++<html lang="en">
++
++<head>
++    <title>Code coverage report for All files</title>
++    <meta charset="utf-8" />
++    <link rel="stylesheet" href="prettify.css" />
++    <link rel="stylesheet" href="base.css" />
++    <link rel="shortcut icon" type="image/x-icon" href="favicon.png" />
++    <meta name="viewport" content="width=device-width, initial-scale=1" />
++    <style type='text/css'>
++        .coverage-summary .sorter {
++            background-image: url(sort-arrow-sprite.png);
++        }
++    </style>
++</head>
++    
++<body>
++<div class='wrapper'>
++    <div class='pad1'>
++        <h1>All files</h1>
++        <div class='clearfix'>
++            
++            <div class='fl pad1y space-right2'>
++                <span class="strong">Unknown% </span>
++                <span class="quiet">Statements</span>
++                <span class='fraction'>0/0</span>
++            </div>
++        
++            
++            <div class='fl pad1y space-right2'>
++                <span class="strong">Unknown% </span>
++                <span class="quiet">Branches</span>
++                <span class='fraction'>0/0</span>
++            </div>
++        
++            
++            <div class='fl pad1y space-right2'>
++                <span class="strong">Unknown% </span>
++                <span class="quiet">Functions</span>
++                <span class='fraction'>0/0</span>
++            </div>
++        
++            
++            <div class='fl pad1y space-right2'>
++                <span class="strong">Unknown% </span>
++                <span class="quiet">Lines</span>
++                <span class='fraction'>0/0</span>
++            </div>
++        
++            
++        </div>
++        <p class="quiet">
++            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
++        </p>
++        <template id="filterTemplate">
++            <div class="quiet">
++                Filter:
++                <input type="search" id="fileSearch">
++            </div>
++        </template>
++    </div>
++    <div class='status-line medium'></div>
++    <div class="pad1">
++<table class="coverage-summary">
++<thead>
++<tr>
++   <th data-col="file" data-fmt="html" data-html="true" class="file">File</th>
++   <th data-col="pic" data-type="number" data-fmt="html" data-html="true" class="pic"></th>
++   <th data-col="statements" data-type="number" data-fmt="pct" class="pct">Statements</th>
++   <th data-col="statements_raw" data-type="number" data-fmt="html" class="abs"></th>
++   <th data-col="branches" data-type="number" data-fmt="pct" class="pct">Branches</th>
++   <th data-col="branches_raw" data-type="number" data-fmt="html" class="abs"></th>
++   <th data-col="functions" data-type="number" data-fmt="pct" class="pct">Functions</th>
++   <th data-col="functions_raw" data-type="number" data-fmt="html" class="abs"></th>
++   <th data-col="lines" data-type="number" data-fmt="pct" class="pct">Lines</th>
++   <th data-col="lines_raw" data-type="number" data-fmt="html" class="abs"></th>
++</tr>
++</thead>
++<tbody></tbody>
++</table>
++</div>
++                <div class='push'></div><!-- for sticky footer -->
++            </div><!-- /wrapper -->
++            <div class='footer quiet pad2 space-top1 center small'>
++                Code coverage generated by
++                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
++                at 2026-08-06T16:05:05.268Z
++            </div>
++        <script src="prettify.js"></script>
++        <script>
++            window.onload = function () {
++                prettyPrint();
++            };
++        </script>
++        <script src="sorter.js"></script>
++        <script src="block-navigation.js"></script>
++    </body>
++</html>
++    
+\ No newline at end of file
+diff --git a/coverage/lcov-report/prettify.css b/coverage/lcov-report/prettify.css
+new file mode 100644
+index 000000000..b317a7cda
+--- /dev/null
++++ b/coverage/lcov-report/prettify.css
+@@ -0,0 +1 @@
++.pln{color:#000}@media screen{.str{color:#080}.kwd{color:#008}.com{color:#800}.typ{color:#606}.lit{color:#066}.pun,.opn,.clo{color:#660}.tag{color:#008}.atn{color:#606}.atv{color:#080}.dec,.var{color:#606}.fun{color:red}}@media print,projection{.str{color:#060}.kwd{color:#006;font-weight:bold}.com{color:#600;font-style:italic}.typ{color:#404;font-weight:bold}.lit{color:#044}.pun,.opn,.clo{color:#440}.tag{color:#006;font-weight:bold}.atn{color:#404}.atv{color:#060}}pre.prettyprint{padding:2px;border:1px solid #888}ol.linenums{margin-top:0;margin-bottom:0}li.L0,li.L1,li.L2,li.L3,li.L5,li.L6,li.L7,li.L8{list-style-type:none}li.L1,li.L3,li.L5,li.L7,li.L9{background:#eee}
+diff --git a/coverage/lcov-report/prettify.js b/coverage/lcov-report/prettify.js
+new file mode 100644
+index 000000000..b3225238f
+--- /dev/null
++++ b/coverage/lcov-report/prettify.js
+@@ -0,0 +1,2 @@
++/* eslint-disable */
++window.PR_SHOULD_USE_CONTINUATION=true;(function(){var h=["break,continue,do,else,for,if,return,while"];var u=[h,"auto,case,char,const,default,double,enum,extern,float,goto,int,long,register,short,signed,sizeof,static,struct,switch,typedef,union,unsigned,void,volatile"];var p=[u,"catch,class,delete,false,import,new,operator,private,protected,public,this,throw,true,try,typeof"];var l=[p,"alignof,align_union,asm,axiom,bool,concept,concept_map,const_cast,constexpr,decltype,dynamic_cast,explicit,export,friend,inline,late_check,mutable,namespace,nullptr,reinterpret_cast,static_assert,static_cast,template,typeid,typename,using,virtual,where"];var x=[p,"abstract,boolean,byte,extends,final,finally,implements,import,instanceof,null,native,package,strictfp,super,synchronized,throws,transient"];var R=[x,"as,base,by,checked,decimal,delegate,descending,dynamic,event,fixed,foreach,from,group,implicit,in,interface,internal,into,is,lock,object,out,override,orderby,params,partial,readonly,ref,sbyte,sealed,stackalloc,string,select,uint,ulong,unchecked,unsafe,ushort,var"];var r="all,and,by,catch,class,else,extends,false,finally,for,if,in,is,isnt,loop,new,no,not,null,of,off,on,or,return,super,then,true,try,unless,until,when,while,yes";var w=[p,"debugger,eval,export,function,get,null,set,undefined,var,with,Infinity,NaN"];var s="caller,delete,die,do,dump,elsif,eval,exit,foreach,for,goto,if,import,last,local,my,next,no,our,print,package,redo,require,sub,undef,unless,until,use,wantarray,while,BEGIN,END";var I=[h,"and,as,assert,class,def,del,elif,except,exec,finally,from,global,import,in,is,lambda,nonlocal,not,or,pass,print,raise,try,with,yield,False,True,None"];var f=[h,"alias,and,begin,case,class,def,defined,elsif,end,ensure,false,in,module,next,nil,not,or,redo,rescue,retry,self,super,then,true,undef,unless,until,when,yield,BEGIN,END"];var H=[h,"case,done,elif,esac,eval,fi,function,in,local,set,then,until"];var A=[l,R,w,s+I,f,H];var e=/^(DIR|FILE|vector|(de|priority_)?queue|list|stack|(const_)?iterator|(multi)?(set|map)|bitset|u?(int|float)\d*)/;var C="str";var z="kwd";var j="com";var O="typ";var G="lit";var L="pun";var F="pln";var m="tag";var E="dec";var J="src";var P="atn";var n="atv";var N="nocode";var M="(?:^^\\.?|[+-]|\\!|\\!=|\\!==|\\#|\\%|\\%=|&|&&|&&=|&=|\\(|\\*|\\*=|\\+=|\\,|\\-=|\\->|\\/|\\/=|:|::|\\;|<|<<|<<=|<=|=|==|===|>|>=|>>|>>=|>>>|>>>=|\\?|\\@|\\[|\\^|\\^=|\\^\\^|\\^\\^=|\\{|\\||\\|=|\\|\\||\\|\\|=|\\~|break|case|continue|delete|do|else|finally|instanceof|return|throw|try|typeof)\\s*";function k(Z){var ad=0;var S=false;var ac=false;for(var V=0,U=Z.length;V<U;++V){var ae=Z[V];if(ae.ignoreCase){ac=true}else{if(/[a-z]/i.test(ae.source.replace(/\\u[0-9a-f]{4}|\\x[0-9a-f]{2}|\\[^ux]/gi,""))){S=true;ac=false;break}}}var Y={b:8,t:9,n:10,v:11,f:12,r:13};function ab(ah){var ag=ah.charCodeAt(0);if(ag!==92){return ag}var af=ah.charAt(1);ag=Y[af];if(ag){return ag}else{if("0"<=af&&af<="7"){return parseInt(ah.substring(1),8)}else{if(af==="u"||af==="x"){return parseInt(ah.substring(2),16)}else{return ah.charCodeAt(1)}}}}function T(af){if(af<32){return(af<16?"\\x0":"\\x")+af.toString(16)}var ag=String.fromCharCode(af);if(ag==="\\"||ag==="-"||ag==="["||ag==="]"){ag="\\"+ag}return ag}function X(am){var aq=am.substring(1,am.length-1).match(new RegExp("\\\\u[0-9A-Fa-f]{4}|\\\\x[0-9A-Fa-f]{2}|\\\\[0-3][0-7]{0,2}|\\\\[0-7]{1,2}|\\\\[\\s\\S]|-|[^-\\\\]","g"));var ak=[];var af=[];var ao=aq[0]==="^";for(var ar=ao?1:0,aj=aq.length;ar<aj;++ar){var ah=aq[ar];if(/\\[bdsw]/i.test(ah)){ak.push(ah)}else{var ag=ab(ah);var al;if(ar+2<aj&&"-"===aq[ar+1]){al=ab(aq[ar+2]);ar+=2}else{al=ag}af.push([ag,al]);if(!(al<65||ag>122)){if(!(al<65||ag>90)){af.push([Math.max(65,ag)|32,Math.min(al,90)|32])}if(!(al<97||ag>122)){af.push([Math.max(97,ag)&~32,Math.min(al,122)&~32])}}}}af.sort(function(av,au){return(av[0]-au[0])||(au[1]-av[1])});var ai=[];var ap=[NaN,NaN];for(var ar=0;ar<af.length;++ar){var at=af[ar];if(at[0]<=ap[1]+1){ap[1]=Math.max(ap[1],at[1])}else{ai.push(ap=at)}}var an=["["];if(ao){an.push("^")}an.push.apply(an,ak);for(var ar=0;ar<ai.length;++ar){var at=ai[ar];an.push(T(at[0]));if(at[1]>at[0]){if(at[1]+1>at[0]){an.push("-")}an.push(T(at[1]))}}an.push("]");return an.join("")}function W(al){var aj=al.source.match(new RegExp("(?:\\[(?:[^\\x5C\\x5D]|\\\\[\\s\\S])*\\]|\\\\u[A-Fa-f0-9]{4}|\\\\x[A-Fa-f0-9]{2}|\\\\[0-9]+|\\\\[^ux0-9]|\\(\\?[:!=]|[\\(\\)\\^]|[^\\x5B\\x5C\\(\\)\\^]+)","g"));var ah=aj.length;var an=[];for(var ak=0,am=0;ak<ah;++ak){var ag=aj[ak];if(ag==="("){++am}else{if("\\"===ag.charAt(0)){var af=+ag.substring(1);if(af&&af<=am){an[af]=-1}}}}for(var ak=1;ak<an.length;++ak){if(-1===an[ak]){an[ak]=++ad}}for(var ak=0,am=0;ak<ah;++ak){var ag=aj[ak];if(ag==="("){++am;if(an[am]===undefined){aj[ak]="(?:"}}else{if("\\"===ag.charAt(0)){var af=+ag.substring(1);if(af&&af<=am){aj[ak]="\\"+an[am]}}}}for(var ak=0,am=0;ak<ah;++ak){if("^"===aj[ak]&&"^"!==aj[ak+1]){aj[ak]=""}}if(al.ignoreCase&&S){for(var ak=0;ak<ah;++ak){var ag=aj[ak];var ai=ag.charAt(0);if(ag.length>=2&&ai==="["){aj[ak]=X(ag)}else{if(ai!=="\\"){aj[ak]=ag.replace(/[a-zA-Z]/g,function(ao){var ap=ao.charCodeAt(0);return"["+String.fromCharCode(ap&~32,ap|32)+"]"})}}}}return aj.join("")}var aa=[];for(var V=0,U=Z.length;V<U;++V){var ae=Z[V];if(ae.global||ae.multiline){throw new Error(""+ae)}aa.push("(?:"+W(ae)+")")}return new RegExp(aa.join("|"),ac?"gi":"g")}function a(V){var U=/(?:^|\s)nocode(?:\s|$)/;var X=[];var T=0;var Z=[];var W=0;var S;if(V.currentStyle){S=V.currentStyle.whiteSpace}else{if(window.getComputedStyle){S=document.defaultView.getComputedStyle(V,null).getPropertyValue("white-space")}}var Y=S&&"pre"===S.substring(0,3);function aa(ab){switch(ab.nodeType){case 1:if(U.test(ab.className)){return}for(var ae=ab.firstChild;ae;ae=ae.nextSibling){aa(ae)}var ad=ab.nodeName;if("BR"===ad||"LI"===ad){X[W]="\n";Z[W<<1]=T++;Z[(W++<<1)|1]=ab}break;case 3:case 4:var ac=ab.nodeValue;if(ac.length){if(!Y){ac=ac.replace(/[ \t\r\n]+/g," ")}else{ac=ac.replace(/\r\n?/g,"\n")}X[W]=ac;Z[W<<1]=T;T+=ac.length;Z[(W++<<1)|1]=ab}break}}aa(V);return{sourceCode:X.join("").replace(/\n$/,""),spans:Z}}function B(S,U,W,T){if(!U){return}var V={sourceCode:U,basePos:S};W(V);T.push.apply(T,V.decorations)}var v=/\S/;function o(S){var V=undefined;for(var U=S.firstChild;U;U=U.nextSibling){var T=U.nodeType;V=(T===1)?(V?S:U):(T===3)?(v.test(U.nodeValue)?S:V):V}return V===S?undefined:V}function g(U,T){var S={};var V;(function(){var ad=U.concat(T);var ah=[];var ag={};for(var ab=0,Z=ad.length;ab<Z;++ab){var Y=ad[ab];var ac=Y[3];if(ac){for(var ae=ac.length;--ae>=0;){S[ac.charAt(ae)]=Y}}var af=Y[1];var aa=""+af;if(!ag.hasOwnProperty(aa)){ah.push(af);ag[aa]=null}}ah.push(/[\0-\uffff]/);V=k(ah)})();var X=T.length;var W=function(ah){var Z=ah.sourceCode,Y=ah.basePos;var ad=[Y,F];var af=0;var an=Z.match(V)||[];var aj={};for(var ae=0,aq=an.length;ae<aq;++ae){var ag=an[ae];var ap=aj[ag];var ai=void 0;var am;if(typeof ap==="string"){am=false}else{var aa=S[ag.charAt(0)];if(aa){ai=ag.match(aa[1]);ap=aa[0]}else{for(var ao=0;ao<X;++ao){aa=T[ao];ai=ag.match(aa[1]);if(ai){ap=aa[0];break}}if(!ai){ap=F}}am=ap.length>=5&&"lang-"===ap.substring(0,5);if(am&&!(ai&&typeof ai[1]==="string")){am=false;ap=J}if(!am){aj[ag]=ap}}var ab=af;af+=ag.length;if(!am){ad.push(Y+ab,ap)}else{var al=ai[1];var ak=ag.indexOf(al);var ac=ak+al.length;if(ai[2]){ac=ag.length-ai[2].length;ak=ac-al.length}var ar=ap.substring(5);B(Y+ab,ag.substring(0,ak),W,ad);B(Y+ab+ak,al,q(ar,al),ad);B(Y+ab+ac,ag.substring(ac),W,ad)}}ah.decorations=ad};return W}function i(T){var W=[],S=[];if(T.tripleQuotedStrings){W.push([C,/^(?:\'\'\'(?:[^\'\\]|\\[\s\S]|\'{1,2}(?=[^\']))*(?:\'\'\'|$)|\"\"\"(?:[^\"\\]|\\[\s\S]|\"{1,2}(?=[^\"]))*(?:\"\"\"|$)|\'(?:[^\\\']|\\[\s\S])*(?:\'|$)|\"(?:[^\\\"]|\\[\s\S])*(?:\"|$))/,null,"'\""])}else{if(T.multiLineStrings){W.push([C,/^(?:\'(?:[^\\\']|\\[\s\S])*(?:\'|$)|\"(?:[^\\\"]|\\[\s\S])*(?:\"|$)|\`(?:[^\\\`]|\\[\s\S])*(?:\`|$))/,null,"'\"`"])}else{W.push([C,/^(?:\'(?:[^\\\'\r\n]|\\.)*(?:\'|$)|\"(?:[^\\\"\r\n]|\\.)*(?:\"|$))/,null,"\"'"])}}if(T.verbatimStrings){S.push([C,/^@\"(?:[^\"]|\"\")*(?:\"|$)/,null])}var Y=T.hashComments;if(Y){if(T.cStyleComments){if(Y>1){W.push([j,/^#(?:##(?:[^#]|#(?!##))*(?:###|$)|.*)/,null,"#"])}else{W.push([j,/^#(?:(?:define|elif|else|endif|error|ifdef|include|ifndef|line|pragma|undef|warning)\b|[^\r\n]*)/,null,"#"])}S.push([C,/^<(?:(?:(?:\.\.\/)*|\/?)(?:[\w-]+(?:\/[\w-]+)+)?[\w-]+\.h|[a-z]\w*)>/,null])}else{W.push([j,/^#[^\r\n]*/,null,"#"])}}if(T.cStyleComments){S.push([j,/^\/\/[^\r\n]*/,null]);S.push([j,/^\/\*[\s\S]*?(?:\*\/|$)/,null])}if(T.regexLiterals){var X=("/(?=[^/*])(?:[^/\\x5B\\x5C]|\\x5C[\\s\\S]|\\x5B(?:[^\\x5C\\x5D]|\\x5C[\\s\\S])*(?:\\x5D|$))+/");S.push(["lang-regex",new RegExp("^"+M+"("+X+")")])}var V=T.types;if(V){S.push([O,V])}var U=(""+T.keywords).replace(/^ | $/g,"");if(U.length){S.push([z,new RegExp("^(?:"+U.replace(/[\s,]+/g,"|")+")\\b"),null])}W.push([F,/^\s+/,null," \r\n\t\xA0"]);S.push([G,/^@[a-z_$][a-z_$@0-9]*/i,null],[O,/^(?:[@_]?[A-Z]+[a-z][A-Za-z_$@0-9]*|\w+_t\b)/,null],[F,/^[a-z_$][a-z_$@0-9]*/i,null],[G,new RegExp("^(?:0x[a-f0-9]+|(?:\\d(?:_\\d+)*\\d*(?:\\.\\d*)?|\\.\\d\\+)(?:e[+\\-]?\\d+)?)[a-z]*","i"),null,"0123456789"],[F,/^\\[\s\S]?/,null],[L,/^.[^\s\w\.$@\'\"\`\/\#\\]*/,null]);return g(W,S)}var K=i({keywords:A,hashComments:true,cStyleComments:true,multiLineStrings:true,regexLiterals:true});function Q(V,ag){var U=/(?:^|\s)nocode(?:\s|$)/;var ab=/\r\n?|\n/;var ac=V.ownerDocument;var S;if(V.currentStyle){S=V.currentStyle.whiteSpace}else{if(window.getComputedStyle){S=ac.defaultView.getComputedStyle(V,null).getPropertyValue("white-space")}}var Z=S&&"pre"===S.substring(0,3);var af=ac.createElement("LI");while(V.firstChild){af.appendChild(V.firstChild)}var W=[af];function ae(al){switch(al.nodeType){case 1:if(U.test(al.className)){break}if("BR"===al.nodeName){ad(al);if(al.parentNode){al.parentNode.removeChild(al)}}else{for(var an=al.firstChild;an;an=an.nextSibling){ae(an)}}break;case 3:case 4:if(Z){var am=al.nodeValue;var aj=am.match(ab);if(aj){var ai=am.substring(0,aj.index);al.nodeValue=ai;var ah=am.substring(aj.index+aj[0].length);if(ah){var ak=al.parentNode;ak.insertBefore(ac.createTextNode(ah),al.nextSibling)}ad(al);if(!ai){al.parentNode.removeChild(al)}}}break}}function ad(ak){while(!ak.nextSibling){ak=ak.parentNode;if(!ak){return}}function ai(al,ar){var aq=ar?al.cloneNode(false):al;var ao=al.parentNode;if(ao){var ap=ai(ao,1);var an=al.nextSibling;ap.appendChild(aq);for(var am=an;am;am=an){an=am.nextSibling;ap.appendChild(am)}}return aq}var ah=ai(ak.nextSibling,0);for(var aj;(aj=ah.parentNode)&&aj.nodeType===1;){ah=aj}W.push(ah)}for(var Y=0;Y<W.length;++Y){ae(W[Y])}if(ag===(ag|0)){W[0].setAttribute("value",ag)}var aa=ac.createElement("OL");aa.className="linenums";var X=Math.max(0,((ag-1))|0)||0;for(var Y=0,T=W.length;Y<T;++Y){af=W[Y];af.className="L"+((Y+X)%10);if(!af.firstChild){af.appendChild(ac.createTextNode("\xA0"))}aa.appendChild(af)}V.appendChild(aa)}function D(ac){var aj=/\bMSIE\b/.test(navigator.userAgent);var am=/\n/g;var al=ac.sourceCode;var an=al.length;var V=0;var aa=ac.spans;var T=aa.length;var ah=0;var X=ac.decorations;var Y=X.length;var Z=0;X[Y]=an;var ar,aq;for(aq=ar=0;aq<Y;){if(X[aq]!==X[aq+2]){X[ar++]=X[aq++];X[ar++]=X[aq++]}else{aq+=2}}Y=ar;for(aq=ar=0;aq<Y;){var at=X[aq];var ab=X[aq+1];var W=aq+2;while(W+2<=Y&&X[W+1]===ab){W+=2}X[ar++]=at;X[ar++]=ab;aq=W}Y=X.length=ar;var ae=null;while(ah<T){var af=aa[ah];var S=aa[ah+2]||an;var ag=X[Z];var ap=X[Z+2]||an;var W=Math.min(S,ap);var ak=aa[ah+1];var U;if(ak.nodeType!==1&&(U=al.substring(V,W))){if(aj){U=U.replace(am,"\r")}ak.nodeValue=U;var ai=ak.ownerDocument;var ao=ai.createElement("SPAN");ao.className=X[Z+1];var ad=ak.parentNode;ad.replaceChild(ao,ak);ao.appendChild(ak);if(V<S){aa[ah+1]=ak=ai.createTextNode(al.substring(W,S));ad.insertBefore(ak,ao.nextSibling)}}V=W;if(V>=S){ah+=2}if(V>=ap){Z+=2}}}var t={};function c(U,V){for(var S=V.length;--S>=0;){var T=V[S];if(!t.hasOwnProperty(T)){t[T]=U}else{if(window.console){console.warn("cannot override language handler %s",T)}}}}function q(T,S){if(!(T&&t.hasOwnProperty(T))){T=/^\s*</.test(S)?"default-markup":"default-code"}return t[T]}c(K,["default-code"]);c(g([],[[F,/^[^<?]+/],[E,/^<!\w[^>]*(?:>|$)/],[j,/^<\!--[\s\S]*?(?:-\->|$)/],["lang-",/^<\?([\s\S]+?)(?:\?>|$)/],["lang-",/^<%([\s\S]+?)(?:%>|$)/],[L,/^(?:<[%?]|[%?]>)/],["lang-",/^<xmp\b[^>]*>([\s\S]+?)<\/xmp\b[^>]*>/i],["lang-js",/^<script\b[^>]*>([\s\S]*?)(<\/script\b[^>]*>)/i],["lang-css",/^<style\b[^>]*>([\s\S]*?)(<\/style\b[^>]*>)/i],["lang-in.tag",/^(<\/?[a-z][^<>]*>)/i]]),["default-markup","htm","html","mxml","xhtml","xml","xsl"]);c(g([[F,/^[\s]+/,null," \t\r\n"],[n,/^(?:\"[^\"]*\"?|\'[^\']*\'?)/,null,"\"'"]],[[m,/^^<\/?[a-z](?:[\w.:-]*\w)?|\/?>$/i],[P,/^(?!style[\s=]|on)[a-z](?:[\w:-]*\w)?/i],["lang-uq.val",/^=\s*([^>\'\"\s]*(?:[^>\'\"\s\/]|\/(?=\s)))/],[L,/^[=<>\/]+/],["lang-js",/^on\w+\s*=\s*\"([^\"]+)\"/i],["lang-js",/^on\w+\s*=\s*\'([^\']+)\'/i],["lang-js",/^on\w+\s*=\s*([^\"\'>\s]+)/i],["lang-css",/^style\s*=\s*\"([^\"]+)\"/i],["lang-css",/^style\s*=\s*\'([^\']+)\'/i],["lang-css",/^style\s*=\s*([^\"\'>\s]+)/i]]),["in.tag"]);c(g([],[[n,/^[\s\S]+/]]),["uq.val"]);c(i({keywords:l,hashComments:true,cStyleComments:true,types:e}),["c","cc","cpp","cxx","cyc","m"]);c(i({keywords:"null,true,false"}),["json"]);c(i({keywords:R,hashComments:true,cStyleComments:true,verbatimStrings:true,types:e}),["cs"]);c(i({keywords:x,cStyleComments:true}),["java"]);c(i({keywords:H,hashComments:true,multiLineStrings:true}),["bsh","csh","sh"]);c(i({keywords:I,hashComments:true,multiLineStrings:true,tripleQuotedStrings:true}),["cv","py"]);c(i({keywords:s,hashComments:true,multiLineStrings:true,regexLiterals:true}),["perl","pl","pm"]);c(i({keywords:f,hashComments:true,multiLineStrings:true,regexLiterals:true}),["rb"]);c(i({keywords:w,cStyleComments:true,regexLiterals:true}),["js"]);c(i({keywords:r,hashComments:3,cStyleComments:true,multilineStrings:true,tripleQuotedStrings:true,regexLiterals:true}),["coffee"]);c(g([],[[C,/^[\s\S]+/]]),["regex"]);function d(V){var U=V.langExtension;try{var S=a(V.sourceNode);var T=S.sourceCode;V.sourceCode=T;V.spans=S.spans;V.basePos=0;q(U,T)(V);D(V)}catch(W){if("console" in window){console.log(W&&W.stack?W.stack:W)}}}function y(W,V,U){var S=document.createElement("PRE");S.innerHTML=W;if(U){Q(S,U)}var T={langExtension:V,numberLines:U,sourceNode:S};d(T);return S.innerHTML}function b(ad){function Y(af){return document.getElementsByTagName(af)}var ac=[Y("pre"),Y("code"),Y("xmp")];var T=[];for(var aa=0;aa<ac.length;++aa){for(var Z=0,V=ac[aa].length;Z<V;++Z){T.push(ac[aa][Z])}}ac=null;var W=Date;if(!W.now){W={now:function(){return +(new Date)}}}var X=0;var S;var ab=/\blang(?:uage)?-([\w.]+)(?!\S)/;var ae=/\bprettyprint\b/;function U(){var ag=(window.PR_SHOULD_USE_CONTINUATION?W.now()+250:Infinity);for(;X<T.length&&W.now()<ag;X++){var aj=T[X];var ai=aj.className;if(ai.indexOf("prettyprint")>=0){var ah=ai.match(ab);var am;if(!ah&&(am=o(aj))&&"CODE"===am.tagName){ah=am.className.match(ab)}if(ah){ah=ah[1]}var al=false;for(var ak=aj.parentNode;ak;ak=ak.parentNode){if((ak.tagName==="pre"||ak.tagName==="code"||ak.tagName==="xmp")&&ak.className&&ak.className.indexOf("prettyprint")>=0){al=true;break}}if(!al){var af=aj.className.match(/\blinenums\b(?::(\d+))?/);af=af?af[1]&&af[1].length?+af[1]:true:false;if(af){Q(aj,af)}S={langExtension:ah,sourceNode:aj,numberLines:af};d(S)}}}if(X<T.length){setTimeout(U,250)}else{if(ad){ad()}}}U()}window.prettyPrintOne=y;window.prettyPrint=b;window.PR={createSimpleLexer:g,registerLangHandler:c,sourceDecorator:i,PR_ATTRIB_NAME:P,PR_ATTRIB_VALUE:n,PR_COMMENT:j,PR_DECLARATION:E,PR_KEYWORD:z,PR_LITERAL:G,PR_NOCODE:N,PR_PLAIN:F,PR_PUNCTUATION:L,PR_SOURCE:J,PR_STRING:C,PR_TAG:m,PR_TYPE:O}})();PR.registerLangHandler(PR.createSimpleLexer([],[[PR.PR_DECLARATION,/^<!\w[^>]*(?:>|$)/],[PR.PR_COMMENT,/^<\!--[\s\S]*?(?:-\->|$)/],[PR.PR_PUNCTUATION,/^(?:<[%?]|[%?]>)/],["lang-",/^<\?([\s\S]+?)(?:\?>|$)/],["lang-",/^<%([\s\S]+?)(?:%>|$)/],["lang-",/^<xmp\b[^>]*>([\s\S]+?)<\/xmp\b[^>]*>/i],["lang-handlebars",/^<script\b[^>]*type\s*=\s*['"]?text\/x-handlebars-template['"]?\b[^>]*>([\s\S]*?)(<\/script\b[^>]*>)/i],["lang-js",/^<script\b[^>]*>([\s\S]*?)(<\/script\b[^>]*>)/i],["lang-css",/^<style\b[^>]*>([\s\S]*?)(<\/style\b[^>]*>)/i],["lang-in.tag",/^(<\/?[a-z][^<>]*>)/i],[PR.PR_DECLARATION,/^{{[#^>/]?\s*[\w.][^}]*}}/],[PR.PR_DECLARATION,/^{{&?\s*[\w.][^}]*}}/],[PR.PR_DECLARATION,/^{{{>?\s*[\w.][^}]*}}}/],[PR.PR_COMMENT,/^{{![^}]*}}/]]),["handlebars","hbs"]);PR.registerLangHandler(PR.createSimpleLexer([[PR.PR_PLAIN,/^[ \t\r\n\f]+/,null," \t\r\n\f"]],[[PR.PR_STRING,/^\"(?:[^\n\r\f\\\"]|\\(?:\r\n?|\n|\f)|\\[\s\S])*\"/,null],[PR.PR_STRING,/^\'(?:[^\n\r\f\\\']|\\(?:\r\n?|\n|\f)|\\[\s\S])*\'/,null],["lang-css-str",/^url\(([^\)\"\']*)\)/i],[PR.PR_KEYWORD,/^(?:url|rgb|\!important|@import|@page|@media|@charset|inherit)(?=[^\-\w]|$)/i,null],["lang-css-kw",/^(-?(?:[_a-z]|(?:\\[0-9a-f]+ ?))(?:[_a-z0-9\-]|\\(?:\\[0-9a-f]+ ?))*)\s*:/i],[PR.PR_COMMENT,/^\/\*[^*]*\*+(?:[^\/*][^*]*\*+)*\//],[PR.PR_COMMENT,/^(?:<!--|-->)/],[PR.PR_LITERAL,/^(?:\d+|\d*\.\d+)(?:%|[a-z]+)?/i],[PR.PR_LITERAL,/^#(?:[0-9a-f]{3}){1,2}/i],[PR.PR_PLAIN,/^-?(?:[_a-z]|(?:\\[\da-f]+ ?))(?:[_a-z\d\-]|\\(?:\\[\da-f]+ ?))*/i],[PR.PR_PUNCTUATION,/^[^\s\w\'\"]+/]]),["css"]);PR.registerLangHandler(PR.createSimpleLexer([],[[PR.PR_KEYWORD,/^-?(?:[_a-z]|(?:\\[\da-f]+ ?))(?:[_a-z\d\-]|\\(?:\\[\da-f]+ ?))*/i]]),["css-kw"]);PR.registerLangHandler(PR.createSimpleLexer([],[[PR.PR_STRING,/^[^\)\"\']+/]]),["css-str"]);
+diff --git a/coverage/lcov-report/sort-arrow-sprite.png b/coverage/lcov-report/sort-arrow-sprite.png
+new file mode 100644
+index 000000000..6ed68316e
+Binary files /dev/null and b/coverage/lcov-report/sort-arrow-sprite.png differ
+diff --git a/coverage/lcov-report/sorter.js b/coverage/lcov-report/sorter.js
+new file mode 100644
+index 000000000..4ed70ae5a
+--- /dev/null
++++ b/coverage/lcov-report/sorter.js
+@@ -0,0 +1,210 @@
++/* eslint-disable */
++var addSorting = (function() {
++    'use strict';
++    var cols,
++        currentSort = {
++            index: 0,
++            desc: false
++        };
++
++    // returns the summary table element
++    function getTable() {
++        return document.querySelector('.coverage-summary');
++    }
++    // returns the thead element of the summary table
++    function getTableHeader() {
++        return getTable().querySelector('thead tr');
++    }
++    // returns the tbody element of the summary table
++    function getTableBody() {
++        return getTable().querySelector('tbody');
++    }
++    // returns the th element for nth column
++    function getNthColumn(n) {
++        return getTableHeader().querySelectorAll('th')[n];
++    }
++
++    function onFilterInput() {
++        const searchValue = document.getElementById('fileSearch').value;
++        const rows = document.getElementsByTagName('tbody')[0].children;
++
++        // Try to create a RegExp from the searchValue. If it fails (invalid regex),
++        // it will be treated as a plain text search
++        let searchRegex;
++        try {
++            searchRegex = new RegExp(searchValue, 'i'); // 'i' for case-insensitive
++        } catch (error) {
++            searchRegex = null;
++        }
++
++        for (let i = 0; i < rows.length; i++) {
++            const row = rows[i];
++            let isMatch = false;
++
++            if (searchRegex) {
++                // If a valid regex was created, use it for matching
++                isMatch = searchRegex.test(row.textContent);
++            } else {
++                // Otherwise, fall back to the original plain text search
++                isMatch = row.textContent
++                    .toLowerCase()
++                    .includes(searchValue.toLowerCase());
++            }
++
++            row.style.display = isMatch ? '' : 'none';
++        }
++    }
++
++    // loads the search box
++    function addSearchBox() {
++        var template = document.getElementById('filterTemplate');
++        var templateClone = template.content.cloneNode(true);
++        templateClone.getElementById('fileSearch').oninput = onFilterInput;
++        template.parentElement.appendChild(templateClone);
++    }
++
++    // loads all columns
++    function loadColumns() {
++        var colNodes = getTableHeader().querySelectorAll('th'),
++            colNode,
++            cols = [],
++            col,
++            i;
++
++        for (i = 0; i < colNodes.length; i += 1) {
++            colNode = colNodes[i];
++            col = {
++                key: colNode.getAttribute('data-col'),
++                sortable: !colNode.getAttribute('data-nosort'),
++                type: colNode.getAttribute('data-type') || 'string'
++            };
++            cols.push(col);
++            if (col.sortable) {
++                col.defaultDescSort = col.type === 'number';
++                colNode.innerHTML =
++                    colNode.innerHTML + '<span class="sorter"></span>';
++            }
++        }
++        return cols;
++    }
++    // attaches a data attribute to every tr element with an object
++    // of data values keyed by column name
++    function loadRowData(tableRow) {
++        var tableCols = tableRow.querySelectorAll('td'),
++            colNode,
++            col,
++            data = {},
++            i,
++            val;
++        for (i = 0; i < tableCols.length; i += 1) {
++            colNode = tableCols[i];
++            col = cols[i];
++            val = colNode.getAttribute('data-value');
++            if (col.type === 'number') {
++                val = Number(val);
++            }
++            data[col.key] = val;
++        }
++        return data;
++    }
++    // loads all row data
++    function loadData() {
++        var rows = getTableBody().querySelectorAll('tr'),
++            i;
++
++        for (i = 0; i < rows.length; i += 1) {
++            rows[i].data = loadRowData(rows[i]);
++        }
++    }
++    // sorts the table using the data for the ith column
++    function sortByIndex(index, desc) {
++        var key = cols[index].key,
++            sorter = function(a, b) {
++                a = a.data[key];
++                b = b.data[key];
++                return a < b ? -1 : a > b ? 1 : 0;
++            },
++            finalSorter = sorter,
++            tableBody = document.querySelector('.coverage-summary tbody'),
++            rowNodes = tableBody.querySelectorAll('tr'),
++            rows = [],
++            i;
++
++        if (desc) {
++            finalSorter = function(a, b) {
++                return -1 * sorter(a, b);
++            };
++        }
++
++        for (i = 0; i < rowNodes.length; i += 1) {
++            rows.push(rowNodes[i]);
++            tableBody.removeChild(rowNodes[i]);
++        }
++
++        rows.sort(finalSorter);
++
++        for (i = 0; i < rows.length; i += 1) {
++            tableBody.appendChild(rows[i]);
++        }
++    }
++    // removes sort indicators for current column being sorted
++    function removeSortIndicators() {
++        var col = getNthColumn(currentSort.index),
++            cls = col.className;
++
++        cls = cls.replace(/ sorted$/, '').replace(/ sorted-desc$/, '');
++        col.className = cls;
++    }
++    // adds sort indicators for current column being sorted
++    function addSortIndicators() {
++        getNthColumn(currentSort.index).className += currentSort.desc
++            ? ' sorted-desc'
++            : ' sorted';
++    }
++    // adds event listeners for all sorter widgets
++    function enableUI() {
++        var i,
++            el,
++            ithSorter = function ithSorter(i) {
++                var col = cols[i];
++
++                return function() {
++                    var desc = col.defaultDescSort;
++
++                    if (currentSort.index === i) {
++                        desc = !currentSort.desc;
++                    }
++                    sortByIndex(i, desc);
++                    removeSortIndicators();
++                    currentSort.index = i;
++                    currentSort.desc = desc;
++                    addSortIndicators();
++                };
++            };
++        for (i = 0; i < cols.length; i += 1) {
++            if (cols[i].sortable) {
++                // add the click event handler on the th so users
++                // dont have to click on those tiny arrows
++                el = getNthColumn(i).querySelector('.sorter').parentElement;
++                if (el.addEventListener) {
++                    el.addEventListener('click', ithSorter(i));
++                } else {
++                    el.attachEvent('onclick', ithSorter(i));
++                }
++            }
++        }
++    }
++    // adds sorting functionality to the UI
++    return function() {
++        if (!getTable()) {
++            return;
++        }
++        cols = loadColumns();
++        loadData();
++        addSearchBox();
++        addSortIndicators();
++        enableUI();
++    };
++})();
++
++window.addEventListener('load', addSorting);
+diff --git a/coverage/lcov.info b/coverage/lcov.info
+new file mode 100644
+index 000000000..e69de29bb
+diff --git a/coverage/prettify.css b/coverage/prettify.css
+new file mode 100644
+index 000000000..b317a7cda
+--- /dev/null
++++ b/coverage/prettify.css
+@@ -0,0 +1 @@
++.pln{color:#000}@media screen{.str{color:#080}.kwd{color:#008}.com{color:#800}.typ{color:#606}.lit{color:#066}.pun,.opn,.clo{color:#660}.tag{color:#008}.atn{color:#606}.atv{color:#080}.dec,.var{color:#606}.fun{color:red}}@media print,projection{.str{color:#060}.kwd{color:#006;font-weight:bold}.com{color:#600;font-style:italic}.typ{color:#404;font-weight:bold}.lit{color:#044}.pun,.opn,.clo{color:#440}.tag{color:#006;font-weight:bold}.atn{color:#404}.atv{color:#060}}pre.prettyprint{padding:2px;border:1px solid #888}ol.linenums{margin-top:0;margin-bottom:0}li.L0,li.L1,li.L2,li.L3,li.L5,li.L6,li.L7,li.L8{list-style-type:none}li.L1,li.L3,li.L5,li.L7,li.L9{background:#eee}
+diff --git a/coverage/prettify.js b/coverage/prettify.js
+new file mode 100644
+index 000000000..b3225238f
+--- /dev/null
++++ b/coverage/prettify.js
+@@ -0,0 +1,2 @@
++/* eslint-disable */
++window.PR_SHOULD_USE_CONTINUATION=true;(function(){var h=["break,continue,do,else,for,if,return,while"];var u=[h,"auto,case,char,const,default,double,enum,extern,float,goto,int,long,register,short,signed,sizeof,static,struct,switch,typedef,union,unsigned,void,volatile"];var p=[u,"catch,class,delete,false,import,new,operator,private,protected,public,this,throw,true,try,typeof"];var l=[p,"alignof,align_union,asm,axiom,bool,concept,concept_map,const_cast,constexpr,decltype,dynamic_cast,explicit,export,friend,inline,late_check,mutable,namespace,nullptr,reinterpret_cast,static_assert,static_cast,template,typeid,typename,using,virtual,where"];var x=[p,"abstract,boolean,byte,extends,final,finally,implements,import,instanceof,null,native,package,strictfp,super,synchronized,throws,transient"];var R=[x,"as,base,by,checked,decimal,delegate,descending,dynamic,event,fixed,foreach,from,group,implicit,in,interface,internal,into,is,lock,object,out,override,orderby,params,partial,readonly,ref,sbyte,sealed,stackalloc,string,select,uint,ulong,unchecked,unsafe,ushort,var"];var r="all,and,by,catch,class,else,extends,false,finally,for,if,in,is,isnt,loop,new,no,not,null,of,off,on,or,return,super,then,true,try,unless,until,when,while,yes";var w=[p,"debugger,eval,export,function,get,null,set,undefined,var,with,Infinity,NaN"];var s="caller,delete,die,do,dump,elsif,eval,exit,foreach,for,goto,if,import,last,local,my,next,no,our,print,package,redo,require,sub,undef,unless,until,use,wantarray,while,BEGIN,END";var I=[h,"and,as,assert,class,def,del,elif,except,exec,finally,from,global,import,in,is,lambda,nonlocal,not,or,pass,print,raise,try,with,yield,False,True,None"];var f=[h,"alias,and,begin,case,class,def,defined,elsif,end,ensure,false,in,module,next,nil,not,or,redo,rescue,retry,self,super,then,true,undef,unless,until,when,yield,BEGIN,END"];var H=[h,"case,done,elif,esac,eval,fi,function,in,local,set,then,until"];var A=[l,R,w,s+I,f,H];var e=/^(DIR|FILE|vector|(de|priority_)?queue|list|stack|(const_)?iterator|(multi)?(set|map)|bitset|u?(int|float)\d*)/;var C="str";var z="kwd";var j="com";var O="typ";var G="lit";var L="pun";var F="pln";var m="tag";var E="dec";var J="src";var P="atn";var n="atv";var N="nocode";var M="(?:^^\\.?|[+-]|\\!|\\!=|\\!==|\\#|\\%|\\%=|&|&&|&&=|&=|\\(|\\*|\\*=|\\+=|\\,|\\-=|\\->|\\/|\\/=|:|::|\\;|<|<<|<<=|<=|=|==|===|>|>=|>>|>>=|>>>|>>>=|\\?|\\@|\\[|\\^|\\^=|\\^\\^|\\^\\^=|\\{|\\||\\|=|\\|\\||\\|\\|=|\\~|break|case|continue|delete|do|else|finally|instanceof|return|throw|try|typeof)\\s*";function k(Z){var ad=0;var S=false;var ac=false;for(var V=0,U=Z.length;V<U;++V){var ae=Z[V];if(ae.ignoreCase){ac=true}else{if(/[a-z]/i.test(ae.source.replace(/\\u[0-9a-f]{4}|\\x[0-9a-f]{2}|\\[^ux]/gi,""))){S=true;ac=false;break}}}var Y={b:8,t:9,n:10,v:11,f:12,r:13};function ab(ah){var ag=ah.charCodeAt(0);if(ag!==92){return ag}var af=ah.charAt(1);ag=Y[af];if(ag){return ag}else{if("0"<=af&&af<="7"){return parseInt(ah.substring(1),8)}else{if(af==="u"||af==="x"){return parseInt(ah.substring(2),16)}else{return ah.charCodeAt(1)}}}}function T(af){if(af<32){return(af<16?"\\x0":"\\x")+af.toString(16)}var ag=String.fromCharCode(af);if(ag==="\\"||ag==="-"||ag==="["||ag==="]"){ag="\\"+ag}return ag}function X(am){var aq=am.substring(1,am.length-1).match(new RegExp("\\\\u[0-9A-Fa-f]{4}|\\\\x[0-9A-Fa-f]{2}|\\\\[0-3][0-7]{0,2}|\\\\[0-7]{1,2}|\\\\[\\s\\S]|-|[^-\\\\]","g"));var ak=[];var af=[];var ao=aq[0]==="^";for(var ar=ao?1:0,aj=aq.length;ar<aj;++ar){var ah=aq[ar];if(/\\[bdsw]/i.test(ah)){ak.push(ah)}else{var ag=ab(ah);var al;if(ar+2<aj&&"-"===aq[ar+1]){al=ab(aq[ar+2]);ar+=2}else{al=ag}af.push([ag,al]);if(!(al<65||ag>122)){if(!(al<65||ag>90)){af.push([Math.max(65,ag)|32,Math.min(al,90)|32])}if(!(al<97||ag>122)){af.push([Math.max(97,ag)&~32,Math.min(al,122)&~32])}}}}af.sort(function(av,au){return(av[0]-au[0])||(au[1]-av[1])});var ai=[];var ap=[NaN,NaN];for(var ar=0;ar<af.length;++ar){var at=af[ar];if(at[0]<=ap[1]+1){ap[1]=Math.max(ap[1],at[1])}else{ai.push(ap=at)}}var an=["["];if(ao){an.push("^")}an.push.apply(an,ak);for(var ar=0;ar<ai.length;++ar){var at=ai[ar];an.push(T(at[0]));if(at[1]>at[0]){if(at[1]+1>at[0]){an.push("-")}an.push(T(at[1]))}}an.push("]");return an.join("")}function W(al){var aj=al.source.match(new RegExp("(?:\\[(?:[^\\x5C\\x5D]|\\\\[\\s\\S])*\\]|\\\\u[A-Fa-f0-9]{4}|\\\\x[A-Fa-f0-9]{2}|\\\\[0-9]+|\\\\[^ux0-9]|\\(\\?[:!=]|[\\(\\)\\^]|[^\\x5B\\x5C\\(\\)\\^]+)","g"));var ah=aj.length;var an=[];for(var ak=0,am=0;ak<ah;++ak){var ag=aj[ak];if(ag==="("){++am}else{if("\\"===ag.charAt(0)){var af=+ag.substring(1);if(af&&af<=am){an[af]=-1}}}}for(var ak=1;ak<an.length;++ak){if(-1===an[ak]){an[ak]=++ad}}for(var ak=0,am=0;ak<ah;++ak){var ag=aj[ak];if(ag==="("){++am;if(an[am]===undefined){aj[ak]="(?:"}}else{if("\\"===ag.charAt(0)){var af=+ag.substring(1);if(af&&af<=am){aj[ak]="\\"+an[am]}}}}for(var ak=0,am=0;ak<ah;++ak){if("^"===aj[ak]&&"^"!==aj[ak+1]){aj[ak]=""}}if(al.ignoreCase&&S){for(var ak=0;ak<ah;++ak){var ag=aj[ak];var ai=ag.charAt(0);if(ag.length>=2&&ai==="["){aj[ak]=X(ag)}else{if(ai!=="\\"){aj[ak]=ag.replace(/[a-zA-Z]/g,function(ao){var ap=ao.charCodeAt(0);return"["+String.fromCharCode(ap&~32,ap|32)+"]"})}}}}return aj.join("")}var aa=[];for(var V=0,U=Z.length;V<U;++V){var ae=Z[V];if(ae.global||ae.multiline){throw new Error(""+ae)}aa.push("(?:"+W(ae)+")")}return new RegExp(aa.join("|"),ac?"gi":"g")}function a(V){var U=/(?:^|\s)nocode(?:\s|$)/;var X=[];var T=0;var Z=[];var W=0;var S;if(V.currentStyle){S=V.currentStyle.whiteSpace}else{if(window.getComputedStyle){S=document.defaultView.getComputedStyle(V,null).getPropertyValue("white-space")}}var Y=S&&"pre"===S.substring(0,3);function aa(ab){switch(ab.nodeType){case 1:if(U.test(ab.className)){return}for(var ae=ab.firstChild;ae;ae=ae.nextSibling){aa(ae)}var ad=ab.nodeName;if("BR"===ad||"LI"===ad){X[W]="\n";Z[W<<1]=T++;Z[(W++<<1)|1]=ab}break;case 3:case 4:var ac=ab.nodeValue;if(ac.length){if(!Y){ac=ac.replace(/[ \t\r\n]+/g," ")}else{ac=ac.replace(/\r\n?/g,"\n")}X[W]=ac;Z[W<<1]=T;T+=ac.length;Z[(W++<<1)|1]=ab}break}}aa(V);return{sourceCode:X.join("").replace(/\n$/,""),spans:Z}}function B(S,U,W,T){if(!U){return}var V={sourceCode:U,basePos:S};W(V);T.push.apply(T,V.decorations)}var v=/\S/;function o(S){var V=undefined;for(var U=S.firstChild;U;U=U.nextSibling){var T=U.nodeType;V=(T===1)?(V?S:U):(T===3)?(v.test(U.nodeValue)?S:V):V}return V===S?undefined:V}function g(U,T){var S={};var V;(function(){var ad=U.concat(T);var ah=[];var ag={};for(var ab=0,Z=ad.length;ab<Z;++ab){var Y=ad[ab];var ac=Y[3];if(ac){for(var ae=ac.length;--ae>=0;){S[ac.charAt(ae)]=Y}}var af=Y[1];var aa=""+af;if(!ag.hasOwnProperty(aa)){ah.push(af);ag[aa]=null}}ah.push(/[\0-\uffff]/);V=k(ah)})();var X=T.length;var W=function(ah){var Z=ah.sourceCode,Y=ah.basePos;var ad=[Y,F];var af=0;var an=Z.match(V)||[];var aj={};for(var ae=0,aq=an.length;ae<aq;++ae){var ag=an[ae];var ap=aj[ag];var ai=void 0;var am;if(typeof ap==="string"){am=false}else{var aa=S[ag.charAt(0)];if(aa){ai=ag.match(aa[1]);ap=aa[0]}else{for(var ao=0;ao<X;++ao){aa=T[ao];ai=ag.match(aa[1]);if(ai){ap=aa[0];break}}if(!ai){ap=F}}am=ap.length>=5&&"lang-"===ap.substring(0,5);if(am&&!(ai&&typeof ai[1]==="string")){am=false;ap=J}if(!am){aj[ag]=ap}}var ab=af;af+=ag.length;if(!am){ad.push(Y+ab,ap)}else{var al=ai[1];var ak=ag.indexOf(al);var ac=ak+al.length;if(ai[2]){ac=ag.length-ai[2].length;ak=ac-al.length}var ar=ap.substring(5);B(Y+ab,ag.substring(0,ak),W,ad);B(Y+ab+ak,al,q(ar,al),ad);B(Y+ab+ac,ag.substring(ac),W,ad)}}ah.decorations=ad};return W}function i(T){var W=[],S=[];if(T.tripleQuotedStrings){W.push([C,/^(?:\'\'\'(?:[^\'\\]|\\[\s\S]|\'{1,2}(?=[^\']))*(?:\'\'\'|$)|\"\"\"(?:[^\"\\]|\\[\s\S]|\"{1,2}(?=[^\"]))*(?:\"\"\"|$)|\'(?:[^\\\']|\\[\s\S])*(?:\'|$)|\"(?:[^\\\"]|\\[\s\S])*(?:\"|$))/,null,"'\""])}else{if(T.multiLineStrings){W.push([C,/^(?:\'(?:[^\\\']|\\[\s\S])*(?:\'|$)|\"(?:[^\\\"]|\\[\s\S])*(?:\"|$)|\`(?:[^\\\`]|\\[\s\S])*(?:\`|$))/,null,"'\"`"])}else{W.push([C,/^(?:\'(?:[^\\\'\r\n]|\\.)*(?:\'|$)|\"(?:[^\\\"\r\n]|\\.)*(?:\"|$))/,null,"\"'"])}}if(T.verbatimStrings){S.push([C,/^@\"(?:[^\"]|\"\")*(?:\"|$)/,null])}var Y=T.hashComments;if(Y){if(T.cStyleComments){if(Y>1){W.push([j,/^#(?:##(?:[^#]|#(?!##))*(?:###|$)|.*)/,null,"#"])}else{W.push([j,/^#(?:(?:define|elif|else|endif|error|ifdef|include|ifndef|line|pragma|undef|warning)\b|[^\r\n]*)/,null,"#"])}S.push([C,/^<(?:(?:(?:\.\.\/)*|\/?)(?:[\w-]+(?:\/[\w-]+)+)?[\w-]+\.h|[a-z]\w*)>/,null])}else{W.push([j,/^#[^\r\n]*/,null,"#"])}}if(T.cStyleComments){S.push([j,/^\/\/[^\r\n]*/,null]);S.push([j,/^\/\*[\s\S]*?(?:\*\/|$)/,null])}if(T.regexLiterals){var X=("/(?=[^/*])(?:[^/\\x5B\\x5C]|\\x5C[\\s\\S]|\\x5B(?:[^\\x5C\\x5D]|\\x5C[\\s\\S])*(?:\\x5D|$))+/");S.push(["lang-regex",new RegExp("^"+M+"("+X+")")])}var V=T.types;if(V){S.push([O,V])}var U=(""+T.keywords).replace(/^ | $/g,"");if(U.length){S.push([z,new RegExp("^(?:"+U.replace(/[\s,]+/g,"|")+")\\b"),null])}W.push([F,/^\s+/,null," \r\n\t\xA0"]);S.push([G,/^@[a-z_$][a-z_$@0-9]*/i,null],[O,/^(?:[@_]?[A-Z]+[a-z][A-Za-z_$@0-9]*|\w+_t\b)/,null],[F,/^[a-z_$][a-z_$@0-9]*/i,null],[G,new RegExp("^(?:0x[a-f0-9]+|(?:\\d(?:_\\d+)*\\d*(?:\\.\\d*)?|\\.\\d\\+)(?:e[+\\-]?\\d+)?)[a-z]*","i"),null,"0123456789"],[F,/^\\[\s\S]?/,null],[L,/^.[^\s\w\.$@\'\"\`\/\#\\]*/,null]);return g(W,S)}var K=i({keywords:A,hashComments:true,cStyleComments:true,multiLineStrings:true,regexLiterals:true});function Q(V,ag){var U=/(?:^|\s)nocode(?:\s|$)/;var ab=/\r\n?|\n/;var ac=V.ownerDocument;var S;if(V.currentStyle){S=V.currentStyle.whiteSpace}else{if(window.getComputedStyle){S=ac.defaultView.getComputedStyle(V,null).getPropertyValue("white-space")}}var Z=S&&"pre"===S.substring(0,3);var af=ac.createElement("LI");while(V.firstChild){af.appendChild(V.firstChild)}var W=[af];function ae(al){switch(al.nodeType){case 1:if(U.test(al.className)){break}if("BR"===al.nodeName){ad(al);if(al.parentNode){al.parentNode.removeChild(al)}}else{for(var an=al.firstChild;an;an=an.nextSibling){ae(an)}}break;case 3:case 4:if(Z){var am=al.nodeValue;var aj=am.match(ab);if(aj){var ai=am.substring(0,aj.index);al.nodeValue=ai;var ah=am.substring(aj.index+aj[0].length);if(ah){var ak=al.parentNode;ak.insertBefore(ac.createTextNode(ah),al.nextSibling)}ad(al);if(!ai){al.parentNode.removeChild(al)}}}break}}function ad(ak){while(!ak.nextSibling){ak=ak.parentNode;if(!ak){return}}function ai(al,ar){var aq=ar?al.cloneNode(false):al;var ao=al.parentNode;if(ao){var ap=ai(ao,1);var an=al.nextSibling;ap.appendChild(aq);for(var am=an;am;am=an){an=am.nextSibling;ap.appendChild(am)}}return aq}var ah=ai(ak.nextSibling,0);for(var aj;(aj=ah.parentNode)&&aj.nodeType===1;){ah=aj}W.push(ah)}for(var Y=0;Y<W.length;++Y){ae(W[Y])}if(ag===(ag|0)){W[0].setAttribute("value",ag)}var aa=ac.createElement("OL");aa.className="linenums";var X=Math.max(0,((ag-1))|0)||0;for(var Y=0,T=W.length;Y<T;++Y){af=W[Y];af.className="L"+((Y+X)%10);if(!af.firstChild){af.appendChild(ac.createTextNode("\xA0"))}aa.appendChild(af)}V.appendChild(aa)}function D(ac){var aj=/\bMSIE\b/.test(navigator.userAgent);var am=/\n/g;var al=ac.sourceCode;var an=al.length;var V=0;var aa=ac.spans;var T=aa.length;var ah=0;var X=ac.decorations;var Y=X.length;var Z=0;X[Y]=an;var ar,aq;for(aq=ar=0;aq<Y;){if(X[aq]!==X[aq+2]){X[ar++]=X[aq++];X[ar++]=X[aq++]}else{aq+=2}}Y=ar;for(aq=ar=0;aq<Y;){var at=X[aq];var ab=X[aq+1];var W=aq+2;while(W+2<=Y&&X[W+1]===ab){W+=2}X[ar++]=at;X[ar++]=ab;aq=W}Y=X.length=ar;var ae=null;while(ah<T){var af=aa[ah];var S=aa[ah+2]||an;var ag=X[Z];var ap=X[Z+2]||an;var W=Math.min(S,ap);var ak=aa[ah+1];var U;if(ak.nodeType!==1&&(U=al.substring(V,W))){if(aj){U=U.replace(am,"\r")}ak.nodeValue=U;var ai=ak.ownerDocument;var ao=ai.createElement("SPAN");ao.className=X[Z+1];var ad=ak.parentNode;ad.replaceChild(ao,ak);ao.appendChild(ak);if(V<S){aa[ah+1]=ak=ai.createTextNode(al.substring(W,S));ad.insertBefore(ak,ao.nextSibling)}}V=W;if(V>=S){ah+=2}if(V>=ap){Z+=2}}}var t={};function c(U,V){for(var S=V.length;--S>=0;){var T=V[S];if(!t.hasOwnProperty(T)){t[T]=U}else{if(window.console){console.warn("cannot override language handler %s",T)}}}}function q(T,S){if(!(T&&t.hasOwnProperty(T))){T=/^\s*</.test(S)?"default-markup":"default-code"}return t[T]}c(K,["default-code"]);c(g([],[[F,/^[^<?]+/],[E,/^<!\w[^>]*(?:>|$)/],[j,/^<\!--[\s\S]*?(?:-\->|$)/],["lang-",/^<\?([\s\S]+?)(?:\?>|$)/],["lang-",/^<%([\s\S]+?)(?:%>|$)/],[L,/^(?:<[%?]|[%?]>)/],["lang-",/^<xmp\b[^>]*>([\s\S]+?)<\/xmp\b[^>]*>/i],["lang-js",/^<script\b[^>]*>([\s\S]*?)(<\/script\b[^>]*>)/i],["lang-css",/^<style\b[^>]*>([\s\S]*?)(<\/style\b[^>]*>)/i],["lang-in.tag",/^(<\/?[a-z][^<>]*>)/i]]),["default-markup","htm","html","mxml","xhtml","xml","xsl"]);c(g([[F,/^[\s]+/,null," \t\r\n"],[n,/^(?:\"[^\"]*\"?|\'[^\']*\'?)/,null,"\"'"]],[[m,/^^<\/?[a-z](?:[\w.:-]*\w)?|\/?>$/i],[P,/^(?!style[\s=]|on)[a-z](?:[\w:-]*\w)?/i],["lang-uq.val",/^=\s*([^>\'\"\s]*(?:[^>\'\"\s\/]|\/(?=\s)))/],[L,/^[=<>\/]+/],["lang-js",/^on\w+\s*=\s*\"([^\"]+)\"/i],["lang-js",/^on\w+\s*=\s*\'([^\']+)\'/i],["lang-js",/^on\w+\s*=\s*([^\"\'>\s]+)/i],["lang-css",/^style\s*=\s*\"([^\"]+)\"/i],["lang-css",/^style\s*=\s*\'([^\']+)\'/i],["lang-css",/^style\s*=\s*([^\"\'>\s]+)/i]]),["in.tag"]);c(g([],[[n,/^[\s\S]+/]]),["uq.val"]);c(i({keywords:l,hashComments:true,cStyleComments:true,types:e}),["c","cc","cpp","cxx","cyc","m"]);c(i({keywords:"null,true,false"}),["json"]);c(i({keywords:R,hashComments:true,cStyleComments:true,verbatimStrings:true,types:e}),["cs"]);c(i({keywords:x,cStyleComments:true}),["java"]);c(i({keywords:H,hashComments:true,multiLineStrings:true}),["bsh","csh","sh"]);c(i({keywords:I,hashComments:true,multiLineStrings:true,tripleQuotedStrings:true}),["cv","py"]);c(i({keywords:s,hashComments:true,multiLineStrings:true,regexLiterals:true}),["perl","pl","pm"]);c(i({keywords:f,hashComments:true,multiLineStrings:true,regexLiterals:true}),["rb"]);c(i({keywords:w,cStyleComments:true,regexLiterals:true}),["js"]);c(i({keywords:r,hashComments:3,cStyleComments:true,multilineStrings:true,tripleQuotedStrings:true,regexLiterals:true}),["coffee"]);c(g([],[[C,/^[\s\S]+/]]),["regex"]);function d(V){var U=V.langExtension;try{var S=a(V.sourceNode);var T=S.sourceCode;V.sourceCode=T;V.spans=S.spans;V.basePos=0;q(U,T)(V);D(V)}catch(W){if("console" in window){console.log(W&&W.stack?W.stack:W)}}}function y(W,V,U){var S=document.createElement("PRE");S.innerHTML=W;if(U){Q(S,U)}var T={langExtension:V,numberLines:U,sourceNode:S};d(T);return S.innerHTML}function b(ad){function Y(af){return document.getElementsByTagName(af)}var ac=[Y("pre"),Y("code"),Y("xmp")];var T=[];for(var aa=0;aa<ac.length;++aa){for(var Z=0,V=ac[aa].length;Z<V;++Z){T.push(ac[aa][Z])}}ac=null;var W=Date;if(!W.now){W={now:function(){return +(new Date)}}}var X=0;var S;var ab=/\blang(?:uage)?-([\w.]+)(?!\S)/;var ae=/\bprettyprint\b/;function U(){var ag=(window.PR_SHOULD_USE_CONTINUATION?W.now()+250:Infinity);for(;X<T.length&&W.now()<ag;X++){var aj=T[X];var ai=aj.className;if(ai.indexOf("prettyprint")>=0){var ah=ai.match(ab);var am;if(!ah&&(am=o(aj))&&"CODE"===am.tagName){ah=am.className.match(ab)}if(ah){ah=ah[1]}var al=false;for(var ak=aj.parentNode;ak;ak=ak.parentNode){if((ak.tagName==="pre"||ak.tagName==="code"||ak.tagName==="xmp")&&ak.className&&ak.className.indexOf("prettyprint")>=0){al=true;break}}if(!al){var af=aj.className.match(/\blinenums\b(?::(\d+))?/);af=af?af[1]&&af[1].length?+af[1]:true:false;if(af){Q(aj,af)}S={langExtension:ah,sourceNode:aj,numberLines:af};d(S)}}}if(X<T.length){setTimeout(U,250)}else{if(ad){ad()}}}U()}window.prettyPrintOne=y;window.prettyPrint=b;window.PR={createSimpleLexer:g,registerLangHandler:c,sourceDecorator:i,PR_ATTRIB_NAME:P,PR_ATTRIB_VALUE:n,PR_COMMENT:j,PR_DECLARATION:E,PR_KEYWORD:z,PR_LITERAL:G,PR_NOCODE:N,PR_PLAIN:F,PR_PUNCTUATION:L,PR_SOURCE:J,PR_STRING:C,PR_TAG:m,PR_TYPE:O}})();PR.registerLangHandler(PR.createSimpleLexer([],[[PR.PR_DECLARATION,/^<!\w[^>]*(?:>|$)/],[PR.PR_COMMENT,/^<\!--[\s\S]*?(?:-\->|$)/],[PR.PR_PUNCTUATION,/^(?:<[%?]|[%?]>)/],["lang-",/^<\?([\s\S]+?)(?:\?>|$)/],["lang-",/^<%([\s\S]+?)(?:%>|$)/],["lang-",/^<xmp\b[^>]*>([\s\S]+?)<\/xmp\b[^>]*>/i],["lang-handlebars",/^<script\b[^>]*type\s*=\s*['"]?text\/x-handlebars-template['"]?\b[^>]*>([\s\S]*?)(<\/script\b[^>]*>)/i],["lang-js",/^<script\b[^>]*>([\s\S]*?)(<\/script\b[^>]*>)/i],["lang-css",/^<style\b[^>]*>([\s\S]*?)(<\/style\b[^>]*>)/i],["lang-in.tag",/^(<\/?[a-z][^<>]*>)/i],[PR.PR_DECLARATION,/^{{[#^>/]?\s*[\w.][^}]*}}/],[PR.PR_DECLARATION,/^{{&?\s*[\w.][^}]*}}/],[PR.PR_DECLARATION,/^{{{>?\s*[\w.][^}]*}}}/],[PR.PR_COMMENT,/^{{![^}]*}}/]]),["handlebars","hbs"]);PR.registerLangHandler(PR.createSimpleLexer([[PR.PR_PLAIN,/^[ \t\r\n\f]+/,null," \t\r\n\f"]],[[PR.PR_STRING,/^\"(?:[^\n\r\f\\\"]|\\(?:\r\n?|\n|\f)|\\[\s\S])*\"/,null],[PR.PR_STRING,/^\'(?:[^\n\r\f\\\']|\\(?:\r\n?|\n|\f)|\\[\s\S])*\'/,null],["lang-css-str",/^url\(([^\)\"\']*)\)/i],[PR.PR_KEYWORD,/^(?:url|rgb|\!important|@import|@page|@media|@charset|inherit)(?=[^\-\w]|$)/i,null],["lang-css-kw",/^(-?(?:[_a-z]|(?:\\[0-9a-f]+ ?))(?:[_a-z0-9\-]|\\(?:\\[0-9a-f]+ ?))*)\s*:/i],[PR.PR_COMMENT,/^\/\*[^*]*\*+(?:[^\/*][^*]*\*+)*\//],[PR.PR_COMMENT,/^(?:<!--|-->)/],[PR.PR_LITERAL,/^(?:\d+|\d*\.\d+)(?:%|[a-z]+)?/i],[PR.PR_LITERAL,/^#(?:[0-9a-f]{3}){1,2}/i],[PR.PR_PLAIN,/^-?(?:[_a-z]|(?:\\[\da-f]+ ?))(?:[_a-z\d\-]|\\(?:\\[\da-f]+ ?))*/i],[PR.PR_PUNCTUATION,/^[^\s\w\'\"]+/]]),["css"]);PR.registerLangHandler(PR.createSimpleLexer([],[[PR.PR_KEYWORD,/^-?(?:[_a-z]|(?:\\[\da-f]+ ?))(?:[_a-z\d\-]|\\(?:\\[\da-f]+ ?))*/i]]),["css-kw"]);PR.registerLangHandler(PR.createSimpleLexer([],[[PR.PR_STRING,/^[^\)\"\']+/]]),["css-str"]);
+diff --git a/coverage/sort-arrow-sprite.png b/coverage/sort-arrow-sprite.png
+new file mode 100644
+index 000000000..6ed68316e
+Binary files /dev/null and b/coverage/sort-arrow-sprite.png differ
+diff --git a/coverage/sorter.js b/coverage/sorter.js
+new file mode 100644
+index 000000000..4ed70ae5a
+--- /dev/null
++++ b/coverage/sorter.js
+@@ -0,0 +1,210 @@
++/* eslint-disable */
++var addSorting = (function() {
++    'use strict';
++    var cols,
++        currentSort = {
++            index: 0,
++            desc: false
++        };
++
++    // returns the summary table element
++    function getTable() {
++        return document.querySelector('.coverage-summary');
++    }
++    // returns the thead element of the summary table
++    function getTableHeader() {
++        return getTable().querySelector('thead tr');
++    }
++    // returns the tbody element of the summary table
++    function getTableBody() {
++        return getTable().querySelector('tbody');
++    }
++    // returns the th element for nth column
++    function getNthColumn(n) {
++        return getTableHeader().querySelectorAll('th')[n];
++    }
++
++    function onFilterInput() {
++        const searchValue = document.getElementById('fileSearch').value;
++        const rows = document.getElementsByTagName('tbody')[0].children;
++
++        // Try to create a RegExp from the searchValue. If it fails (invalid regex),
++        // it will be treated as a plain text search
++        let searchRegex;
++        try {
++            searchRegex = new RegExp(searchValue, 'i'); // 'i' for case-insensitive
++        } catch (error) {
++            searchRegex = null;
++        }
++
++        for (let i = 0; i < rows.length; i++) {
++            const row = rows[i];
++            let isMatch = false;
++
++            if (searchRegex) {
++                // If a valid regex was created, use it for matching
++                isMatch = searchRegex.test(row.textContent);
++            } else {
++                // Otherwise, fall back to the original plain text search
++                isMatch = row.textContent
++                    .toLowerCase()
++                    .includes(searchValue.toLowerCase());
++            }
++
++            row.style.display = isMatch ? '' : 'none';
++        }
++    }
++
++    // loads the search box
++    function addSearchBox() {
++        var template = document.getElementById('filterTemplate');
++        var templateClone = template.content.cloneNode(true);
++        templateClone.getElementById('fileSearch').oninput = onFilterInput;
++        template.parentElement.appendChild(templateClone);
++    }
++
++    // loads all columns
++    function loadColumns() {
++        var colNodes = getTableHeader().querySelectorAll('th'),
++            colNode,
++            cols = [],
++            col,
++            i;
++
++        for (i = 0; i < colNodes.length; i += 1) {
++            colNode = colNodes[i];
++            col = {
++                key: colNode.getAttribute('data-col'),
++                sortable: !colNode.getAttribute('data-nosort'),
++                type: colNode.getAttribute('data-type') || 'string'
++            };
++            cols.push(col);
++            if (col.sortable) {
++                col.defaultDescSort = col.type === 'number';
++                colNode.innerHTML =
++                    colNode.innerHTML + '<span class="sorter"></span>';
++            }
++        }
++        return cols;
++    }
++    // attaches a data attribute to every tr element with an object
++    // of data values keyed by column name
++    function loadRowData(tableRow) {
++        var tableCols = tableRow.querySelectorAll('td'),
++            colNode,
++            col,
++            data = {},
++            i,
++            val;
++        for (i = 0; i < tableCols.length; i += 1) {
++            colNode = tableCols[i];
++            col = cols[i];
++            val = colNode.getAttribute('data-value');
++            if (col.type === 'number') {
++                val = Number(val);
++            }
++            data[col.key] = val;
++        }
++        return data;
++    }
++    // loads all row data
++    function loadData() {
++        var rows = getTableBody().querySelectorAll('tr'),
++            i;
++
++        for (i = 0; i < rows.length; i += 1) {
++            rows[i].data = loadRowData(rows[i]);
++        }
++    }
++    // sorts the table using the data for the ith column
++    function sortByIndex(index, desc) {
++        var key = cols[index].key,
++            sorter = function(a, b) {
++                a = a.data[key];
++                b = b.data[key];
++                return a < b ? -1 : a > b ? 1 : 0;
++            },
++            finalSorter = sorter,
++            tableBody = document.querySelector('.coverage-summary tbody'),
++            rowNodes = tableBody.querySelectorAll('tr'),
++            rows = [],
++            i;
++
++        if (desc) {
++            finalSorter = function(a, b) {
++                return -1 * sorter(a, b);
++            };
++        }
++
++        for (i = 0; i < rowNodes.length; i += 1) {
++            rows.push(rowNodes[i]);
++            tableBody.removeChild(rowNodes[i]);
++        }
++
++        rows.sort(finalSorter);
++
++        for (i = 0; i < rows.length; i += 1) {
++            tableBody.appendChild(rows[i]);
++        }
++    }
++    // removes sort indicators for current column being sorted
++    function removeSortIndicators() {
++        var col = getNthColumn(currentSort.index),
++            cls = col.className;
++
++        cls = cls.replace(/ sorted$/, '').replace(/ sorted-desc$/, '');
++        col.className = cls;
++    }
++    // adds sort indicators for current column being sorted
++    function addSortIndicators() {
++        getNthColumn(currentSort.index).className += currentSort.desc
++            ? ' sorted-desc'
++            : ' sorted';
++    }
++    // adds event listeners for all sorter widgets
++    function enableUI() {
++        var i,
++            el,
++            ithSorter = function ithSorter(i) {
++                var col = cols[i];
++
++                return function() {
++                    var desc = col.defaultDescSort;
++
++                    if (currentSort.index === i) {
++                        desc = !currentSort.desc;
++                    }
++                    sortByIndex(i, desc);
++                    removeSortIndicators();
++                    currentSort.index = i;
++                    currentSort.desc = desc;
++                    addSortIndicators();
++                };
++            };
++        for (i = 0; i < cols.length; i += 1) {
++            if (cols[i].sortable) {
++                // add the click event handler on the th so users
++                // dont have to click on those tiny arrows
++                el = getNthColumn(i).querySelector('.sorter').parentElement;
++                if (el.addEventListener) {
++                    el.addEventListener('click', ithSorter(i));
++                } else {
++                    el.attachEvent('onclick', ithSorter(i));
++                }
++            }
++        }
++    }
++    // adds sorting functionality to the UI
++    return function() {
++        if (!getTable()) {
++            return;
++        }
++        cols = loadColumns();
++        loadData();
++        addSearchBox();
++        addSortIndicators();
++        enableUI();
++    };
++})();
++
++window.addEventListener('load', addSorting);
+diff --git a/packages/a2a-server/src/agent/executor.ts b/packages/a2a-server/src/agent/executor.ts
+index dbb826937..381876a69 100644
+--- a/packages/a2a-server/src/agent/executor.ts
++++ b/packages/a2a-server/src/agent/executor.ts
+@@ -92,11 +92,12 @@ export class CoderAgentExecutor implements AgentExecutor {
+     agentSettings: AgentSettings,
+     taskId: string,
+   ): Promise<Config> {
++    const isTrusted = agentSettings.isTrusted === true;
+     const workspaceRoot = setTargetDir(agentSettings);
+     loadEnvironment(); // Will override any global env with workspace envs
+-    const settings = loadSettings(workspaceRoot);
++    const settings = loadSettings(workspaceRoot, isTrusted);
+     const extensions = loadExtensions(workspaceRoot);
+-    return loadConfig(settings, new SimpleExtensionLoader(extensions), taskId);
++    return loadConfig(settings, new SimpleExtensionLoader(extensions), taskId, isTrusted);
+   }
+ 
+   /**
+diff --git a/packages/a2a-server/src/config/config.test.ts b/packages/a2a-server/src/config/config.test.ts
+index c17de943e..b6b7b65a1 100644
+--- a/packages/a2a-server/src/config/config.test.ts
++++ b/packages/a2a-server/src/config/config.test.ts
+@@ -20,6 +20,7 @@ import {
+   FatalAuthenticationError,
+   PolicyDecision,
+   PRIORITY_YOLO_ALLOW_ALL,
++  createPolicyEngineConfig,
+ } from '@google/gemini-cli-core';
+ 
+ // Mock dependencies
+@@ -29,6 +30,22 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
+   return {
+     ...actual,
+     PRIORITY_YOLO_ALLOW_ALL: 998,
++    createPolicyEngineConfig: vi.fn().mockImplementation((settings, approvalMode) => {
++      if (approvalMode === 'yolo') {
++        return Promise.resolve({
++          rules: [
++            {
++              toolName: '*',
++              decision: 'allow',
++              priority: 998,
++              modes: ['yolo'],
++              allowRedirection: true,
++            },
++          ],
++        });
++      }
++      return Promise.resolve({ rules: [] });
++    }),
+     Config: vi.fn().mockImplementation((params) => {
+       const mockConfig = {
+         ...params,
+@@ -499,4 +516,42 @@ describe('loadConfig', () => {
+       });
+     });
+   });
++
++  describe('createPolicyEngineConfig invocation', () => {
++    it('should invoke createPolicyEngineConfig with properly mapped tool settings and policy paths', async () => {
++      const settings: Settings = {
++        mcpServers: {
++          myMockMcp: {
++            command: 'node',
++            args: [],
++          },
++        },
++        tools: {
++          core: ['ls', 'read_file'],
++          exclude: ['shell'],
++          allowed: ['write_file'],
++        },
++        policyPaths: ['/user/policies/main.toml'],
++        adminPolicyPaths: ['/admin/policies/sec.toml'],
++      };
++
++      await loadConfig(settings, mockExtensionLoader, taskId, true);
++
++      expect(createPolicyEngineConfig).toHaveBeenCalledWith(
++        expect.objectContaining({
++          mcpServers: settings.mcpServers,
++          tools: expect.objectContaining({
++            core: settings.tools?.core,
++            exclude: settings.tools?.exclude,
++            allowed: settings.tools?.allowed,
++          }),
++          policyPaths: settings.policyPaths,
++          adminPolicyPaths: settings.adminPolicyPaths,
++        }),
++        'default',
++        undefined,
++        true,
++      );
++    });
++  });
+ });
+diff --git a/packages/a2a-server/src/config/config.ts b/packages/a2a-server/src/config/config.ts
+index 5e882b143..03ca96cbd 100644
+--- a/packages/a2a-server/src/config/config.ts
++++ b/packages/a2a-server/src/config/config.ts
+@@ -23,11 +23,11 @@ import {
+   ExperimentFlags,
+   isHeadlessMode,
+   FatalAuthenticationError,
+-  PolicyDecision,
+-  PRIORITY_YOLO_ALLOW_ALL,
+   type TelemetryTarget,
+   type ConfigParameters,
+   type ExtensionLoader,
++  createPolicyEngineConfig,
++  type PolicySettings,
+ } from '@google/gemini-cli-core';
+ 
+ import { logger } from '../utils/logger.js';
+@@ -38,6 +38,7 @@ export async function loadConfig(
+   settings: Settings,
+   extensionLoader: ExtensionLoader,
+   taskId: string,
++  trusted: boolean = false,
+ ): Promise<Config> {
+   const workspaceDir = process.cwd();
+ 
+@@ -63,6 +64,24 @@ export async function loadConfig(
+       ? ApprovalMode.YOLO
+       : ApprovalMode.DEFAULT;
+ 
++  const policySettings: PolicySettings = {
++    mcpServers: settings.mcpServers,
++    tools: {
++      core: settings.coreTools || settings.tools?.core || undefined,
++      exclude: settings.excludeTools || settings.tools?.exclude || undefined,
++      allowed: settings.allowedTools || settings.tools?.allowed || undefined,
++    },
++    policyPaths: settings.policyPaths,
++    adminPolicyPaths: settings.adminPolicyPaths,
++  };
++
++  const policyEngineConfig = await createPolicyEngineConfig(
++    policySettings,
++    approvalMode,
++    undefined,
++    true,
++  );
++
+   const configParams: ConfigParameters = {
+     sessionId: taskId,
+     clientName: 'a2a-server',
+@@ -72,26 +91,13 @@ export async function loadConfig(
+     targetDir: workspaceDir, // Or a specific directory the agent operates on
+     debugMode: process.env['DEBUG'] === 'true' || false,
+     question: '', // Not used in server mode directly like CLI
+-
++ 
+     coreTools: settings.coreTools || settings.tools?.core || undefined,
+     excludeTools: settings.excludeTools || settings.tools?.exclude || undefined,
+     allowedTools: settings.allowedTools || settings.tools?.allowed || undefined,
+     showMemoryUsage: settings.showMemoryUsage || false,
+     approvalMode,
+-    policyEngineConfig: {
+-      rules:
+-        approvalMode === ApprovalMode.YOLO
+-          ? [
+-              {
+-                toolName: '*',
+-                decision: PolicyDecision.ALLOW,
+-                priority: PRIORITY_YOLO_ALLOW_ALL,
+-                modes: [ApprovalMode.YOLO],
+-                allowRedirection: true,
+-              },
+-            ]
+-          : [],
+-    },
++    policyEngineConfig,
+     mcpServers: settings.mcpServers,
+     cwd: workspaceDir,
+     telemetry: {
+@@ -118,7 +124,7 @@ export async function loadConfig(
+     },
+     ideMode: false,
+     folderTrust,
+-    trustedFolder: true,
++    trustedFolder: trusted,
+     extensionLoader,
+     checkpointing,
+     interactive: true,
+diff --git a/packages/a2a-server/src/config/settings.test.ts b/packages/a2a-server/src/config/settings.test.ts
+index ab80bced2..3c9d6cf1f 100644
+--- a/packages/a2a-server/src/config/settings.test.ts
++++ b/packages/a2a-server/src/config/settings.test.ts
+@@ -146,7 +146,7 @@ describe('loadSettings', () => {
+     );
+     fs.writeFileSync(workspaceSettingsPath, JSON.stringify(workspaceSettings));
+ 
+-    const result = loadSettings(mockWorkspaceDir);
++    const result = loadSettings(mockWorkspaceDir, true);
+     // Primitive value overwritten
+     expect(result.showMemoryUsage).toBe(true);
+ 
+@@ -154,4 +154,48 @@ describe('loadSettings', () => {
+     expect(result.fileFiltering?.respectGitIgnore).toBe(false);
+     expect(result.fileFiltering?.enableRecursiveFileSearch).toBeUndefined();
+   });
++
++  it('should ignore untrusted workspace settings.json', () => {
++    const userSettings = {
++      showMemoryUsage: false,
++    };
++    fs.writeFileSync(USER_SETTINGS_PATH, JSON.stringify(userSettings));
++
++    const workspaceSettings = {
++      showMemoryUsage: true,
++    };
++    const workspaceSettingsPath = path.join(
++      mockGeminiWorkspaceDir,
++      'settings.json',
++    );
++    fs.writeFileSync(workspaceSettingsPath, JSON.stringify(workspaceSettings));
++
++    const result = loadSettings(mockWorkspaceDir, false);
++    // showMemoryUsage should NOT be overwritten because workspace is untrusted
++    expect(result.showMemoryUsage).toBe(false);
++  });
++
++  it('should prevent workspace override of adminPolicyPaths or policyPaths even if workspace is trusted', () => {
++    const userSettings = {
++      policyPaths: ['/trusted/user/policy'],
++      adminPolicyPaths: ['/trusted/user/admin/policy'],
++    };
++    fs.writeFileSync(USER_SETTINGS_PATH, JSON.stringify(userSettings));
++
++    const workspaceSettings = {
++      policyPaths: ['/malicious/workspace/policy'],
++      adminPolicyPaths: ['/malicious/workspace/admin/policy'],
++    };
++    const workspaceSettingsPath = path.join(
++      mockGeminiWorkspaceDir,
++      'settings.json',
++    );
++    fs.writeFileSync(workspaceSettingsPath, JSON.stringify(workspaceSettings));
++
++    const result = loadSettings(mockWorkspaceDir, true);
++
++    // policyPaths and adminPolicyPaths must strictly use userSettings values
++    expect(result.policyPaths).toEqual(['/trusted/user/policy']);
++    expect(result.adminPolicyPaths).toEqual(['/trusted/user/admin/policy']);
++  });
+ });
+diff --git a/packages/a2a-server/src/config/settings.ts b/packages/a2a-server/src/config/settings.ts
+index ced11a4da..0ce13ecdf 100644
+--- a/packages/a2a-server/src/config/settings.ts
++++ b/packages/a2a-server/src/config/settings.ts
+@@ -14,6 +14,7 @@ import {
+   getErrorMessage,
+   type TelemetrySettings,
+   homedir,
++  checkPathTrust,
+ } from '@google/gemini-cli-core';
+ import stripJsonComments from 'strip-json-comments';
+ 
+@@ -37,6 +38,13 @@ export interface Settings {
+   showMemoryUsage?: boolean;
+   checkpointing?: CheckpointingSettings;
+   folderTrust?: boolean;
++  security?: {
++    folderTrust?: {
++      enabled?: boolean;
++    };
++  };
++  policyPaths?: string[];
++  adminPolicyPaths?: string[];
+   general?: {
+     previewFeatures?: boolean;
+   };
+@@ -70,7 +78,10 @@ export interface CheckpointingSettings {
+  * than `LoadedSettings` (unnecessary since we are not modifying users
+  * settings.json).
+  */
+-export function loadSettings(workspaceDir: string): Settings {
++export function loadSettings(
++  workspaceDir: string,
++  isTrustedOverride?: boolean,
++): Settings {
+   let userSettings: Settings = {};
+   let workspaceSettings: Settings = {};
+   const settingsErrors: SettingsError[] = [];
+@@ -92,27 +103,42 @@ export function loadSettings(workspaceDir: string): Settings {
+     });
+   }
+ 
++  // Check folder trust
++  let isTrusted = isTrustedOverride;
++  if (isTrusted === undefined) {
++    const isFolderTrustEnabled =
++      userSettings.security?.folderTrust?.enabled !== false &&
++      userSettings.folderTrust !== false;
++    const trustResult = checkPathTrust({
++      path: workspaceDir,
++      isFolderTrustEnabled,
++    });
++    isTrusted = trustResult.isTrusted === true;
++  }
++
+   const workspaceSettingsPath = path.join(
+     workspaceDir,
+     GEMINI_DIR,
+     'settings.json',
+   );
+ 
+-  // Load workspace settings
+-  try {
+-    if (fs.existsSync(workspaceSettingsPath)) {
+-      const projectContent = fs.readFileSync(workspaceSettingsPath, 'utf-8');
+-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+-      const parsedWorkspaceSettings = JSON.parse(
+-        stripJsonComments(projectContent),
+-      ) as Settings;
+-      workspaceSettings = resolveEnvVarsInObject(parsedWorkspaceSettings);
++  // Load workspace settings only if trusted
++  if (isTrusted) {
++    try {
++      if (fs.existsSync(workspaceSettingsPath)) {
++        const projectContent = fs.readFileSync(workspaceSettingsPath, 'utf-8');
++        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
++        const parsedWorkspaceSettings = JSON.parse(
++          stripJsonComments(projectContent),
++        ) as Settings;
++        workspaceSettings = resolveEnvVarsInObject(parsedWorkspaceSettings);
++      }
++    } catch (error: unknown) {
++      settingsErrors.push({
++        message: getErrorMessage(error),
++        path: workspaceSettingsPath,
++      });
+     }
+-  } catch (error: unknown) {
+-    settingsErrors.push({
+-      message: getErrorMessage(error),
+-      path: workspaceSettingsPath,
+-    });
+   }
+ 
+   if (settingsErrors.length > 0) {
+@@ -125,10 +151,25 @@ export function loadSettings(workspaceDir: string): Settings {
+ 
+   // If there are overlapping keys, the values of workspaceSettings will
+   // override values from userSettings
+-  return {
++  const mergedSettings: Settings = {
+     ...userSettings,
+     ...workspaceSettings,
+   };
++
++  // Override policyPaths and adminPolicyPaths on the merged result to strictly use userSettings values
++  if (userSettings.policyPaths !== undefined) {
++    mergedSettings.policyPaths = userSettings.policyPaths;
++  } else {
++    delete mergedSettings.policyPaths;
++  }
++
++  if (userSettings.adminPolicyPaths !== undefined) {
++    mergedSettings.adminPolicyPaths = userSettings.adminPolicyPaths;
++  } else {
++    delete mergedSettings.adminPolicyPaths;
++  }
++
++  return mergedSettings;
+ }
+ 
+ function resolveEnvVarsInString(value: string): string {
+diff --git a/packages/a2a-server/src/http/app.ts b/packages/a2a-server/src/http/app.ts
+index 35ca48949..793e6173c 100644
+--- a/packages/a2a-server/src/http/app.ts
++++ b/packages/a2a-server/src/http/app.ts
+@@ -22,14 +22,17 @@ import type { AgentSettings } from '../types.js';
+ import { GCSTaskStore, NoOpTaskStore } from '../persistence/gcs.js';
+ import { CoderAgentExecutor } from '../agent/executor.js';
+ import { requestStorage } from './requestStorage.js';
++import * as fs from 'node:fs';
++import stripJsonComments from 'strip-json-comments';
+ import { loadConfig, loadEnvironment, setTargetDir } from '../config/config.js';
+-import { loadSettings } from '../config/settings.js';
++import { loadSettings, USER_SETTINGS_PATH } from '../config/settings.js';
+ import { loadExtensions } from '../config/extension.js';
+ import { commandRegistry } from '../commands/command-registry.js';
+ import {
+   debugLogger,
+   SimpleExtensionLoader,
+   GitService,
++  checkPathTrust,
+ } from '@google/gemini-cli-core';
+ import type { Command, CommandArgument } from '../commands/types.js';
+ 
+@@ -197,12 +200,36 @@ export async function createApp() {
+     // Load the server configuration once on startup.
+     const workspaceRoot = setTargetDir(undefined);
+     loadEnvironment();
+-    const settings = loadSettings(workspaceRoot);
++
++    let isFolderTrustEnabled = true;
++    try {
++      if (fs.existsSync(USER_SETTINGS_PATH)) {
++        const userContent = fs.readFileSync(USER_SETTINGS_PATH, 'utf-8');
++        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
++        const parsed = JSON.parse(stripJsonComments(userContent)) as {
++          security?: { folderTrust?: { enabled?: boolean } };
++          folderTrust?: boolean;
++        };
++        isFolderTrustEnabled =
++          parsed.security?.folderTrust?.enabled !== false &&
++          parsed.folderTrust !== false;
++      }
++    } catch {
++      // ignore
++    }
++    const trustResult = checkPathTrust({
++      path: workspaceRoot,
++      isFolderTrustEnabled,
++    });
++    const isTrusted = trustResult.isTrusted === true;
++
++    const settings = loadSettings(workspaceRoot, isTrusted);
+     const extensions = loadExtensions(workspaceRoot);
+     const config = await loadConfig(
+       settings,
+       new SimpleExtensionLoader(extensions),
+       'a2a-server',
++      isTrusted,
+     );
+ 
+     let git: GitService | undefined;
+diff --git a/packages/a2a-server/src/test-setup.ts b/packages/a2a-server/src/test-setup.ts
+new file mode 100644
+index 000000000..b5152b77b
+--- /dev/null
++++ b/packages/a2a-server/src/test-setup.ts
+@@ -0,0 +1,9 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import { File } from 'node:buffer';
++
++globalThis.File = globalThis.File || File;
+diff --git a/packages/a2a-server/src/types.ts b/packages/a2a-server/src/types.ts
+index bce233c9d..b6f397140 100644
+--- a/packages/a2a-server/src/types.ts
++++ b/packages/a2a-server/src/types.ts
+@@ -47,6 +47,7 @@ export interface AgentSettings {
+   kind: CoderAgentEvent.StateAgentSettingsEvent;
+   workspacePath: string;
+   autoExecute?: boolean;
++  isTrusted?: boolean;
+ }
+ 
+ export interface ToolCallConfirmation {
+diff --git a/packages/a2a-server/vitest.config.ts b/packages/a2a-server/vitest.config.ts
+index a22fdc31a..5118f1289 100644
+--- a/packages/a2a-server/vitest.config.ts
++++ b/packages/a2a-server/vitest.config.ts
+@@ -12,6 +12,7 @@ export default defineConfig({
+     include: ['**/*.{test,spec}.?(c|m)[jt]s?(x)'],
+     exclude: ['**/node_modules/**', '**/dist/**'],
+     globals: true,
++    setupFiles: [new URL('./src/test-setup.ts', import.meta.url).pathname],
+     reporters: ['default', 'junit'],
+     silent: true,
+     outputFile: {
+diff --git a/scripts/copy_bundle_assets.js b/scripts/copy_bundle_assets.js
+index 658c0a57c..91c47a508 100644
+--- a/scripts/copy_bundle_assets.js
++++ b/scripts/copy_bundle_assets.js
+@@ -54,6 +54,15 @@ for (const file of policyFiles) {
+ 
+ console.log(`Copied ${policyFiles.length} policy files to bundle/policies/`);
+ 
++const a2aPolicyDir = join(root, 'packages/a2a-server/dist/policies');
++if (!existsSync(a2aPolicyDir)) {
++  mkdirSync(a2aPolicyDir, { recursive: true });
++}
++for (const file of policyFiles) {
++  copyFileSync(join(root, file), join(a2aPolicyDir, basename(file)));
++}
++console.log(`Copied ${policyFiles.length} policy files to packages/a2a-server/dist/policies`);
++
+ // 3. Copy Documentation (docs/)
+ const docsSrc = join(root, 'docs');
+ const docsDest = join(bundleDir, 'docs');

@@ -25,6 +25,9 @@ from dotenv import load_dotenv
 # Path resolution
 HELPERS_DIR = Path(__file__).parent.resolve()
 EVAL_DIR = HELPERS_DIR.parent.resolve()
+CARETAKER_EVALS_DIR = EVAL_DIR.parent.resolve()
+if str(CARETAKER_EVALS_DIR) not in sys.path:
+    sys.path.insert(0, str(CARETAKER_EVALS_DIR))
 
 # Import helpers from reference_triage and triage_worker
 from triage.helpers.github_api import (
@@ -159,6 +162,7 @@ def main() -> None:
         default="both",
         help="Generation mode: 'ground_truth', 'triage_agent', or 'both'",
     )
+    parser.add_argument("--max-workers", type=int, default=4, help="Max concurrent worker threads")
 
     args = parser.parse_args()
 
@@ -166,25 +170,48 @@ def main() -> None:
     prs = args.pr or []
     output_dir_path = Path(args.output_dir) if args.output_dir else None
 
-    for idx, issue_num in enumerate(issues):
-        pr_num = prs[idx] if idx < len(prs) else None
-        if args.mode in ["ground_truth", "both"]:
-            generate_ground_truth_issue(
-                owner=args.owner,
-                repo=args.repo,
-                issue_number=issue_num,
-                pr_number=pr_num,
-                output_dir=output_dir_path,
-            )
+    pairs = [(issue_num, prs[idx] if idx < len(prs) else None) for idx, issue_num in enumerate(issues)]
 
-        if args.mode in ["triage_agent", "both"]:
-            generate_triage_agent_issue(
-                owner=args.owner,
-                repo=args.repo,
-                issue_number=issue_num,
-                pr_number=pr_num,
-                output_dir=output_dir_path,
-            )
+    def _worker(pair):
+        issue_num, pr_num = pair
+        try:
+            if args.mode in ["ground_truth", "both"]:
+                generate_ground_truth_issue(
+                    owner=args.owner,
+                    repo=args.repo,
+                    issue_number=issue_num,
+                    pr_number=pr_num,
+                    output_dir=output_dir_path,
+                )
+
+            if args.mode in ["triage_agent", "both"]:
+                generate_triage_agent_issue(
+                    owner=args.owner,
+                    repo=args.repo,
+                    issue_number=issue_num,
+                    pr_number=pr_num,
+                    output_dir=output_dir_path,
+                )
+            return (issue_num, True, None)
+        except Exception as e:
+            print(f"❌ Error generating golden issue #{issue_num}: {e}")
+            return (issue_num, False, str(e))
+
+    if len(pairs) == 1:
+        _worker(pairs[0])
+    else:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        print(f"\n==========================================================")
+        print(f" Starting Concurrent Golden Issue Generation ({len(pairs)} items)")
+        print(f" Mode: {args.mode} | Target Repository: {args.owner}/{args.repo}")
+        print(f" Max Workers: {args.max_workers}")
+        print(f"==========================================================\n")
+
+        with ThreadPoolExecutor(max_workers=min(args.max_workers, len(pairs))) as executor:
+            futures = [executor.submit(_worker, pair) for pair in pairs]
+            for future in as_completed(futures):
+                future.result()
 
 
 if __name__ == "__main__":

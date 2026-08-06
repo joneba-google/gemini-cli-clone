@@ -1,0 +1,202 @@
+diff --git a/packages/cli/src/ui/AppContainer.test.tsx b/packages/cli/src/ui/AppContainer.test.tsx
+index ea9e0629d..e10c04ac8 100644
+--- a/packages/cli/src/ui/AppContainer.test.tsx
++++ b/packages/cli/src/ui/AppContainer.test.tsx
+@@ -21,6 +21,7 @@ import { AppContainer } from './AppContainer.js';
+ import { SettingsContext } from './contexts/SettingsContext.js';
+ import { type TrackedToolCall } from './hooks/useToolScheduler.js';
+ import {
++  type HookSystem,
+   type Config,
+   makeFakeConfig,
+   CoreEvent,
+@@ -3130,6 +3131,36 @@ describe('AppContainer State Management', () => {
+       expect(clearTerminalCalls).toHaveLength(0);
+       unmount();
+     });
++
++    it('asserts that session start does not trigger direct historyManager.addItem calls lacking a source tag', async () => {
++      const mockFireSessionStartEvent = vi.fn().mockResolvedValue({
++        systemMessage: 'Test hook system message',
++        getAdditionalContext: () => undefined,
++      });
++      vi.spyOn(mockConfig, 'getHookSystem').mockReturnValue({
++        fireSessionStartEvent: mockFireSessionStartEvent,
++      } as unknown as HookSystem);
++
++      const addItemMock = mockedUseHistory().addItem;
++      addItemMock.mockClear();
++
++      const { unmount } = await act(async () => renderAppContainer());
++
++      await waitFor(() => expect(capturedUIState).toBeTruthy());
++
++      expect(mockFireSessionStartEvent).toHaveBeenCalled();
++
++      // Since we removed direct historyManager.addItem on session start,
++      // it should NOT have been called with 'Test hook system message'
++      expect(addItemMock).not.toHaveBeenCalledWith(
++        expect.objectContaining({
++          text: 'Test hook system message',
++        }),
++        expect.any(Number),
++      );
++
++      unmount();
++    });
+   });
+ 
+   describe('Submission Handling', () => {
+diff --git a/packages/cli/src/ui/AppContainer.tsx b/packages/cli/src/ui/AppContainer.tsx
+index 5c7d4176b..d77c9adfb 100644
+--- a/packages/cli/src/ui/AppContainer.tsx
++++ b/packages/cli/src/ui/AppContainer.tsx
+@@ -497,16 +497,6 @@ export const AppContainer = (props: AppContainerProps) => {
+         ?.fireSessionStartEvent(sessionStartSource);
+ 
+       if (result) {
+-        if (result.systemMessage) {
+-          historyManager.addItem(
+-            {
+-              type: MessageType.INFO,
+-              text: result.systemMessage,
+-            },
+-            Date.now(),
+-          );
+-        }
+-
+         const additionalContext = result.getAdditionalContext();
+         const geminiClient = config.getGeminiClient();
+         if (additionalContext && geminiClient) {
+@@ -549,12 +539,6 @@ export const AppContainer = (props: AppContainerProps) => {
+         debugLogger.error('Error during cleanup:', e),
+       );
+     };
+-    // Disable the dependencies check here. historyManager gets flagged
+-    // but we don't want to react to changes to it because each new history
+-    // item, including the ones from the start session hook will cause a
+-    // re-render and an error when we try to reload config.
+-    //
+-    // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [config, resumedSessionData]);
+ 
+   useEffect(
+diff --git a/packages/core/src/hooks/hookEventHandler.test.ts b/packages/core/src/hooks/hookEventHandler.test.ts
+index 9e9385010..4b80d72f1 100644
+--- a/packages/core/src/hooks/hookEventHandler.test.ts
++++ b/packages/core/src/hooks/hookEventHandler.test.ts
+@@ -18,10 +18,11 @@ import {
+   HookType,
+   type HookConfig,
+   type HookExecutionResult,
++  type HookOutput,
+ } from './types.js';
+ import type { HookPlanner } from './hookPlanner.js';
+ import type { HookRunner } from './hookRunner.js';
+-import type { HookAggregator } from './hookAggregator.js';
++import type { HookAggregator, AggregatedHookResult } from './hookAggregator.js';
+ 
+ // Mock debugLogger
+ const mockDebugLogger = vi.hoisted(() => ({
+@@ -36,6 +37,7 @@ const mockCoreEvents = vi.hoisted(() => ({
+   emitFeedback: vi.fn(),
+   emitHookStart: vi.fn(),
+   emitHookEnd: vi.fn(),
++  emitHookSystemMessage: vi.fn(),
+ }));
+ 
+ vi.mock('../utils/debugLogger.js', () => ({
+@@ -891,4 +893,80 @@ describe('HookEventHandler', () => {
+       );
+     });
+   });
++
++  describe('systemMessage emission checking', () => {
++    it('should call emitHookSystemMessage for text output format when systemMessage is present', async () => {
++      const mockResult: HookExecutionResult = {
++        success: true,
++        duration: 100,
++        hookConfig: {
++          type: HookType.Command,
++          command: './test.sh',
++        } as unknown as HookConfig,
++        eventName: HookEventName.BeforeTool,
++        outputFormat: 'text',
++        output: {
++          systemMessage: 'A text-format system message',
++        } as HookOutput,
++      };
++
++      vi.mocked(mockHookPlanner.createExecutionPlan).mockReturnValue({
++        eventName: HookEventName.BeforeTool,
++        hookConfigs: [mockResult.hookConfig],
++        sequential: false,
++      });
++      vi.mocked(mockHookRunner.executeHooksParallel).mockResolvedValue([mockResult]);
++      vi.mocked(mockHookAggregator.aggregateResults).mockReturnValue({
++        success: true,
++        allOutputs: [],
++        errors: [],
++        totalDuration: 100,
++      } as unknown as AggregatedHookResult);
++
++      await hookEventHandler.fireBeforeToolEvent('TestTool', {});
++
++      expect(mockCoreEvents.emitHookSystemMessage).toHaveBeenCalledWith({
++        hookName: './test.sh',
++        eventName: HookEventName.BeforeTool,
++        message: 'A text-format system message',
++      });
++    });
++
++    it('should call emitHookSystemMessage for json output format when systemMessage is present', async () => {
++      const mockResult: HookExecutionResult = {
++        success: true,
++        duration: 100,
++        hookConfig: {
++          type: HookType.Command,
++          command: './test.sh',
++        } as unknown as HookConfig,
++        eventName: HookEventName.BeforeTool,
++        outputFormat: 'json',
++        output: {
++          systemMessage: 'A json-format system message',
++        } as HookOutput,
++      };
++
++      vi.mocked(mockHookPlanner.createExecutionPlan).mockReturnValue({
++        eventName: HookEventName.BeforeTool,
++        hookConfigs: [mockResult.hookConfig],
++        sequential: false,
++      });
++      vi.mocked(mockHookRunner.executeHooksParallel).mockResolvedValue([mockResult]);
++      vi.mocked(mockHookAggregator.aggregateResults).mockReturnValue({
++        success: true,
++        allOutputs: [],
++        errors: [],
++        totalDuration: 100,
++      } as unknown as AggregatedHookResult);
++
++      await hookEventHandler.fireBeforeToolEvent('TestTool', {});
++
++      expect(mockCoreEvents.emitHookSystemMessage).toHaveBeenCalledWith({
++        hookName: './test.sh',
++        eventName: HookEventName.BeforeTool,
++        message: 'A json-format system message',
++      });
++    });
++  });
+ });
+diff --git a/packages/core/src/hooks/hookEventHandler.ts b/packages/core/src/hooks/hookEventHandler.ts
+index 24dd77d76..0dd754699 100644
+--- a/packages/core/src/hooks/hookEventHandler.ts
++++ b/packages/core/src/hooks/hookEventHandler.ts
+@@ -460,7 +460,7 @@ export class HookEventHandler {
+       logHookCall(this.context.config, hookCallEvent);
+ 
+       // Emit structured system message event for UI display
+-      if (result.output?.systemMessage && result.outputFormat === 'json') {
++      if (result.output?.systemMessage) {
+         coreEvents.emitHookSystemMessage({
+           hookName,
+           eventName,

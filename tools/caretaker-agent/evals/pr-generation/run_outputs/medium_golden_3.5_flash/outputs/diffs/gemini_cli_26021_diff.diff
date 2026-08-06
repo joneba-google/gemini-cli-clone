@@ -1,0 +1,214 @@
+diff --git a/packages/core/src/policy/config.test.ts b/packages/core/src/policy/config.test.ts
+index 0d23eaaee..2cb483162 100644
+--- a/packages/core/src/policy/config.test.ts
++++ b/packages/core/src/policy/config.test.ts
+@@ -509,6 +509,147 @@ describe('createPolicyEngineConfig', () => {
+     expect(explicitFalseRule).toBeUndefined();
+   });
+ 
++  describe('headless MCP auto-allow', () => {
++    const defaultMcpServers = {
++      'server-foo': {},
++      'server-bar': {},
++    };
++
++    it('should NOT automatically allow configured MCP servers in non-interactive mode by default when autoAllowInHeadless is not set', async () => {
++      const config = await createPolicyEngineConfig(
++        {
++          mcpServers: defaultMcpServers,
++        },
++        ApprovalMode.DEFAULT,
++        MOCK_DEFAULT_DIR,
++        false, // non-interactive
++      );
++
++      const rules = config.rules ?? [];
++      const fooRule = rules.find((r) => r.mcpName === 'server-foo');
++      const barRule = rules.find((r) => r.mcpName === 'server-bar');
++
++      expect(fooRule).toBeUndefined();
++      expect(barRule).toBeUndefined();
++    });
++
++    it('should automatically allow configured MCP servers in non-interactive mode when autoAllowInHeadless is true', async () => {
++      const config = await createPolicyEngineConfig(
++        {
++          mcp: { autoAllowInHeadless: true },
++          mcpServers: defaultMcpServers,
++        },
++        ApprovalMode.DEFAULT,
++        MOCK_DEFAULT_DIR,
++        false, // non-interactive
++      );
++
++      const rules = config.rules ?? [];
++      const fooRule = rules.find((r) => r.mcpName === 'server-foo');
++      const barRule = rules.find((r) => r.mcpName === 'server-bar');
++
++      expect(fooRule).toBeDefined();
++      expect(fooRule?.decision).toBe(PolicyDecision.ALLOW);
++      expect(fooRule?.source).toBe('Settings (Headless MCP Auto-Allow)');
++      expect(fooRule?.toolName).toBe('mcp_server-foo_*');
++
++      expect(barRule).toBeDefined();
++      expect(barRule?.decision).toBe(PolicyDecision.ALLOW);
++      expect(barRule?.source).toBe('Settings (Headless MCP Auto-Allow)');
++      expect(barRule?.toolName).toBe('mcp_server-bar_*');
++    });
++
++    it('should not generate auto-allow rules when interactive is true, even if autoAllowInHeadless is true', async () => {
++      const config = await createPolicyEngineConfig(
++        {
++          mcp: { autoAllowInHeadless: true },
++          mcpServers: defaultMcpServers,
++        },
++        ApprovalMode.DEFAULT,
++        MOCK_DEFAULT_DIR,
++        true, // interactive
++      );
++
++      const rules = config.rules ?? [];
++      const fooRule = rules.find(
++        (r) => r.mcpName === 'server-foo' && r.source === 'Settings (Headless MCP Auto-Allow)',
++      );
++      expect(fooRule).toBeUndefined();
++    });
++
++    it('should skip duplicate allow rules if an MCP server is already in mcp.allowed, covered by wildcard, or has trust: true', async () => {
++      const config = await createPolicyEngineConfig(
++        {
++          mcp: {
++            autoAllowInHeadless: true,
++            allowed: ['server-bar', 'server-explicit-allowed']
++          },
++          mcpServers: {
++            'server-bar': {}, // Duplicated with mcp.allowed -> should skip headless auto-allow and use general ALLOWED rule
++            'server-trusted': { trust: true }, // Duplicated with trust: true -> should skip headless auto-allow and use TRUSTED rule
++            'server-normal': {}, // Non-duplicated -> should get headless auto-allow
++          },
++        },
++        ApprovalMode.DEFAULT,
++        MOCK_DEFAULT_DIR,
++        false, // non-interactive
++      );
++
++      const rules = config.rules ?? [];
++
++      // server-bar: should use allowed rule with 'Settings (MCP Allowed)' instead of 'Settings (Headless MCP Auto-Allow)'
++      const barHeadlessRule = rules.find(
++        (r) => r.mcpName === 'server-bar' && r.source === 'Settings (Headless MCP Auto-Allow)',
++      );
++      const barAllowedRule = rules.find(
++        (r) => r.mcpName === 'server-bar' && r.source === 'Settings (MCP Allowed)',
++      );
++      expect(barHeadlessRule).toBeUndefined();
++      expect(barAllowedRule).toBeDefined();
++
++      // server-trusted: should use trusted rule with 'Settings (MCP Trusted)' instead of 'Settings (Headless MCP Auto-Allow)'
++      const trustedHeadlessRule = rules.find(
++        (r) => r.mcpName === 'server-trusted' && r.source === 'Settings (Headless MCP Auto-Allow)',
++      );
++      const trustedRule = rules.find(
++        (r) => r.mcpName === 'server-trusted' && r.source === 'Settings (MCP Trusted)',
++      );
++      expect(trustedHeadlessRule).toBeUndefined();
++      expect(trustedRule).toBeDefined();
++
++      // server-normal: should get headless rule
++      const normalHeadlessRule = rules.find(
++        (r) => r.mcpName === 'server-normal' && r.source === 'Settings (Headless MCP Auto-Allow)',
++      );
++      expect(normalHeadlessRule).toBeDefined();
++      expect(normalHeadlessRule?.decision).toBe(PolicyDecision.ALLOW);
++
++      // Covered by '*' wildcard check:
++      const configWithWildcard = await createPolicyEngineConfig(
++        {
++          mcp: {
++            autoAllowInHeadless: true,
++            allowed: ['*']
++          },
++          mcpServers: {
++            'any-server': {},
++          },
++        },
++        ApprovalMode.DEFAULT,
++        MOCK_DEFAULT_DIR,
++        false, // non-interactive
++      );
++      const wildcardHeadlessRule = configWithWildcard.rules?.find(
++        (r) => r.mcpName === 'any-server' && r.source === 'Settings (Headless MCP Auto-Allow)',
++      );
++      expect(wildcardHeadlessRule).toBeUndefined();
++      const isWildcardAllowedRulePresent = configWithWildcard.rules?.some(
++        (r) => r.mcpName === '*' && r.source === 'Settings (MCP Allowed)',
++      );
++      expect(isWildcardAllowedRulePresent).toBe(true);
++    });
++  });
++
+   it('should have YOLO allow-all rule beat write tool rules in YOLO mode', async () => {
+     const config = await createPolicyEngineConfig(
+       { tools: { exclude: ['dangerous-tool'] } },
+diff --git a/packages/core/src/policy/config.ts b/packages/core/src/policy/config.ts
+index 6d978479c..1d8c839b5 100644
+--- a/packages/core/src/policy/config.ts
++++ b/packages/core/src/policy/config.ts
+@@ -600,6 +600,28 @@ export async function createPolicyEngineConfig(
+     }
+   }
+ 
++  if (!interactive && settings.mcp?.autoAllowInHeadless && settings.mcpServers) {
++    for (const serverName of Object.keys(settings.mcpServers)) {
++      const isTrusted = settings.mcpServers[serverName]?.trust === true;
++      const isAllowedExplicitly = settings.mcp?.allowed?.includes(serverName);
++      const isAllowedByWildcard = settings.mcp?.allowed?.includes('*');
++      if (isTrusted || isAllowedExplicitly || isAllowedByWildcard) {
++        continue;
++      }
++      rules.push({
++        toolName:
++          serverName === '*'
++            ? `${MCP_TOOL_PREFIX}*`
++            : `${MCP_TOOL_PREFIX}${serverName}_*`,
++        mcpName: serverName,
++        decision: PolicyDecision.ALLOW,
++        priority: ALLOWED_MCP_SERVER_PRIORITY,
++        source: 'Settings (Headless MCP Auto-Allow)',
++        modes: nonPlanModes,
++      });
++    }
++  }
++
+   return {
+     rules,
+     checkers,
+diff --git a/packages/core/src/policy/types.ts b/packages/core/src/policy/types.ts
+index 672e3f841..5af375490 100644
+--- a/packages/core/src/policy/types.ts
++++ b/packages/core/src/policy/types.ts
+@@ -333,6 +333,7 @@ export interface PolicySettings {
+   mcp?: {
+     excluded?: string[];
+     allowed?: string[];
++    autoAllowInHeadless?: boolean;
+   };
+   tools?: {
+     core?: string[];
+diff --git a/packages/core/test-setup.ts b/packages/core/test-setup.ts
+index d73036957..508ede99b 100644
+--- a/packages/core/test-setup.ts
++++ b/packages/core/test-setup.ts
+@@ -9,6 +9,12 @@ if (process.env.NO_COLOR !== undefined) {
+   delete process.env.NO_COLOR;
+ }
+ 
++import { File } from 'node:buffer';
++if (!globalThis.File) {
++  // eslint-disable-next-line @typescript-eslint/no-explicit-any
++  globalThis.File = File as any;
++}
++
+ import { setSimulate429 } from './src/utils/testUtils.js';
+ import { vi, afterEach } from 'vitest';
+ import { coreEvents } from './src/utils/events.js';

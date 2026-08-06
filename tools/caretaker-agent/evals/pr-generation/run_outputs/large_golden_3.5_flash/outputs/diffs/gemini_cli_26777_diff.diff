@@ -1,0 +1,330 @@
+diff --git a/packages/core/src/tools/ripGrep.test.ts b/packages/core/src/tools/ripGrep.test.ts
+index bd3cd2118..a7cf53584 100644
+--- a/packages/core/src/tools/ripGrep.test.ts
++++ b/packages/core/src/tools/ripGrep.test.ts
+@@ -10,11 +10,11 @@ import {
+   RipGrepTool,
+   ensureRgPath,
+   type RipGrepToolParams,
+-  getRipgrepPath,
++  resolveRipgrepPath,
+ } from './ripGrep.js';
+ import type { GrepResult } from './tools.js';
+ import path from 'node:path';
+-import { isSubpath } from '../utils/paths.js';
++import { isSubpath, resolveToRealPath } from '../utils/paths.js';
+ import fs from 'node:fs/promises';
+ import os from 'node:os';
+ import type { Config } from '../config/config.js';
+@@ -34,6 +34,27 @@ vi.mock('../utils/fileUtils.js', async (importOriginal) => {
+   };
+ });
+ 
++vi.mock('../utils/paths.js', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('../utils/paths.js')>();
++  return {
++    ...actual,
++    resolveToRealPath: vi.fn((p) => actual.resolveToRealPath(p)),
++    isSubpath: vi.fn((parent, child) => actual.isSubpath(parent, child)),
++  };
++});
++
++
++import { resolveExecutable, isTrustedSystemPath } from '../utils/shell-utils.js';
++
++vi.mock('../utils/shell-utils.js', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('../utils/shell-utils.js')>();
++  return {
++    ...actual,
++    resolveExecutable: vi.fn(),
++    isTrustedSystemPath: vi.fn((p) => actual.isTrustedSystemPath(p)),
++  };
++});
++
+ // Mock child_process for ripgrep calls
+ vi.mock('child_process', () => ({
+   spawn: vi.fn(),
+@@ -67,7 +88,7 @@ describe('ensureRgPath', () => {
+   it('should return rg path if ripgrep already exists', async () => {
+     vi.mocked(fileExists).mockResolvedValue(true);
+     const rgPath = await ensureRgPath();
+-    expect(rgPath).toBe(await getRipgrepPath());
++    expect(rgPath).toBe(await resolveRipgrepPath());
+   });
+ 
+   it('should throw an error if ripgrep cannot be used', async () => {
+@@ -1945,7 +1966,7 @@ describe('RipGrepTool', () => {
+   });
+ });
+ 
+-describe('getRipgrepPath', () => {
++describe('resolveRipgrepPath', () => {
+   afterEach(() => {
+     vi.restoreAllMocks();
+   });
+@@ -1966,7 +1987,7 @@ describe('getRipgrepPath', () => {
+           checkPath.endsWith(expectedBin),
+         );
+ 
+-        const resolvedPath = await getRipgrepPath();
++        const resolvedPath = await resolveRipgrepPath();
+         expect(resolvedPath).not.toBeNull();
+         expect(resolvedPath?.endsWith(expectedBin)).toBe(true);
+       },
+@@ -1984,7 +2005,7 @@ describe('getRipgrepPath', () => {
+         checkPath.includes(path.normalize('tools/vendor/ripgrep')),
+       );
+ 
+-      const resolvedPath = await getRipgrepPath();
++      const resolvedPath = await resolveRipgrepPath();
+       expect(resolvedPath).not.toBeNull();
+       expect(resolvedPath).toContain(path.normalize('tools/vendor/ripgrep'));
+     });
+@@ -1993,22 +2014,103 @@ describe('getRipgrepPath', () => {
+       vi.mocked(fileExists).mockImplementation(
+         async (checkPath) =>
+           checkPath.includes(path.normalize('core/vendor/ripgrep')) &&
+-          !checkPath.includes(path.join(path.sep, 'tools', path.sep)),
++          !checkPath.includes(path.normalize('core/src/tools')) &&
++          !checkPath.includes(path.normalize('core/dist/tools')),
+       );
+ 
+-      const resolvedPath = await getRipgrepPath();
++      const resolvedPath = await resolveRipgrepPath();
+       expect(resolvedPath).not.toBeNull();
+       expect(resolvedPath).toContain(path.normalize('core/vendor/ripgrep'));
+-      expect(resolvedPath).not.toContain(
+-        path.join(path.sep, 'tools', path.sep),
+-      );
+     });
+ 
+-    it('should return null if binary is missing from both paths', async () => {
+-      vi.mocked(fileExists).mockResolvedValue(false);
++    describe('System PATH search fallback when bundled files are missing', () => {
++      beforeEach(() => {
++        vi.mocked(fileExists).mockResolvedValue(false);
++      });
++
++      it('should resolve safe trusted system paths', async () => {
++        vi.mocked(resolveExecutable).mockResolvedValue('/usr/bin/rg');
++        vi.mocked(isTrustedSystemPath).mockReturnValue(true);
++
++        const resolvedPath = await resolveRipgrepPath();
++        expect(resolvedPath).toBe('/usr/bin/rg');
++      });
+ 
+-      const resolvedPath = await getRipgrepPath();
+-      expect(resolvedPath).toBeNull();
++      it('should reject paths inside current working directory (CWD)', async () => {
++        const cwdPath = path.resolve(process.cwd(), 'rg');
++        vi.mocked(resolveExecutable).mockResolvedValue(cwdPath);
++
++        const resolvedPath = await resolveRipgrepPath();
++        expect(resolvedPath).toBeNull();
++      });
++
++      it('should reject untrusted paths outside of standard directories', async () => {
++        vi.mocked(resolveExecutable).mockResolvedValue('/tmp/untrusted/rg');
++        vi.mocked(isTrustedSystemPath).mockReturnValue(false);
++
++        const resolvedPath = await resolveRipgrepPath();
++        expect(resolvedPath).toBeNull();
++      });
++
++      it('should allow macOS Homebrew Cellar paths even if not standard system paths', async () => {
++        vi.spyOn(os, 'platform').mockReturnValue('darwin');
++        vi.mocked(resolveExecutable).mockResolvedValue('/opt/homebrew/Cellar/ripgrep/13.0.0/bin/rg');
++        vi.mocked(isTrustedSystemPath).mockReturnValue(false);
++
++        const resolvedPath = await resolveRipgrepPath();
++        expect(resolvedPath).toBe('/opt/homebrew/Cellar/ripgrep/13.0.0/bin/rg');
++      });
++
++      it('should reject macOS Homebrew Cellar paths if not on darwin platform', async () => {
++        vi.spyOn(os, 'platform').mockReturnValue('linux');
++        vi.mocked(resolveExecutable).mockResolvedValue('/opt/homebrew/Cellar/ripgrep/13.0.0/bin/rg');
++        vi.mocked(isTrustedSystemPath).mockReturnValue(false);
++
++        const resolvedPath = await resolveRipgrepPath();
++        expect(resolvedPath).toBeNull();
++      });
++
++      it('should identify safe standard Windows paths when environment variables are set', async () => {
++        vi.spyOn(os, 'platform').mockReturnValue('win32');
++        
++        // Mock paths.js functions to bypass POSIX path resolution side-effects in POSIX node environment
++        vi.mocked(resolveToRealPath).mockImplementation((p) => p);
++        vi.mocked(isSubpath).mockImplementation((parent, child) => {
++          // If CWD is passed, check if mock path is inside it. Since system paths are absolute on Windows (C:\), they are not inside our linux CWD system paths
++          if (parent === process.cwd() || parent === resolveToRealPath(process.cwd())) {
++            return child.startsWith(parent);
++          }
++          // Default mock isSubpath behavior for Windows
++          const p = parent.toLowerCase().replace(/\\/g, '/');
++          const c = child.toLowerCase().replace(/\\/g, '/');
++          return c.startsWith(p) && c !== p;
++        });
++
++        // Mock environment variables for Windows
++        const origSystemRoot = process.env['SystemRoot'];
++        const origProgramFiles = process.env['ProgramFiles'];
++        process.env['SystemRoot'] = 'C:\\Windows';
++        process.env['ProgramFiles'] = 'C:\\Program Files';
++
++        try {
++          // Trusted Windows path
++          vi.mocked(resolveExecutable).mockResolvedValue('C:\\Windows\\System32\\rg.exe');
++          vi.mocked(isTrustedSystemPath).mockReturnValue(true);
++
++          let resolvedPath = await resolveRipgrepPath();
++          expect(resolvedPath).toBe('C:\\Windows\\System32\\rg.exe');
++
++          // Untrusted Windows path (e.g. inside Downloads)
++          vi.mocked(resolveExecutable).mockResolvedValue('C:\\Users\\User\\Downloads\\rg.exe');
++          vi.mocked(isTrustedSystemPath).mockReturnValue(false);
++
++          resolvedPath = await resolveRipgrepPath();
++          expect(resolvedPath).toBeNull();
++        } finally {
++          process.env['SystemRoot'] = origSystemRoot;
++          process.env['ProgramFiles'] = origProgramFiles;
++        }
++      });
+     });
+   });
+ });
+diff --git a/packages/core/src/tools/ripGrep.ts b/packages/core/src/tools/ripGrep.ts
+index 861b4b0b8..6e9663a96 100644
+--- a/packages/core/src/tools/ripGrep.ts
++++ b/packages/core/src/tools/ripGrep.ts
+@@ -19,7 +19,7 @@ import {
+   type ExecuteOptions,
+ } from './tools.js';
+ import { ToolErrorType } from './tool-error.js';
+-import { makeRelative, shortenPath } from '../utils/paths.js';
++import { makeRelative, shortenPath, resolveToRealPath, isSubpath } from '../utils/paths.js';
+ import { getErrorMessage, isNodeError } from '../utils/errors.js';
+ import type { Config } from '../config/config.js';
+ import { fileExists } from '../utils/fileUtils.js';
+@@ -30,7 +30,7 @@ import {
+   COMMON_DIRECTORY_EXCLUDES,
+ } from '../utils/ignorePatterns.js';
+ import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
+-import { execStreaming } from '../utils/shell-utils.js';
++import { execStreaming, resolveExecutable, isTrustedSystemPath } from '../utils/shell-utils.js';
+ import {
+   DEFAULT_TOTAL_MAX_MATCHES,
+   DEFAULT_SEARCH_TIMEOUT_MS,
+@@ -41,7 +41,7 @@ import { type GrepMatch, formatGrepResults } from './grep-utils.js';
+ 
+ const __dirname = path.dirname(fileURLToPath(import.meta.url));
+ 
+-export async function getRipgrepPath(): Promise<string | null> {
++export async function resolveRipgrepPath(): Promise<string | null> {
+   const platform = os.platform();
+   const arch = os.arch();
+ 
+@@ -61,14 +61,34 @@ export async function getRipgrepPath(): Promise<string | null> {
+     }
+   }
+ 
++  const resolvedSystemPath = await resolveExecutable('rg');
++  if (resolvedSystemPath) {
++    const realPath = resolveToRealPath(resolvedSystemPath);
++    const realCwd = resolveToRealPath(process.cwd());
++
++    // Strictly reject if the real path falls under the current working directory (process.cwd())
++    if (isSubpath(realCwd, realPath)) {
++      return null;
++    }
++
++    const isTrusted = isTrustedSystemPath(realPath);
++    const isMacCellar =
++      platform === 'darwin' &&
++      (realPath.startsWith('/opt/homebrew/Cellar') || realPath.startsWith('/usr/local/Cellar'));
++
++    if (isTrusted || isMacCellar) {
++      return realPath;
++    }
++  }
++
+   return null;
+ }
+ 
+ /**
+- * Checks if `rg` exists in the bundled vendor directory.
++ * Checks if `rg` exists in the bundled vendor directory or system PATH.
+  */
+ export async function canUseRipgrep(): Promise<boolean> {
+-  const binPath = await getRipgrepPath();
++  const binPath = await resolveRipgrepPath();
+   return binPath !== null;
+ }
+ 
+@@ -76,7 +96,7 @@ export async function canUseRipgrep(): Promise<boolean> {
+  * Ensures `rg` is available, or throws.
+  */
+ export async function ensureRgPath(): Promise<string> {
+-  const binPath = await getRipgrepPath();
++  const binPath = await resolveRipgrepPath();
+   if (binPath !== null) {
+     return binPath;
+   }
+diff --git a/packages/core/src/utils/shell-utils.ts b/packages/core/src/utils/shell-utils.ts
+index e1e5127e5..73951d837 100644
+--- a/packages/core/src/utils/shell-utils.ts
++++ b/packages/core/src/utils/shell-utils.ts
+@@ -8,6 +8,7 @@ import os from 'node:os';
+ import fs from 'node:fs';
+ import path from 'node:path';
+ import { quote, type ParseEntry } from 'shell-quote';
++import { isSubpath } from './paths.js';
+ import {
+   spawn,
+   spawnSync,
+@@ -105,6 +106,45 @@ export async function resolveExecutable(
+   return undefined;
+ }
+ 
++/**
++ * Checks if a canonical resolved real path is a trusted system path.
++ * On Windows, checks if it falls under SystemRoot or ProgramFiles.
++ * On Unix, checks if it falls under /usr/bin, /bin, /usr/sbin, /sbin, or /usr/local/bin.
++ */
++export function isTrustedSystemPath(realPath: string): boolean {
++  if (os.platform() === 'win32') {
++    const systemRoot = process.env['SystemRoot'];
++    const programFiles = process.env['ProgramFiles'];
++    const programFilesX86 = process.env['ProgramFiles(x86)'];
++
++    if (systemRoot && isSubpath(systemRoot, realPath)) {
++      return true;
++    }
++    if (programFiles && isSubpath(programFiles, realPath)) {
++      return true;
++    }
++    if (programFilesX86 && isSubpath(programFilesX86, realPath)) {
++      return true;
++    }
++    return false;
++  } else {
++    const trustedPrefixes = [
++      '/usr/bin',
++      '/bin',
++      '/usr/sbin',
++      '/sbin',
++      '/usr/local/bin',
++    ];
++    for (const prefix of trustedPrefixes) {
++      if (isSubpath(prefix, realPath)) {
++        return true;
++      }
++    }
++    return false;
++  }
++}
++
++
+ let bashLanguage: Language | null = null;
+ let treeSitterInitialization: Promise<void> | null = null;
+ let treeSitterInitializationError: Error | null = null;

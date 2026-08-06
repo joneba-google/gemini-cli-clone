@@ -1,0 +1,264 @@
+diff --git a/packages/cli/src/ui/hooks/usePrivacySettings.test.tsx b/packages/cli/src/ui/hooks/usePrivacySettings.test.tsx
+index adf1eb53d..9ed073d4d 100644
+--- a/packages/cli/src/ui/hooks/usePrivacySettings.test.tsx
++++ b/packages/cli/src/ui/hooks/usePrivacySettings.test.tsx
+@@ -49,7 +49,7 @@ describe('usePrivacySettings', () => {
+     };
+   };
+ 
+-  it('should throw error when content generator is not a CodeAssistServer', async () => {
++  it('should report isTierUnavailable when content generator is not a CodeAssistServer', async () => {
+     vi.mocked(getCodeAssistServer).mockReturnValue(undefined);
+ 
+     const { result } = await act(async () => renderPrivacySettingsHook());
+@@ -58,7 +58,8 @@ describe('usePrivacySettings', () => {
+       expect(result.current.privacyState.isLoading).toBe(false);
+     });
+ 
+-    expect(result.current.privacyState.error).toBe('Oauth not being used');
++    expect(result.current.privacyState.isTierUnavailable).toBe(true);
++    expect(result.current.privacyState.error).toBeUndefined();
+   });
+ 
+   it('should handle paid tier users correctly', async () => {
+@@ -79,7 +80,7 @@ describe('usePrivacySettings', () => {
+     expect(result.current.privacyState.dataCollectionOptIn).toBeUndefined();
+   });
+ 
+-  it('should throw error when CodeAssistServer has no projectId', async () => {
++  it('should report isTierUnavailable when CodeAssistServer has no projectId', async () => {
+     vi.mocked(getCodeAssistServer).mockReturnValue({
+       userTier: UserTierId.FREE,
+     } as unknown as CodeAssistServer);
+@@ -90,9 +91,48 @@ describe('usePrivacySettings', () => {
+       expect(result.current.privacyState.isLoading).toBe(false);
+     });
+ 
+-    expect(result.current.privacyState.error).toBe(
+-      'CodeAssist server is missing a project ID',
+-    );
++    expect(result.current.privacyState.isTierUnavailable).toBe(true);
++    expect(result.current.privacyState.error).toBeUndefined();
++  });
++
++  it('should report isTierUnavailable when getCodeAssistGlobalUserSetting throws a backend error containing "User does not have a current tier"', async () => {
++    const mockCodeAssistServer = {
++      projectId: 'test-project-id',
++      getCodeAssistGlobalUserSetting: vi.fn().mockRejectedValue(
++        new Error('User does not have a current tier'),
++      ),
++      userTier: UserTierId.FREE,
++    } as unknown as CodeAssistServer;
++    vi.mocked(getCodeAssistServer).mockReturnValue(mockCodeAssistServer);
++
++    const { result } = await act(async () => renderPrivacySettingsHook());
++
++    await waitFor(() => {
++      expect(result.current.privacyState.isLoading).toBe(false);
++    });
++
++    expect(result.current.privacyState.isTierUnavailable).toBe(true);
++    expect(result.current.privacyState.error).toBeUndefined();
++  });
++
++  it('should report standard error when getCodeAssistGlobalUserSetting throws an unexpected error', async () => {
++    const mockCodeAssistServer = {
++      projectId: 'test-project-id',
++      getCodeAssistGlobalUserSetting: vi.fn().mockRejectedValue(
++        new Error('Network error or database failure'),
++      ),
++      userTier: UserTierId.FREE,
++    } as unknown as CodeAssistServer;
++    vi.mocked(getCodeAssistServer).mockReturnValue(mockCodeAssistServer);
++
++    const { result } = await act(async () => renderPrivacySettingsHook());
++
++    await waitFor(() => {
++      expect(result.current.privacyState.isLoading).toBe(false);
++    });
++
++    expect(result.current.privacyState.isTierUnavailable).toBeUndefined();
++    expect(result.current.privacyState.error).toBe('Network error or database failure');
+   });
+ 
+   it('should update data collection opt-in setting', async () => {
+diff --git a/packages/cli/src/ui/hooks/usePrivacySettings.ts b/packages/cli/src/ui/hooks/usePrivacySettings.ts
+index 7bf5a5ff1..bcf4466c5 100644
+--- a/packages/cli/src/ui/hooks/usePrivacySettings.ts
++++ b/packages/cli/src/ui/hooks/usePrivacySettings.ts
+@@ -13,11 +13,29 @@ import {
+   debugLogger,
+ } from '@google/gemini-cli-core';
+ 
++export class TierUnavailableError extends Error {
++  constructor(message: string) {
++    super(message);
++    this.name = 'TierUnavailableError';
++  }
++}
++
++export function isTierUnavailableError(error: unknown): boolean {
++  if (error instanceof TierUnavailableError) {
++    return true;
++  }
++  if (error instanceof Error) {
++    return /does not have a current tier/i.test(error.message);
++  }
++  return false;
++}
++
+ export interface PrivacyState {
+   isLoading: boolean;
+   error?: string;
+   isFreeTier?: boolean;
+   dataCollectionOptIn?: boolean;
++  isTierUnavailable?: boolean;
+ }
+ 
+ export const usePrivacySettings = (config: Config) => {
+@@ -34,7 +52,11 @@ export const usePrivacySettings = (config: Config) => {
+         const server = getCodeAssistServerOrFail(config);
+         const tier = server.userTier;
+         if (tier === undefined) {
+-          throw new Error('Could not determine user tier.');
++          setPrivacyState({
++            isLoading: false,
++            isTierUnavailable: true,
++          });
++          return;
+         }
+         if (tier !== UserTierId.FREE) {
+           // We don't need to fetch opt-out info since non-free tier
+@@ -53,10 +75,17 @@ export const usePrivacySettings = (config: Config) => {
+           dataCollectionOptIn: optIn,
+         });
+       } catch (e) {
+-        setPrivacyState({
+-          isLoading: false,
+-          error: e instanceof Error ? e.message : String(e),
+-        });
++        if (isTierUnavailableError(e)) {
++          setPrivacyState({
++            isLoading: false,
++            isTierUnavailable: true,
++          });
++        } else {
++          setPrivacyState({
++            isLoading: false,
++            error: e instanceof Error ? e.message : String(e),
++          });
++        }
+       }
+     };
+     // eslint-disable-next-line @typescript-eslint/no-floating-promises
+@@ -74,10 +103,17 @@ export const usePrivacySettings = (config: Config) => {
+           dataCollectionOptIn: updatedOptIn,
+         });
+       } catch (e) {
+-        setPrivacyState({
+-          isLoading: false,
+-          error: e instanceof Error ? e.message : String(e),
+-        });
++        if (isTierUnavailableError(e)) {
++          setPrivacyState({
++            isLoading: false,
++            isTierUnavailable: true,
++          });
++        } else {
++          setPrivacyState({
++            isLoading: false,
++            error: e instanceof Error ? e.message : String(e),
++          });
++        }
+       }
+     },
+     [config],
+@@ -92,9 +128,9 @@ export const usePrivacySettings = (config: Config) => {
+ function getCodeAssistServerOrFail(config: Config): CodeAssistServer {
+   const server = getCodeAssistServer(config);
+   if (server === undefined) {
+-    throw new Error('Oauth not being used');
++    throw new TierUnavailableError('Oauth not being used');
+   } else if (server.projectId === undefined) {
+-    throw new Error('CodeAssist server is missing a project ID');
++    throw new TierUnavailableError('CodeAssist server is missing a project ID');
+   }
+   return server;
+ }
+diff --git a/packages/cli/src/ui/privacy/CloudFreePrivacyNotice.test.tsx b/packages/cli/src/ui/privacy/CloudFreePrivacyNotice.test.tsx
+index a6fa1ab62..68a17e621 100644
+--- a/packages/cli/src/ui/privacy/CloudFreePrivacyNotice.test.tsx
++++ b/packages/cli/src/ui/privacy/CloudFreePrivacyNotice.test.tsx
+@@ -76,6 +76,11 @@ describe('CloudFreePrivacyNotice', () => {
+       mockState: { isFreeTier: true },
+       expectedText: 'Gemini Code Assist for Individuals Privacy Notice',
+     },
++    {
++      stateName: 'isTierUnavailable state',
++      mockState: { isTierUnavailable: true },
++      expectedText: 'GOOGLE_CLOUD_PROJECT',
++    },
+   ])('renders correctly in $stateName', async ({ mockState, expectedText }) => {
+     mockedUsePrivacySettings.mockReturnValue({
+       privacyState: { ...defaultState, ...mockState },
+@@ -101,6 +106,11 @@ describe('CloudFreePrivacyNotice', () => {
+       mockState: { isFreeTier: false },
+       shouldExit: true,
+     },
++    {
++      stateName: 'isTierUnavailable state',
++      mockState: { isTierUnavailable: true },
++      shouldExit: true,
++    },
+     {
+       stateName: 'free tier state (no selection)',
+       mockState: { isFreeTier: true },
+diff --git a/packages/cli/src/ui/privacy/CloudFreePrivacyNotice.tsx b/packages/cli/src/ui/privacy/CloudFreePrivacyNotice.tsx
+index 52175c067..227e02aa0 100644
+--- a/packages/cli/src/ui/privacy/CloudFreePrivacyNotice.tsx
++++ b/packages/cli/src/ui/privacy/CloudFreePrivacyNotice.tsx
+@@ -27,7 +27,9 @@ export const CloudFreePrivacyNotice = ({
+   useKeypress(
+     (key) => {
+       if (
+-        (privacyState.error || privacyState.isFreeTier === false) &&
++        (privacyState.error ||
++          privacyState.isFreeTier === false ||
++          privacyState.isTierUnavailable) &&
+         key.name === 'escape'
+       ) {
+         onExit();
+@@ -53,6 +55,33 @@ export const CloudFreePrivacyNotice = ({
+     );
+   }
+ 
++  if (privacyState.isTierUnavailable) {
++    return (
++      <Box flexDirection="column" marginY={1}>
++        <Text bold color={theme.text.accent}>
++          Gemini Code Assist Privacy Notice
++        </Text>
++        <Newline />
++        <Text color={theme.text.primary}>
++          Data collection opt-in settings are not available for this account.
++        </Text>
++        <Text color={theme.text.primary}>
++          If you are using a Google Workspace or enterprise account, please ensure
++          the GOOGLE_CLOUD_PROJECT environment variable is set to your Google Cloud project ID.
++        </Text>
++        <Newline />
++        <Text>
++          For more information, see:
++        </Text>
++        <Text color={theme.text.link}>
++          https://developers.google.com/gemini-code-assist/resources/privacy-notices
++        </Text>
++        <Newline />
++        <Text color={theme.text.secondary}>Press Esc to exit.</Text>
++      </Box>
++    );
++  }
++
+   if (privacyState.isFreeTier === false) {
+     return (
+       <Box flexDirection="column" marginY={1}>

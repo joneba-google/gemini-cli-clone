@@ -1,0 +1,483 @@
+diff --git a/packages/cli/src/config/settingsSchema.ts b/packages/cli/src/config/settingsSchema.ts
+index 730bd4b93..c041aaa8c 100644
+--- a/packages/cli/src/config/settingsSchema.ts
++++ b/packages/cli/src/config/settingsSchema.ts
+@@ -757,7 +757,7 @@ const SETTINGS_SCHEMA = {
+         label: 'Terminal Buffer',
+         category: 'UI',
+         requiresRestart: true,
+-        default: true,
++        default: false,
+         description: 'Use the new terminal buffer architecture for rendering.',
+         showInDialog: true,
+       },
+diff --git a/packages/cli/src/interactiveCli.tsx b/packages/cli/src/interactiveCli.tsx
+index 418f58b19..0c97c50e6 100644
+--- a/packages/cli/src/interactiveCli.tsx
++++ b/packages/cli/src/interactiveCli.tsx
+@@ -156,7 +156,7 @@ export async function startInteractiveUI(
+         useAlternateBuffer || config.getUseTerminalBuffer(),
+       patchConsole: false,
+       alternateBuffer: useAlternateBuffer,
+-      renderProcess: config.getUseRenderProcess(),
++      renderProcess: config.getUseRenderProcess() && config.getUseTerminalBuffer(),
+       terminalBuffer: config.getUseTerminalBuffer(),
+       incrementalRendering:
+         settings.merged.ui.incrementalRendering !== false &&
+diff --git a/packages/cli/src/test-utils/render.tsx b/packages/cli/src/test-utils/render.tsx
+index bf8ca468e..0cc3d3076 100644
+--- a/packages/cli/src/test-utils/render.tsx
++++ b/packages/cli/src/test-utils/render.tsx
+@@ -694,6 +694,7 @@ export const renderWithProviders = async (
+       useAlternateBuffer: settings.merged.ui?.useAlternateBuffer,
+       showMemoryUsage: settings.merged.ui?.showMemoryUsage,
+       accessibility: settings.merged.ui?.accessibility,
++      useTerminalBuffer: settings.user?.settings?.ui?.terminalBuffer ?? true,
+     });
+   }
+ 
+diff --git a/packages/cli/src/ui/components/InputPrompt.test.tsx b/packages/cli/src/ui/components/InputPrompt.test.tsx
+index 4d4080983..ab4851f4c 100644
+--- a/packages/cli/src/ui/components/InputPrompt.test.tsx
++++ b/packages/cli/src/ui/components/InputPrompt.test.tsx
+@@ -5103,6 +5103,26 @@ describe('InputPrompt', () => {
+       },
+     );
+   });
++
++  describe('when terminalBuffer is false', () => {
++    it('should render correct sliced scrollableData without ScrollableList', async () => {
++      const { stdout, unmount } = await renderWithProviders(
++        <TestInputPrompt {...props} />,
++        {
++          settings: createMockSettings({
++            ui: {
++              useAlternateBuffer: false,
++              terminalBuffer: false,
++            },
++          }),
++        },
++      );
++
++      // Verify that it renders correctly in non-alternate buffer mode
++      expect(stdout.lastFrame()).toBeDefined();
++      unmount();
++    });
++  });
+ });
+ 
+ function clean(str: string | undefined): string {
+diff --git a/packages/cli/src/ui/components/InputPrompt.tsx b/packages/cli/src/ui/components/InputPrompt.tsx
+index c8d7efa1b..f4aaec28d 100644
+--- a/packages/cli/src/ui/components/InputPrompt.tsx
++++ b/packages/cli/src/ui/components/InputPrompt.tsx
+@@ -5,7 +5,7 @@
+  */
+ 
+ import type React from 'react';
+-import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
++import { useCallback, useEffect, useState, useRef, useMemo, Fragment } from 'react';
+ import clipboardy from 'clipboardy';
+ import { Box, Text, useStdout, type DOMElement } from 'ink';
+ import { SuggestionsDisplay, MAX_WIDTH } from './SuggestionsDisplay.js';
+@@ -1820,24 +1820,44 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
+                 height={Math.min(buffer.viewportHeight, scrollableData.length)}
+                 width="100%"
+               >
+-                <ScrollableList
+-                  ref={listRef}
+-                  hasFocus={focus}
+-                  data={scrollableData}
+-                  renderItem={renderItem}
+-                  estimatedItemHeight={() => 1}
+-                  keyExtractor={(item) =>
+-                    item.type === 'visualLine'
+-                      ? `line-${item.absoluteVisualIdx}`
+-                      : `ghost-${item.index}`
+-                  }
+-                  width="100%"
+-                  backgroundColor={listBackgroundColor}
+-                  containerHeight={Math.min(
+-                    buffer.viewportHeight,
+-                    scrollableData.length,
+-                  )}
+-                />
++                {isAlternateBuffer ? (
++                  <ScrollableList
++                    ref={listRef}
++                    hasFocus={focus}
++                    data={scrollableData}
++                    renderItem={renderItem}
++                    estimatedItemHeight={() => 1}
++                    keyExtractor={(item) =>
++                      item.type === 'visualLine'
++                        ? `line-${item.absoluteVisualIdx}`
++                        : `ghost-${item.index}`
++                    }
++                    width="100%"
++                    backgroundColor={listBackgroundColor}
++                    containerHeight={Math.min(
++                      buffer.viewportHeight,
++                      scrollableData.length,
++                    )}
++                  />
++                ) : (
++                  scrollableData
++                    .slice(
++                      buffer.visualScrollRow,
++                      buffer.visualScrollRow + buffer.viewportHeight,
++                    )
++                    .map((item, index) => {
++                      const absoluteIdx = buffer.visualScrollRow + index;
++                      const key =
++                        item.type === 'visualLine'
++                          ? `line-${item.absoluteVisualIdx}`
++                          : `ghost-${item.index}`;
++                      return (
++                        <Fragment key={key}>
++                          {renderItem({ item, index: absoluteIdx })}
++                        </Fragment>
++                      );
++                    })
++                )}
+               </Box>
+             )}
+           </Box>
+diff --git a/packages/cli/src/ui/components/__snapshots__/InputPrompt.test.tsx.snap b/packages/cli/src/ui/components/__snapshots__/InputPrompt.test.tsx.snap
+index caa270d8c..7f9b51647 100644
+--- a/packages/cli/src/ui/components/__snapshots__/InputPrompt.test.tsx.snap
++++ b/packages/cli/src/ui/components/__snapshots__/InputPrompt.test.tsx.snap
+@@ -168,6 +168,27 @@ exports[`InputPrompt > mouse interaction > should toggle paste expansion on doub
+ "
+ `;
+ 
++exports[`InputPrompt > mouse interaction > should toggle paste expansion on double-click 4`] = `
++"▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
++ > [Pasted Text: 10 lines]
++▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
++"
++`;
++
++exports[`InputPrompt > mouse interaction > should toggle paste expansion on double-click 5`] = `
++"▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
++ > [Pasted Text: 10 lines]
++▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
++"
++`;
++
++exports[`InputPrompt > mouse interaction > should toggle paste expansion on double-click 6`] = `
++"▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
++ > [Pasted Text: 10 lines]
++▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
++"
++`;
++
+ exports[`InputPrompt > multiline rendering > should correctly render multiline input including blank lines 1`] = `
+ "────────────────────────────────────────────────────────────────────────────────────────────────────
+ │ > hello                                                                                          │
+diff --git a/packages/cli/src/ui/components/messages/ToolResultDisplay.test.tsx b/packages/cli/src/ui/components/messages/ToolResultDisplay.test.tsx
+index f30c30989..95b9e4067 100644
+--- a/packages/cli/src/ui/components/messages/ToolResultDisplay.test.tsx
++++ b/packages/cli/src/ui/components/messages/ToolResultDisplay.test.tsx
+@@ -7,7 +7,7 @@
+ import { renderWithProviders } from '../../../test-utils/render.js';
+ import { createMockSettings } from '../../../test-utils/settings.js';
+ import { ToolResultDisplay } from './ToolResultDisplay.js';
+-import { describe, it, expect, vi } from 'vitest';
++import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { makeFakeConfig, type AnsiOutput } from '@google/gemini-cli-core';
+ 
+ describe('ToolResultDisplay', () => {
+@@ -351,7 +351,7 @@ describe('ToolResultDisplay', () => {
+ 
+     expect(output).not.toContain('Line 1');
+     expect(output).not.toContain('Line 2');
+-    expect(output).toContain('Line 3');
++    expect(output).not.toContain('Line 3');
+     expect(output).toContain('Line 4');
+     expect(output).toContain('Line 5');
+     expect(output).toMatchSnapshot();
+diff --git a/packages/cli/src/ui/components/messages/ToolResultDisplay.tsx b/packages/cli/src/ui/components/messages/ToolResultDisplay.tsx
+index aaa30a74d..f26f8cc64 100644
+--- a/packages/cli/src/ui/components/messages/ToolResultDisplay.tsx
++++ b/packages/cli/src/ui/components/messages/ToolResultDisplay.tsx
+@@ -22,6 +22,7 @@ import { tryParseJSON } from '../../../utils/jsonoutput.js';
+ import { useAlternateBuffer } from '../../hooks/useAlternateBuffer.js';
+ import { Scrollable } from '../shared/Scrollable.js';
+ import { ScrollableList } from '../shared/ScrollableList.js';
++import { MaxSizedBox } from '../shared/MaxSizedBox.js';
+ import { SCROLL_TO_ITEM_END } from '../shared/VirtualizedList.js';
+ import { ACTIVE_SHELL_MAX_LINES } from '../../constants.js';
+ import { calculateToolContentMaxLines } from '../../utils/toolLayoutUtils.js';
+@@ -208,31 +209,63 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
+   };
+ 
+   if (Array.isArray(resultDisplay)) {
+-    const limit = maxLines ?? availableHeight ?? ACTIVE_SHELL_MAX_LINES;
+-    const listHeight = Math.min(
++    if (isAlternateBuffer) {
++      const limit = maxLines ?? availableHeight ?? ACTIVE_SHELL_MAX_LINES;
++      const listHeight = Math.min(
++        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
++        (resultDisplay as AnsiOutput).length,
++        limit,
++      );
++
++      const initialScrollIndex =
++        overflowDirection === 'bottom' ? 0 : SCROLL_TO_ITEM_END;
++
++      return (
++        <Box width={childWidth} flexDirection="column" maxHeight={listHeight}>
++          <ScrollableList
++            width={childWidth}
++            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
++            data={resultDisplay as AnsiOutput}
++            renderItem={renderVirtualizedAnsiLine}
++            estimatedItemHeight={() => 1}
++            keyExtractor={keyExtractor}
++            initialScrollIndex={initialScrollIndex}
++            hasFocus={hasFocus}
++            fixedItemHeight={true}
++          />
++        </Box>
++      );
++    } else {
++      const limit = maxLines ?? availableHeight ?? ACTIVE_SHELL_MAX_LINES;
+       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+-      (resultDisplay as AnsiOutput).length,
+-      limit,
+-    );
++      const ansiOutput = resultDisplay as AnsiOutput;
++      const totalLines = ansiOutput.length;
++      const hasHidden = totalLines > limit;
++      const visibleCount = hasHidden ? Math.max(0, limit - 1) : totalLines;
++      const hiddenCount = totalLines - visibleCount;
+ 
+-    const initialScrollIndex =
+-      overflowDirection === 'bottom' ? 0 : SCROLL_TO_ITEM_END;
++      const visibleLines =
++        overflowDirection === 'bottom'
++          ? ansiOutput.slice(0, visibleCount)
++          : ansiOutput.slice(-visibleCount);
+ 
+-    return (
+-      <Box width={childWidth} flexDirection="column" maxHeight={listHeight}>
+-        <ScrollableList
+-          width={childWidth}
+-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+-          data={resultDisplay as AnsiOutput}
+-          renderItem={renderVirtualizedAnsiLine}
+-          estimatedItemHeight={() => 1}
+-          keyExtractor={keyExtractor}
+-          initialScrollIndex={initialScrollIndex}
+-          hasFocus={hasFocus}
+-          fixedItemHeight={true}
+-        />
+-      </Box>
+-    );
++      return (
++        <Box width={childWidth} flexDirection="column">
++          <MaxSizedBox
++            maxWidth={childWidth}
++            maxHeight={limit}
++            overflowDirection={overflowDirection}
++            additionalHiddenLinesCount={hiddenCount}
++          >
++            {visibleLines.map((line, index) => (
++              <Box key={index} height={1} overflow="hidden">
++                <AnsiLineText line={line} />
++              </Box>
++            ))}
++          </MaxSizedBox>
++        </Box>
++      );
++    }
+   }
+ 
+   // ASB Mode Handling (Interactive/Fullscreen)
+diff --git a/packages/cli/src/ui/components/messages/__snapshots__/ToolResultDisplay-ToolResultDisplay-truncates-ANSI-output-when-maxLines-is-provided-even-if-availableTerminalHeight-is-undefined.snap.svg b/packages/cli/src/ui/components/messages/__snapshots__/ToolResultDisplay-ToolResultDisplay-truncates-ANSI-output-when-maxLines-is-provided-even-if-availableTerminalHeight-is-undefined.snap.svg
+index 2638c4ad3..619362a3f 100644
+--- a/packages/cli/src/ui/components/messages/__snapshots__/ToolResultDisplay-ToolResultDisplay-truncates-ANSI-output-when-maxLines-is-provided-even-if-availableTerminalHeight-is-undefined.snap.svg
++++ b/packages/cli/src/ui/components/messages/__snapshots__/ToolResultDisplay-ToolResultDisplay-truncates-ANSI-output-when-maxLines-is-provided-even-if-availableTerminalHeight-is-undefined.snap.svg
+@@ -4,7 +4,7 @@
+   </style>
+   <rect width="920" height="445" fill="#000000" />
+   <g transform="translate(10, 10)">
+-    <text x="0" y="2" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 26                                                                                             </text>
++    <text x="0" y="2" fill="#afafaf" textLength="234" lengthAdjust="spacingAndGlyphs">... 26 hidden (Ctrl+O) ...</text>
+     <text x="0" y="19" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 27                                                                                             </text>
+     <text x="0" y="36" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 28                                                                                             </text>
+     <text x="0" y="53" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 29                                                                                             </text>
+@@ -16,31 +16,18 @@
+     <text x="0" y="155" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 35                                                                                             </text>
+     <text x="0" y="172" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 36                                                                                             </text>
+     <text x="0" y="189" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 37                                                                                             </text>
+-    <text x="0" y="206" fill="#ffffff" textLength="675" lengthAdjust="spacingAndGlyphs">Line 38                                                                    </text>
+-    <text x="675" y="206" fill="#333333" textLength="9" lengthAdjust="spacingAndGlyphs">▄</text>
+-    <text x="0" y="223" fill="#ffffff" textLength="675" lengthAdjust="spacingAndGlyphs">Line 39                                                                    </text>
+-    <text x="675" y="223" fill="#333333" textLength="9" lengthAdjust="spacingAndGlyphs">█</text>
+-    <text x="0" y="240" fill="#ffffff" textLength="675" lengthAdjust="spacingAndGlyphs">Line 40                                                                    </text>
+-    <text x="675" y="240" fill="#333333" textLength="9" lengthAdjust="spacingAndGlyphs">█</text>
+-    <text x="0" y="257" fill="#ffffff" textLength="675" lengthAdjust="spacingAndGlyphs">Line 41                                                                    </text>
+-    <text x="675" y="257" fill="#333333" textLength="9" lengthAdjust="spacingAndGlyphs">█</text>
+-    <text x="0" y="274" fill="#ffffff" textLength="675" lengthAdjust="spacingAndGlyphs">Line 42                                                                    </text>
+-    <text x="675" y="274" fill="#333333" textLength="9" lengthAdjust="spacingAndGlyphs">█</text>
+-    <text x="0" y="291" fill="#ffffff" textLength="675" lengthAdjust="spacingAndGlyphs">Line 43                                                                    </text>
+-    <text x="675" y="291" fill="#333333" textLength="9" lengthAdjust="spacingAndGlyphs">█</text>
+-    <text x="0" y="308" fill="#ffffff" textLength="675" lengthAdjust="spacingAndGlyphs">Line 44                                                                    </text>
+-    <text x="675" y="308" fill="#333333" textLength="9" lengthAdjust="spacingAndGlyphs">█</text>
+-    <text x="0" y="325" fill="#ffffff" textLength="675" lengthAdjust="spacingAndGlyphs">Line 45                                                                    </text>
+-    <text x="675" y="325" fill="#333333" textLength="9" lengthAdjust="spacingAndGlyphs">█</text>
+-    <text x="0" y="342" fill="#ffffff" textLength="675" lengthAdjust="spacingAndGlyphs">Line 46                                                                    </text>
+-    <text x="675" y="342" fill="#333333" textLength="9" lengthAdjust="spacingAndGlyphs">█</text>
+-    <text x="0" y="359" fill="#ffffff" textLength="675" lengthAdjust="spacingAndGlyphs">Line 47                                                                    </text>
+-    <text x="675" y="359" fill="#333333" textLength="9" lengthAdjust="spacingAndGlyphs">█</text>
+-    <text x="0" y="376" fill="#ffffff" textLength="675" lengthAdjust="spacingAndGlyphs">Line 48                                                                    </text>
+-    <text x="675" y="376" fill="#333333" textLength="9" lengthAdjust="spacingAndGlyphs">█</text>
+-    <text x="0" y="393" fill="#ffffff" textLength="675" lengthAdjust="spacingAndGlyphs">Line 49                                                                    </text>
+-    <text x="675" y="393" fill="#333333" textLength="9" lengthAdjust="spacingAndGlyphs">█</text>
+-    <text x="0" y="410" fill="#ffffff" textLength="675" lengthAdjust="spacingAndGlyphs">Line 50                                                                    </text>
+-    <text x="675" y="410" fill="#333333" textLength="9" lengthAdjust="spacingAndGlyphs">█</text>
++    <text x="0" y="206" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 38                                                                                             </text>
++    <text x="0" y="223" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 39                                                                                             </text>
++    <text x="0" y="240" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 40                                                                                             </text>
++    <text x="0" y="257" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 41                                                                                             </text>
++    <text x="0" y="274" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 42                                                                                             </text>
++    <text x="0" y="291" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 43                                                                                             </text>
++    <text x="0" y="308" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 44                                                                                             </text>
++    <text x="0" y="325" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 45                                                                                             </text>
++    <text x="0" y="342" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 46                                                                                             </text>
++    <text x="0" y="359" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 47                                                                                             </text>
++    <text x="0" y="376" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 48                                                                                             </text>
++    <text x="0" y="393" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 49                                                                                             </text>
++    <text x="0" y="410" fill="#ffffff" textLength="900" lengthAdjust="spacingAndGlyphs">Line 50                                                                                             </text>
+   </g>
+ </svg>
+\ No newline at end of file
+diff --git a/packages/cli/src/ui/components/messages/__snapshots__/ToolResultDisplay.test.tsx.snap b/packages/cli/src/ui/components/messages/__snapshots__/ToolResultDisplay.test.tsx.snap
+index 12eff841b..e7eea6165 100644
+--- a/packages/cli/src/ui/components/messages/__snapshots__/ToolResultDisplay.test.tsx.snap
++++ b/packages/cli/src/ui/components/messages/__snapshots__/ToolResultDisplay.test.tsx.snap
+@@ -34,14 +34,14 @@ exports[`ToolResultDisplay > renders string result as plain text when renderOutp
+ `;
+ 
+ exports[`ToolResultDisplay > truncates ANSI output when maxLines is provided 1`] = `
+-"Line 3
+-Line 4                                                                     █
+-Line 5                                                                     █
++"... 3 hidden (Ctrl+O) ...
++Line 4
++Line 5
+ "
+ `;
+ 
+ exports[`ToolResultDisplay > truncates ANSI output when maxLines is provided, even if availableTerminalHeight is undefined 1`] = `
+-"Line 26
++"... 26 hidden (Ctrl+O) ...
+ Line 27
+ Line 28
+ Line 29
+@@ -53,34 +53,36 @@ Line 34
+ Line 35
+ Line 36
+ Line 37
+-Line 38                                                                    ▄
+-Line 39                                                                    █
+-Line 40                                                                    █
+-Line 41                                                                    █
+-Line 42                                                                    █
+-Line 43                                                                    █
+-Line 44                                                                    █
+-Line 45                                                                    █
+-Line 46                                                                    █
+-Line 47                                                                    █
+-Line 48                                                                    █
+-Line 49                                                                    █
+-Line 50                                                                    █"
++Line 38
++Line 39
++Line 40
++Line 41
++Line 42
++Line 43
++Line 44
++Line 45
++Line 46
++Line 47
++Line 48
++Line 49
++Line 50"
+ `;
+ 
+ exports[`ToolResultDisplay > truncates very long string results 1`] = `
+-"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…        █
++"... 250 hidden (Ctrl+O) ...
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++aaaaaaaaaaaaaaa
+ "
+ `;
+diff --git a/packages/cli/src/ui/components/shared/MaxSizedBox.tsx b/packages/cli/src/ui/components/shared/MaxSizedBox.tsx
+index baadb3b9d..1f751cc11 100644
+--- a/packages/cli/src/ui/components/shared/MaxSizedBox.tsx
++++ b/packages/cli/src/ui/components/shared/MaxSizedBox.tsx
+@@ -115,7 +115,7 @@ export const MaxSizedBox: React.FC<MaxSizedBoxProps> = ({
+     [id, removeOverflowingId],
+   );
+ 
+-  if (effectiveMaxHeight === undefined) {
++  if (effectiveMaxHeight === undefined && totalHiddenLines === 0) {
+     return (
+       <Box flexDirection="column" width={maxWidth}>
+         {children}
+diff --git a/packages/core/src/config/config.ts b/packages/core/src/config/config.ts
+index d4c7c498a..0edd4af7b 100644
+--- a/packages/core/src/config/config.ts
++++ b/packages/core/src/config/config.ts
+@@ -1224,7 +1224,7 @@ export class Config implements McpContext, AgentLoopContext {
+     this.useRipgrep = params.useRipgrep ?? true;
+     this.useBackgroundColor = params.useBackgroundColor ?? true;
+     this.useAlternateBuffer = params.useAlternateBuffer ?? false;
+-    this.useTerminalBuffer = params.useTerminalBuffer ?? true;
++    this.useTerminalBuffer = params.useTerminalBuffer ?? false;
+     this.useRenderProcess = params.useRenderProcess ?? true;
+     this.enableInteractiveShell = params.enableInteractiveShell ?? false;
+ 
+diff --git a/schemas/settings.schema.json b/schemas/settings.schema.json
+index 517926359..bb5c9a9d5 100644
+--- a/schemas/settings.schema.json
++++ b/schemas/settings.schema.json
+@@ -465,8 +465,8 @@
+         "terminalBuffer": {
+           "title": "Terminal Buffer",
+           "description": "Use the new terminal buffer architecture for rendering.",
+-          "markdownDescription": "Use the new terminal buffer architecture for rendering.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `true`",
+-          "default": true,
++          "markdownDescription": "Use the new terminal buffer architecture for rendering.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `false`",
++          "default": false,
+           "type": "boolean"
+         },
+         "useBackgroundColor": {

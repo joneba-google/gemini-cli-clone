@@ -1,0 +1,366 @@
+diff --git a/packages/cli/src/acp/acpSession.ts b/packages/cli/src/acp/acpSession.ts
+index 75ec7af49..cdf4f5838 100644
+--- a/packages/cli/src/acp/acpSession.ts
++++ b/packages/cli/src/acp/acpSession.ts
+@@ -37,6 +37,7 @@ import {
+   MessageBusType,
+   PolicyDecision,
+   type ToolConfirmationRequest,
++  resolveAtCommandPath,
+ } from '@google/gemini-cli-core';
+ import * as acp from '@agentclientprotocol/sdk';
+ import type { Part, FunctionCall } from '@google/genai';
+@@ -1013,7 +1014,12 @@ export class Session {
+     }
+ 
+     for (const atPathPart of atPathCommandParts) {
+-      const pathName = atPathPart.fileData!.fileUri;
++      const rawPathName = atPathPart.fileData!.fileUri;
++      const pathName = resolveAtCommandPath(rawPathName);
++      if (!pathName) {
++        debugLogger.warn(`Path ${rawPathName} is invalid or contains malformed fragments, skipping.`);
++        continue;
++      }
+       // Check if path should be ignored
+       if (fileDiscovery.shouldIgnoreFile(pathName, fileFilteringOptions)) {
+         ignoredPaths.push(pathName);
+diff --git a/packages/cli/src/ui/hooks/atCommandProcessor.ts b/packages/cli/src/ui/hooks/atCommandProcessor.ts
+index e23d70a60..d186510f8 100644
+--- a/packages/cli/src/ui/hooks/atCommandProcessor.ts
++++ b/packages/cli/src/ui/hooks/atCommandProcessor.ts
+@@ -19,6 +19,7 @@ import {
+   REFERENCE_CONTENT_START,
+   REFERENCE_CONTENT_END,
+   CoreToolCallStatus,
++  resolveAtCommandPath,
+ } from '@google/gemini-cli-core';
+ import { Buffer } from 'node:buffer';
+ import type {
+@@ -238,9 +239,15 @@ async function resolveFilePaths(
+ 
+   for (const part of fileParts) {
+     const originalAtPath = part.content;
+-    const pathName = originalAtPath.substring(1);
++    const rawPathName = originalAtPath.substring(1);
+ 
++    if (!rawPathName) {
++      continue;
++    }
++
++    const pathName = resolveAtCommandPath(rawPathName);
+     if (!pathName) {
++      onDebugMessage(`Path ${rawPathName} is invalid or contains malformed fragments, skipping.`);
+       continue;
+     }
+ 
+diff --git a/packages/core/src/config/config.ts b/packages/core/src/config/config.ts
+index 4429ce5de..1f712bd29 100644
+--- a/packages/core/src/config/config.ts
++++ b/packages/core/src/config/config.ts
+@@ -177,6 +177,7 @@ import { startupProfiler } from '../telemetry/startupProfiler.js';
+ import type { AgentDefinition } from '../agents/types.js';
+ import { fetchAdminControls } from '../code_assist/admin/admin_controls.js';
+ import { isSubpath, resolveToRealPath } from '../utils/paths.js';
++import { validatePath } from '../utils/path-validator.js';
+ import { InjectionService } from './injectionService.js';
+ import { ExecutionLifecycleService } from '../services/executionLifecycleService.js';
+ import { WORKSPACE_POLICY_TIER } from '../policy/config.js';
+@@ -3299,6 +3300,10 @@ export class Config implements McpContext, AgentLoopContext {
+     absolutePath: string,
+     checkType: 'read' | 'write' = 'write',
+   ): string | null {
++    if (!validatePath(absolutePath)) {
++      return `Invalid path style, structure or suspicious content detected: "${absolutePath}"`;
++    }
++
+     if (checkType === 'write' && hasScopedAutoMemoryExtractionWriteAccess()) {
+       const resolvedPath = resolveToRealPath(absolutePath);
+       if (
+diff --git a/packages/core/src/index.ts b/packages/core/src/index.ts
+index 092249c02..66289e865 100644
+--- a/packages/core/src/index.ts
++++ b/packages/core/src/index.ts
+@@ -129,6 +129,8 @@ export * from './utils/constants.js';
+ export * from './utils/sessionUtils.js';
+ export * from './utils/cache.js';
+ export * from './utils/markdownUtils.js';
++export * from './utils/path-validator.js';
++export * from './utils/atCommandUtils.js';
+ 
+ // Export services
+ export * from './services/fileDiscoveryService.js';
+diff --git a/packages/core/src/utils/atCommandUtils.ts b/packages/core/src/utils/atCommandUtils.ts
+new file mode 100644
+index 000000000..b81db03bc
+--- /dev/null
++++ b/packages/core/src/utils/atCommandUtils.ts
+@@ -0,0 +1,83 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import { validatePath } from './path-validator.js';
++
++/**
++ * Validates and resolves a path extracted from an @-command or a potential path string.
++ * If the path is valid, it is returned.
++ * If it is invalid (e.g. contains log fragments), it attempts to extract a valid embedded path.
++ * If no valid path can be resolved or extracted, returns null.
++ */
++export function resolveAtCommandPath(inputPath: string): string | null {
++  if (typeof inputPath !== 'string') {
++    return null;
++  }
++
++  // 1. If it's already a valid path, return it directly.
++  if (validatePath(inputPath)) {
++    return inputPath;
++  }
++
++  // 2. Otherwise, attempt to extract a valid path from the fragment.
++  return tryExtractPath(inputPath);
++}
++
++/**
++ * Attempts to extract a valid file path from a log snippet, stack trace, or malformed path.
++ */
++export function tryExtractPath(input: string): string | null {
++  if (typeof input !== 'string' || !input.trim()) {
++    return null;
++  }
++
++  // Split input into words/tokens by whitespace, comma, or semicolons
++  const tokens = input.split(/[\s,;]/);
++
++  for (let token of tokens) {
++    token = token.trim();
++    if (!token) {
++      continue;
++    }
++
++    // 1. Remove surrounding packaging markers like parentheses: (path/to/file) -> path/to/file
++    if (token.startsWith('(') && token.endsWith(')')) {
++      token = token.slice(1, -1).trim();
++    }
++
++    // 2. Remove surrounding square brackets: [path/to/file] -> path/to/file
++    // Ensure we don't stripping brackets that form a part of folder structure, e.g. [my-folder]/file
++    if (token.startsWith('[') && token.endsWith(']') && !token.slice(1, -1).includes('[')) {
++      token = token.slice(1, -1).trim();
++    }
++
++    // 3. Remove surrounding quotes: "path/to/file" or 'path/to/file'
++    if (
++      (token.startsWith('"') && token.endsWith('"')) ||
++      (token.startsWith("'") && token.endsWith("'")) ||
++      (token.startsWith('`') && token.endsWith('`'))
++    ) {
++      token = token.slice(1, -1).trim();
++    }
++
++    // 4. Remove common line/col endings or stack trace suffixes: :123:45, :123
++    token = token.replace(/:\d+:\d+$/, '');
++    token = token.replace(/:\d+$/, '');
++
++    // 5. Basic checks: must contain path separator / or \ or a dot, and not start with standard url schemes
++    if (
++      (token.includes('/') || token.includes('\\') || token.includes('.')) &&
++      !token.startsWith('http://') &&
++      !token.startsWith('https://')
++    ) {
++      if (validatePath(token)) {
++        return token;
++      }
++    }
++  }
++
++  return null;
++}
+diff --git a/packages/core/src/utils/path-validator.test.ts b/packages/core/src/utils/path-validator.test.ts
+new file mode 100644
+index 000000000..ed7bb79e8
+--- /dev/null
++++ b/packages/core/src/utils/path-validator.test.ts
+@@ -0,0 +1,98 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import { describe, expect, it } from 'vitest';
++import { validatePath, MAX_PATH_LENGTH, MAX_COMPONENT_LENGTH } from './path-validator.js';
++import { resolveAtCommandPath, tryExtractPath } from './atCommandUtils.js';
++
++describe('validatePath', () => {
++  it('accepts standard valid paths', () => {
++    expect(validatePath('src/utils/path-validator.ts')).toBe(true);
++    expect(validatePath('/usr/local/bin/node')).toBe(true);
++    expect(validatePath('C:\\Users\\User\\Documents\\file.txt')).toBe(true);
++  });
++
++  it('accepts valid paths with spaces, apostrophes, and brackets', () => {
++    expect(validatePath('folder name/file.txt')).toBe(true);
++    expect(validatePath("packages/foo/it's-a-cool-file.ts")).toBe(true);
++    expect(validatePath('[my-folder]/file.ts')).toBe(true);
++    expect(validatePath('some[brackets]here/test.js')).toBe(true);
++  });
++
++  it('rejects non-string inputs', () => {
++    expect(validatePath(null)).toBe(false);
++    expect(validatePath(undefined)).toBe(false);
++    expect(validatePath(123)).toBe(false);
++    expect(validatePath({})).toBe(false);
++  });
++
++  it('rejects empty paths', () => {
++    expect(validatePath('')).toBe(false);
++  });
++
++  it('rejects paths exceeding maximum length', () => {
++    const longPath = 'a'.repeat(MAX_PATH_LENGTH + 1);
++    expect(validatePath(longPath)).toBe(false);
++  });
++
++  it('rejects paths with components exceeding maximum component length', () => {
++    const longComponent = 'a'.repeat(MAX_COMPONENT_LENGTH + 1);
++    expect(validatePath(`src/utils/${longComponent}/file.ts`)).toBe(false);
++    expect(validatePath(longComponent)).toBe(false);
++  });
++
++  it('rejects paths with newlines and control characters', () => {
++    expect(validatePath('src/utils\n/path-validator.ts')).toBe(false);
++    expect(validatePath('src/utils/\rpath-validator.ts')).toBe(false);
++    expect(validatePath('src/utils/\0path-validator.ts')).toBe(false);
++    expect(validatePath('src/utils/\tpath-validator.ts')).toBe(false);
++  });
++
++  it('rejects paths with log markers', () => {
++    expect(validatePath('AssertionError: expected false to be true')).toBe(false);
++    expect(validatePath('FAIL  packages/core/src/utils/paths.test.ts')).toBe(false);
++    expect(validatePath('✓ test passed')).toBe(false);
++    expect(validatePath('× test failed')).toBe(false);
++    expect(validatePath('TestingLibraryElementError: Unable to find element')).toBe(false);
++
++    // In subpaths
++    expect(validatePath('logs/AssertionError: details')).toBe(false);
++    expect(validatePath('logs\\AssertionError: details')).toBe(false);
++  });
++
++  it('rejects paths with suspicious quotes or ellipses', () => {
++    expect(validatePath('src/utils/.../path.ts')).toBe(false);
++    expect(validatePath('src/utils/…/path.ts')).toBe(false);
++    expect(validatePath('src/utils/`path`/file.ts')).toBe(false);
++
++    // Unbalanced double quotes
++    expect(validatePath('src/utils/"/file.ts')).toBe(false);
++    expect(validatePath('"src/utils/file.ts')).toBe(false);
++
++    // Double quotes in middle
++    expect(validatePath('src/utils/"folder"/file.ts')).toBe(false);
++  });
++
++  it('accepts double quotes only if they enclose the whole path', () => {
++    expect(validatePath('"C:\\Users\\User\\Documents\\file.txt"')).toBe(true);
++    expect(validatePath('"src/utils/file.ts"')).toBe(true);
++  });
++});
++
++describe('tryExtractPath & resolveAtCommandPath', () => {
++  it('extracts valid paths from log fragments and stack traces', () => {
++    expect(tryExtractPath('AssertionError: expected false to be true at src/utils/paths.ts:123')).toBe('src/utils/paths.ts');
++    expect(tryExtractPath('at fn (/usr/local/bin/node:45:21)')).toBe('/usr/local/bin/node');
++    expect(tryExtractPath('FAIL packages/core/src/utils/paths.test.ts:32')).toBe('packages/core/src/utils/paths.test.ts');
++    expect(tryExtractPath('error in "src/config/config.ts" at line 34')).toBe('src/config/config.ts');
++  });
++
++  it('resolves valid directly or by extraction', () => {
++    expect(resolveAtCommandPath('src/utils/paths.ts')).toBe('src/utils/paths.ts');
++    expect(resolveAtCommandPath('FAIL packages/core/src/utils/paths.test.ts:32')).toBe('packages/core/src/utils/paths.test.ts');
++    expect(resolveAtCommandPath('no path here')).toBeNull();
++  });
++});
+diff --git a/packages/core/src/utils/path-validator.ts b/packages/core/src/utils/path-validator.ts
+new file mode 100644
+index 000000000..3c34a0eaa
+--- /dev/null
++++ b/packages/core/src/utils/path-validator.ts
+@@ -0,0 +1,76 @@
++/**
++ * @license
++ * Copyright 2025 Google LLC
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++export const MAX_PATH_LENGTH = 4096;
++export const MAX_COMPONENT_LENGTH = 255;
++
++/**
++ * Validates a file path or potential path input.
++ * Ensures the path does not contain control characters, newline characters,
++ * typical test/log assertion strings, suspicious quotes/ellipses, and adheres
++ * to path length limits.
++ */
++export function validatePath(inputPath: unknown): boolean {
++  if (typeof inputPath !== 'string') {
++    return false;
++  }
++
++  // 1. Length check
++  if (inputPath.length === 0 || inputPath.length > MAX_PATH_LENGTH) {
++    return false;
++  }
++
++  // 2. Control/newline characters Check
++  // Matches \n, \r, \0, \t
++  if (/[\n\r\0\t]/.test(inputPath)) {
++    return false;
++  }
++
++  // 3. Log markers Check
++  const logMarkerRegex = /(^|[/\\\\])(AssertionError:|FAIL |\u2713 |\u00d7 |TestingLibraryElementError:)/;
++  if (logMarkerRegex.test(inputPath)) {
++    return false;
++  }
++
++  // 4. Suspicious quotes/ellipses Check
++  // Ellipses (three dots or unicode ellipsis)
++  if (/\.\.\.|\u2026/.test(inputPath)) {
++    return false;
++  }
++
++  // Backticks are generally suspicious
++  if (inputPath.includes('`')) {
++    return false;
++  }
++
++  // Double quotes should only be used to wrap the entire path (specifically on Windows)
++  const doubleQuoteCount = (inputPath.match(/"/g) || []).length;
++  if (doubleQuoteCount % 2 !== 0) {
++    return false;
++  }
++  if (doubleQuoteCount > 0) {
++    if (!(inputPath.startsWith('"') && inputPath.endsWith('"') && doubleQuoteCount === 2)) {
++      return false;
++    }
++  }
++
++  // If the path contains spaces, it should also contain at least one path separator (/, \) or a dot (.)
++  // to prevent random sentence fragments from being processed as paths.
++  if (inputPath.includes(' ') && !/[/.]/.test(inputPath) && !inputPath.includes('\\')) {
++    return false;
++  }
++
++  // 5. Component Length Check
++  // Split path by forward/backward slash to validate every path component
++  const components = inputPath.split(/[/\\]/);
++  for (const component of components) {
++    if (component.length > MAX_COMPONENT_LENGTH) {
++      return false;
++    }
++  }
++
++  return true;
++}

@@ -1,0 +1,297 @@
+diff --git a/packages/cli/src/config/settingsSchema.ts b/packages/cli/src/config/settingsSchema.ts
+index 730bd4b93..c041aaa8c 100644
+--- a/packages/cli/src/config/settingsSchema.ts
++++ b/packages/cli/src/config/settingsSchema.ts
+@@ -757,7 +757,7 @@ const SETTINGS_SCHEMA = {
+         label: 'Terminal Buffer',
+         category: 'UI',
+         requiresRestart: true,
+-        default: true,
++        default: false,
+         description: 'Use the new terminal buffer architecture for rendering.',
+         showInDialog: true,
+       },
+diff --git a/packages/cli/src/interactiveCli.tsx b/packages/cli/src/interactiveCli.tsx
+index 418f58b19..a6b055982 100644
+--- a/packages/cli/src/interactiveCli.tsx
++++ b/packages/cli/src/interactiveCli.tsx
+@@ -156,7 +156,8 @@ export async function startInteractiveUI(
+         useAlternateBuffer || config.getUseTerminalBuffer(),
+       patchConsole: false,
+       alternateBuffer: useAlternateBuffer,
+-      renderProcess: config.getUseRenderProcess(),
++      renderProcess:
++        config.getUseRenderProcess() && config.getUseTerminalBuffer(),
+       terminalBuffer: config.getUseTerminalBuffer(),
+       incrementalRendering:
+         settings.merged.ui.incrementalRendering !== false &&
+diff --git a/packages/cli/src/ui/components/InputPrompt.tsx b/packages/cli/src/ui/components/InputPrompt.tsx
+index c8d7efa1b..f597ce447 100644
+--- a/packages/cli/src/ui/components/InputPrompt.tsx
++++ b/packages/cli/src/ui/components/InputPrompt.tsx
+@@ -5,7 +5,7 @@
+  */
+ 
+ import type React from 'react';
+-import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
++import { useCallback, useEffect, useState, useRef, useMemo, Fragment } from 'react';
+ import clipboardy from 'clipboardy';
+ import { Box, Text, useStdout, type DOMElement } from 'ink';
+ import { SuggestionsDisplay, MAX_WIDTH } from './SuggestionsDisplay.js';
+@@ -1820,24 +1820,43 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
+                 height={Math.min(buffer.viewportHeight, scrollableData.length)}
+                 width="100%"
+               >
+-                <ScrollableList
+-                  ref={listRef}
+-                  hasFocus={focus}
+-                  data={scrollableData}
+-                  renderItem={renderItem}
+-                  estimatedItemHeight={() => 1}
+-                  keyExtractor={(item) =>
+-                    item.type === 'visualLine'
+-                      ? `line-${item.absoluteVisualIdx}`
+-                      : `ghost-${item.index}`
+-                  }
+-                  width="100%"
+-                  backgroundColor={listBackgroundColor}
+-                  containerHeight={Math.min(
+-                    buffer.viewportHeight,
+-                    scrollableData.length,
+-                  )}
+-                />
++                {isAlternateBuffer ? (
++                  <ScrollableList
++                    ref={listRef}
++                    hasFocus={focus}
++                    data={scrollableData}
++                    renderItem={renderItem}
++                    estimatedItemHeight={() => 1}
++                    keyExtractor={(item) =>
++                      item.type === 'visualLine'
++                        ? `line-${item.absoluteVisualIdx}`
++                        : `ghost-${item.index}`
++                    }
++                    width="100%"
++                    backgroundColor={listBackgroundColor}
++                    containerHeight={Math.min(
++                      buffer.viewportHeight,
++                      scrollableData.length,
++                    )}
++                  />
++                ) : (
++                  scrollableData
++                    .slice(
++                      buffer.visualScrollRow,
++                      buffer.visualScrollRow + buffer.viewportHeight,
++                    )
++                    .map((item, index) => {
++                      const key =
++                        item.type === 'visualLine'
++                          ? `line-${item.absoluteVisualIdx}`
++                          : `ghost-${item.index}`;
++                      return (
++                        <Fragment key={key}>
++                          {renderItem({ item, index: buffer.visualScrollRow + index })}
++                        </Fragment>
++                      );
++                    })
++                )}
+               </Box>
+             )}
+           </Box>
+diff --git a/packages/cli/src/ui/components/messages/ToolResultDisplay.test.tsx b/packages/cli/src/ui/components/messages/ToolResultDisplay.test.tsx
+index f30c30989..b40a91834 100644
+--- a/packages/cli/src/ui/components/messages/ToolResultDisplay.test.tsx
++++ b/packages/cli/src/ui/components/messages/ToolResultDisplay.test.tsx
+@@ -391,4 +391,52 @@ describe('ToolResultDisplay', () => {
+     await expect(renderResult).toMatchSvgSnapshot();
+     unmount();
+   });
++
++  it('stays scrolled to the bottom as lines are incrementally added in non-alternate buffer mode', async () => {
++    const ansiResult: AnsiOutput = [
++      [{ text: 'Line 1', fg: '', bg: '', bold: false, italic: false, underline: false, dim: false, inverse: false, isUninitialized: false }],
++      [{ text: 'Line 2', fg: '', bg: '', bold: false, italic: false, underline: false, dim: false, inverse: false, isUninitialized: false }],
++      [{ text: 'Line 3', fg: '', bg: '', bold: false, italic: false, underline: false, dim: false, inverse: false, isUninitialized: false }],
++    ];
++
++    const { lastFrame, waitUntilReady, unmount, rerender } = await renderWithProviders(
++      <ToolResultDisplay
++        resultDisplay={ansiResult}
++        terminalWidth={80}
++        availableTerminalHeight={20}
++        maxLines={3}
++      />,
++      {
++        config: makeFakeConfig({ useAlternateBuffer: false }),
++        settings: createMockSettings({ ui: { useAlternateBuffer: false } }),
++        uiState: { constrainHeight: true },
++      },
++    );
++    await waitUntilReady();
++    let output = lastFrame();
++    expect(output).toContain('Line 3');
++
++    // Add a new line, it should still show the latest (bottom-most) lines
++    const incrementedAnsiResult: AnsiOutput = [
++      ...ansiResult,
++      [{ text: 'Line 4', fg: '', bg: '', bold: false, italic: false, underline: false, dim: false, inverse: false, isUninitialized: false }],
++    ];
++
++    rerender(
++      <ToolResultDisplay
++        resultDisplay={incrementedAnsiResult}
++        terminalWidth={80}
++        availableTerminalHeight={20}
++        maxLines={3}
++      />
++    );
++    await waitUntilReady();
++    output = lastFrame();
++
++    expect(output).not.toContain('Line 1');
++    expect(output).toContain('Line 2');
++    expect(output).toContain('Line 3');
++    expect(output).toContain('Line 4');
++    unmount();
++  });
+ });
+diff --git a/packages/cli/src/ui/components/messages/ToolResultDisplay.tsx b/packages/cli/src/ui/components/messages/ToolResultDisplay.tsx
+index aaa30a74d..d28afc05c 100644
+--- a/packages/cli/src/ui/components/messages/ToolResultDisplay.tsx
++++ b/packages/cli/src/ui/components/messages/ToolResultDisplay.tsx
+@@ -10,6 +10,7 @@ import { DiffRenderer } from './DiffRenderer.js';
+ import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
+ import { AnsiOutputText, AnsiLineText } from '../AnsiOutput.js';
+ import { SlicingMaxSizedBox } from '../shared/SlicingMaxSizedBox.js';
++import { MaxSizedBox } from '../shared/MaxSizedBox.js';
+ import { theme } from '../../semantic-colors.js';
+ import {
+   type AnsiOutput,
+@@ -208,31 +209,62 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
+   };
+ 
+   if (Array.isArray(resultDisplay)) {
+-    const limit = maxLines ?? availableHeight ?? ACTIVE_SHELL_MAX_LINES;
+-    const listHeight = Math.min(
++    if (isAlternateBuffer) {
++      const limit = maxLines ?? availableHeight ?? ACTIVE_SHELL_MAX_LINES;
++      const listHeight = Math.min(
++        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
++        (resultDisplay as AnsiOutput).length,
++        limit,
++      );
++
++      const initialScrollIndex =
++        overflowDirection === 'bottom' ? 0 : SCROLL_TO_ITEM_END;
++
++      return (
++        <Box width={childWidth} flexDirection="column" maxHeight={listHeight}>
++          <ScrollableList
++            width={childWidth}
++            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
++            data={resultDisplay as AnsiOutput}
++            renderItem={renderVirtualizedAnsiLine}
++            estimatedItemHeight={() => 1}
++            keyExtractor={keyExtractor}
++            initialScrollIndex={initialScrollIndex}
++            hasFocus={hasFocus}
++            fixedItemHeight={true}
++          />
++        </Box>
++      );
++    } else {
++      const limit = maxLines ?? availableHeight ?? ACTIVE_SHELL_MAX_LINES;
+       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+-      (resultDisplay as AnsiOutput).length,
+-      limit,
+-    );
++      const dataArr = resultDisplay as AnsiOutput;
++      let visibleItems: AnsiLine[] = dataArr;
++      let hiddenCount = 0;
+ 
+-    const initialScrollIndex =
+-      overflowDirection === 'bottom' ? 0 : SCROLL_TO_ITEM_END;
++      if (dataArr.length > limit) {
++        const targetLines = Math.max(1, limit - 1);
++        hiddenCount = dataArr.length - targetLines;
++        visibleItems =
++          overflowDirection === 'bottom'
++            ? dataArr.slice(0, targetLines)
++            : dataArr.slice(-targetLines);
++      }
+ 
+-    return (
+-      <Box width={childWidth} flexDirection="column" maxHeight={listHeight}>
+-        <ScrollableList
+-          width={childWidth}
+-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+-          data={resultDisplay as AnsiOutput}
+-          renderItem={renderVirtualizedAnsiLine}
+-          estimatedItemHeight={() => 1}
+-          keyExtractor={keyExtractor}
+-          initialScrollIndex={initialScrollIndex}
+-          hasFocus={hasFocus}
+-          fixedItemHeight={true}
+-        />
+-      </Box>
+-    );
++      return (
++        <MaxSizedBox
++          maxWidth={childWidth}
++          overflowDirection={overflowDirection}
++          additionalHiddenLinesCount={hiddenCount}
++        >
++          {visibleItems.map((item, index) => (
++            <Box key={index} height={1} overflow="hidden">
++              <AnsiLineText line={item} />
++            </Box>
++          ))}
++        </MaxSizedBox>
++      );
++    }
+   }
+ 
+   // ASB Mode Handling (Interactive/Fullscreen)
+diff --git a/packages/cli/src/ui/components/shared/MaxSizedBox.tsx b/packages/cli/src/ui/components/shared/MaxSizedBox.tsx
+index baadb3b9d..1f751cc11 100644
+--- a/packages/cli/src/ui/components/shared/MaxSizedBox.tsx
++++ b/packages/cli/src/ui/components/shared/MaxSizedBox.tsx
+@@ -115,7 +115,7 @@ export const MaxSizedBox: React.FC<MaxSizedBoxProps> = ({
+     [id, removeOverflowingId],
+   );
+ 
+-  if (effectiveMaxHeight === undefined) {
++  if (effectiveMaxHeight === undefined && totalHiddenLines === 0) {
+     return (
+       <Box flexDirection="column" width={maxWidth}>
+         {children}
+diff --git a/packages/core/src/config/config.ts b/packages/core/src/config/config.ts
+index d4c7c498a..0edd4af7b 100644
+--- a/packages/core/src/config/config.ts
++++ b/packages/core/src/config/config.ts
+@@ -1224,7 +1224,7 @@ export class Config implements McpContext, AgentLoopContext {
+     this.useRipgrep = params.useRipgrep ?? true;
+     this.useBackgroundColor = params.useBackgroundColor ?? true;
+     this.useAlternateBuffer = params.useAlternateBuffer ?? false;
+-    this.useTerminalBuffer = params.useTerminalBuffer ?? true;
++    this.useTerminalBuffer = params.useTerminalBuffer ?? false;
+     this.useRenderProcess = params.useRenderProcess ?? true;
+     this.enableInteractiveShell = params.enableInteractiveShell ?? false;
+ 
+diff --git a/schemas/settings.schema.json b/schemas/settings.schema.json
+index 517926359..bb5c9a9d5 100644
+--- a/schemas/settings.schema.json
++++ b/schemas/settings.schema.json
+@@ -465,8 +465,8 @@
+         "terminalBuffer": {
+           "title": "Terminal Buffer",
+           "description": "Use the new terminal buffer architecture for rendering.",
+-          "markdownDescription": "Use the new terminal buffer architecture for rendering.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `true`",
+-          "default": true,
++          "markdownDescription": "Use the new terminal buffer architecture for rendering.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `false`",
++          "default": false,
+           "type": "boolean"
+         },
+         "useBackgroundColor": {

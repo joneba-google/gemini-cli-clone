@@ -27,6 +27,12 @@ PR_GEN_DIR = Path(__file__).resolve().parent
 EVALS_DIR = PR_GEN_DIR.parent
 RUNS_BASE_DIR = PR_GEN_DIR / "run_outputs"
 TARGET_REPO_DIR = EVALS_DIR / "triage" / "target_repo"
+CARETAKER_ROOT = EVALS_DIR.parent
+
+if str(PR_GEN_DIR) not in sys.path:
+    sys.path.insert(0, str(PR_GEN_DIR))
+if str(CARETAKER_ROOT) not in sys.path:
+    sys.path.insert(0, str(CARETAKER_ROOT))
 
 logger = logging.getLogger("DiffViewerGenerator")
 
@@ -291,15 +297,75 @@ def generate_html_report(run_name: str, test_cases: List[Dict[str, Any]]) -> str
             font-size: 12px;
             border-radius: 6px;
         }}
-        /* diff2html dark theme overrides */
+        /* diff2html dark theme overrides & scrolling fix */
         .d2h-wrapper {{ color: #c9d1d9 !important; background-color: #0d1117 !important; }}
         .d2h-file-header {{ background-color: #161b22 !important; border-color: #30363d !important; }}
         .d2h-file-name {{ color: #58a6ff !important; }}
-        .d2h-code-line {{ color: #c9d1d9 !important; }}
+        .d2h-code-line {{ color: #c9d1d9 !important; position: relative !important; display: table-cell !important; }}
         .d2h-code-line-prefix {{ color: #8b949e !important; }}
         .d2h-ins {{ background-color: rgba(46, 160, 67, 0.15) !important; color: #e6edf3 !important; }}
         .d2h-del {{ background-color: rgba(248, 81, 73, 0.15) !important; color: #e6edf3 !important; }}
-        .d2h-code-side-line {{ font-size: 12px !important; }}
+        .d2h-code-side-line {{ font-size: 12px !important; position: relative !important; display: table-cell !important; }}
+        
+        /* Sticky File Header Bar & CHANGED Tag Alignment Fix */
+        .d2h-file-wrapper {{
+            border: 1px solid var(--border-color) !important;
+            border-radius: 6px !important;
+            margin-bottom: 24px !important;
+        }}
+        .d2h-file-header {{
+            position: sticky !important;
+            top: -24px !important;
+            z-index: 10 !important;
+            background-color: var(--bg-secondary) !important;
+            border-bottom: 1px solid var(--border-color) !important;
+            padding: 10px 16px !important;
+            margin: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+            border-top-left-radius: 6px !important;
+            border-top-right-radius: 6px !important;
+        }}
+        .d2h-file-name-wrapper {{
+            display: flex !important;
+            align-items: center !important;
+            gap: 10px !important;
+            width: 100% !important;
+            font-size: 13px !important;
+        }}
+        .d2h-file-name {{
+            color: var(--accent-blue) !important;
+            font-weight: 600 !important;
+        }}
+        .d2h-tag {{
+            display: inline-flex !important;
+            align-items: center !important;
+            padding: 2px 8px !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            border-radius: 12px !important;
+            text-transform: uppercase !important;
+            line-height: 1.2 !important;
+        }}
+        .d2h-changed, .d2h-changed-tag {{
+            background-color: rgba(210, 153, 34, 0.2) !important;
+            color: var(--accent-yellow) !important;
+            border: 1px solid var(--accent-yellow) !important;
+        }}
+
+        /* Fix line number positioning so numbers scroll in sync with content */
+        .d2h-diff-tbody > tr {{ position: relative !important; }}
+        .d2h-code-linenumber,
+        .d2h-code-side-linenumber {{
+            position: static !important;
+            display: table-cell !important;
+            vertical-align: middle !important;
+            width: 45px !important;
+            min-width: 45px !important;
+            box-sizing: border-box !important;
+            user-select: none !important;
+        }}
     </style>
 </head>
 <body>
@@ -364,26 +430,27 @@ def generate_html_report(run_name: str, test_cases: List[Dict[str, Any]]) -> str
             listEl.innerHTML = '';
             testData.forEach((item, index) => {{
                 totalScore += item.score || 0;
-                if ((item.score || 0) >= 2) passCount++;
+                if ((item.score || 0) >= 4) passCount++;
 
                 const div = document.createElement('div');
                 div.className = `test-item ${{index === 0 ? 'active' : ''}}`;
                 div.id = `test-item-${{index}}`;
                 div.onclick = () => selectTest(index);
 
-                const isPass = (item.score || 0) >= 2;
+                const isPass = (item.score || 0) >= 4;
                 const badgeClass = isPass ? 'badge-pass' : 'badge-fail';
-                const badgeText = isPass ? `PASS (${{item.score}}/3)` : `FAIL (${{item.score}}/3)`;
+                const badgeText = isPass ? `PASS (${{item.score}}/6)` : `FAIL (${{item.score}}/6)`;
+                const runtimeStr = item.runtime_seconds ? (String(item.runtime_seconds).endsWith('s') ? item.runtime_seconds : item.runtime_seconds + 's') : '';
 
                 div.innerHTML = `
                     <div class="test-item-title">#${{item.issue_number}} - ${{escapeHtml(item.title || item.test_id)}}</div>
-                    <div><span class="badge ${{badgeClass}}">${{badgeText}}</span> <span style="font-size: 11px; color: var(--text-secondary); margin-left: 6px;">${{item.runtime_seconds ? item.runtime_seconds + 's' : ''}}</span></div>
+                    <div><span class="badge ${{badgeClass}}">${{badgeText}}</span> <span style="font-size: 11px; color: var(--text-secondary); margin-left: 6px;">Turns: ${{item.attempts || '?'}} | ${{runtimeStr}}</span></div>
                 `;
                 listEl.appendChild(div);
             }});
 
             const avgScore = total > 0 ? (totalScore / total).toFixed(2) : '0.00';
-            statsEl.innerHTML = `Avg Score: <strong>${{avgScore}} / 3.00</strong> | Total Issues: <strong>${{total}}</strong> | Passed: <strong>${{passCount}}</strong>`;
+            statsEl.innerHTML = `Avg Score: <strong>${{avgScore}} / 6.00</strong> | Total Issues: <strong>${{total}}</strong> | Passed: <strong>${{passCount}}</strong>`;
         }}
 
         function selectTest(index) {{
@@ -395,11 +462,12 @@ def generate_html_report(run_name: str, test_cases: List[Dict[str, Any]]) -> str
 
             document.getElementById('selected-title').innerText = `#${{currentTest.issue_number}}: ${{currentTest.title || currentTest.test_id}}`;
             
-            const isPass = (currentTest.score || 0) >= 2;
+            const isPass = (currentTest.score || 0) >= 4;
             const badgeClass = isPass ? 'badge-pass' : 'badge-fail';
+            const runtimeStr = currentTest.runtime_seconds ? (String(currentTest.runtime_seconds).endsWith('s') ? currentTest.runtime_seconds : currentTest.runtime_seconds + 's') : '?';
             document.getElementById('selected-meta').innerHTML = `
-                <span class="badge ${{badgeClass}}">${{isPass ? 'PASS' : 'FAIL'}} (Score: ${{currentTest.score}}/3)</span>
-                <span style="font-size: 12px; color: var(--text-secondary); margin-left: 12px;">Turns: ${{currentTest.attempts || '?'}} | Runtime: ${{currentTest.runtime_seconds || '?'}}s</span>
+                <span class="badge ${{badgeClass}}">${{isPass ? 'PASS' : 'FAIL'}} (Score: ${{currentTest.score}}/6)</span>
+                <span style="font-size: 12px; color: var(--text-secondary); margin-left: 12px;">Turns: ${{currentTest.attempts || '?'}} | Runtime: ${{runtimeStr}}</span>
             `;
 
             document.getElementById('selected-verdict').innerHTML = `<strong>Judge Verdict:</strong> ${{escapeHtml(currentTest.verdict_description || 'No verdict details available.')}}`;
@@ -510,6 +578,14 @@ def main() -> None:
         logger.error(f"No JSON spec files found in input path: {args.input_path}")
         sys.exit(1)
 
+    # Load test metrics from test_results.json / Results.txt
+    try:
+        from eval_diff_judge import load_test_metrics_for_run
+        turn_map, runtime_map, _, _, _ = load_test_metrics_for_run(str(run_dir))
+    except Exception as e:
+        logger.warning(f"Could not load test metrics: {e}")
+        turn_map, runtime_map = {}, {}
+
     # Load score map / verdicts from eval_score.md if available
     verdict_map = {}
     if score_file_md.exists():
@@ -518,13 +594,26 @@ def main() -> None:
             for line in content.splitlines():
                 if line.startswith("| ✅") or line.startswith("| ❌"):
                     parts = [p.strip() for p in line.split("|")]
-                    if len(parts) >= 7:
+                    if len(parts) >= 9:
+                        issue_str = parts[2].replace("`", "").replace("#", "")
+                        turns_str = parts[3]
+                        runtime_str = parts[4].rstrip("s")
+                        score_str = parts[7].replace("**", "").split("/")[0]
+                        verdict = parts[8]
+                        if issue_str.isdigit():
+                            verdict_map[int(issue_str)] = {
+                                "score": int(score_str) if score_str.isdigit() else 6,
+                                "turns": turns_str,
+                                "runtime": runtime_str,
+                                "verdict": verdict,
+                            }
+                    elif len(parts) >= 7:
                         issue_str = parts[2].replace("`", "").replace("#", "")
                         score_str = parts[5].replace("**", "").split("/")[0]
                         verdict = parts[6]
                         if issue_str.isdigit():
                             verdict_map[int(issue_str)] = {
-                                "score": int(score_str) if score_str.isdigit() else 0,
+                                "score": int(score_str) if score_str.isdigit() else 6,
                                 "verdict": verdict,
                             }
         except Exception as e:
@@ -585,14 +674,30 @@ def main() -> None:
 
         # Score & Verdict
         verdict_info = verdict_map.get(issue_number, {})
-        score = verdict_info.get("score", 2 if proposed_diff.strip() else 0)
+        score = verdict_info.get("score", 6 if proposed_diff.strip() else 0)
         verdict = verdict_info.get("verdict", "Evaluated by SSR LLM Diff Judge.")
+
+        # Turns and Runtime
+        turns_val = verdict_info.get("turns")
+        if not turns_val:
+            turns_tuple = turn_map.get(test_id) or turn_map.get(f"gemini_cli_{issue_number}")
+            if turns_tuple:
+                turns_val = turns_tuple[0]
+            else:
+                turns_val = "?"
+
+        runtime_val = verdict_info.get("runtime")
+        if not runtime_val:
+            rt = runtime_map.get(test_id) or runtime_map.get(f"gemini_cli_{issue_number}")
+            runtime_val = str(rt) if rt is not None else "?"
 
         test_cases.append({
             "test_id": test_id,
             "issue_number": issue_number or "?",
             "title": title,
             "score": score,
+            "attempts": turns_val,
+            "runtime_seconds": runtime_val,
             "verdict_description": verdict,
             "proposed_diff": proposed_diff,
             "true_diff": true_diff,

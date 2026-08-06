@@ -199,3 +199,40 @@ def test_main_cli_dispatch_custom_output_dir(tmp_path):
             pr_number=None,
             output_dir=custom_dir,
         )
+
+
+def test_batch_generate_golden_issues_concurrent(tmp_path):
+    """Tests CLI main function with multiple issues and PRs executing concurrently."""
+    with patch("helpers.generate_golden_issue.generate_ground_truth_issue") as mock_gt:
+        test_args = [
+            "generate_golden_issue.py",
+            "--issue", "101", "102", "103",
+            "--pr", "201", "202",
+            "--mode", "ground_truth",
+            "--max-workers", "4",
+        ]
+        with patch("sys.argv", test_args):
+            main()
+
+        assert mock_gt.call_count == 3
+        mock_gt.assert_any_call(
+            owner="google-gemini",
+            repo="gemini-cli",
+            issue_number=101,
+            pr_number=201,
+            output_dir=None,
+        )
+        mock_gt.assert_any_call(
+            owner="google-gemini",
+            repo="gemini-cli",
+            issue_number=102,
+            pr_number=202,
+            output_dir=None,
+        )
+        mock_gt.assert_any_call(
+            owner="google-gemini",
+            repo="gemini-cli",
+            issue_number=103,
+            pr_number=None,
+            output_dir=None,
+        )

@@ -1,0 +1,697 @@
+diff --git a/packages/cli/src/acp/acpClient.ts b/packages/cli/src/acp/acpClient.ts
+index e0a352e0d..45ff7944d 100644
+--- a/packages/cli/src/acp/acpClient.ts
++++ b/packages/cli/src/acp/acpClient.ts
+@@ -372,7 +372,7 @@ export class GeminiAgent {
+       mcpServers,
+     );
+ 
+-    const sessionSelector = new SessionSelector(config);
++    const sessionSelector = new SessionSelector(config.storage, config.getSessionId());
+     const { sessionData, sessionPath } =
+       await sessionSelector.resolveSession(sessionId);
+ 
+diff --git a/packages/cli/src/gemini.tsx b/packages/cli/src/gemini.tsx
+index f77fc11d6..4a4928185 100644
+--- a/packages/cli/src/gemini.tsx
++++ b/packages/cli/src/gemini.tsx
+@@ -9,11 +9,12 @@ import {
+   WarningPriority,
+   type Config,
+   type ResumedSessionData,
++  type Storage,
+   type WorktreeInfo,
+   type OutputPayload,
+   type ConsoleLogPayload,
+   type UserFeedbackPayload,
+-  sessionId,
++  createSessionId,
+   logUserPrompt,
+   AuthType,
+   UserPromptEvent,
+@@ -79,6 +80,7 @@ import { runAcpClient } from './acp/acpClient.js';
+ import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
+ import { appEvents, AppEvent } from './utils/events.js';
+ import { SessionError, SessionSelector } from './utils/sessionUtils.js';
++import type { RESUME_LATEST } from './utils/sessionUtils.js';
+ 
+ import {
+   relaunchAppInChildProcess,
+@@ -348,6 +350,19 @@ export async function main() {
+     }
+   }
+ 
++  let sessionId = createSessionId();
++  if (argv.resume) {
++    try {
++      const tempConfig = await loadCliConfig(settings.merged, sessionId, argv, {
++        projectHooks: settings.workspace.settings.hooks,
++      });
++      await tempConfig.storage.initialize();
++      sessionId = await resolveSessionId(argv.resume, tempConfig.storage);
++    } catch {
++      // ignore
++    }
++  }
++
+   const partialConfig = await loadCliConfig(settings.merged, sessionId, argv, {
+     projectHooks: settings.workspace.settings.hooks,
+   });
+@@ -602,7 +617,7 @@ export async function main() {
+     // Handle --resume flag
+     let resumedSessionData: ResumedSessionData | undefined = undefined;
+     if (argv.resume) {
+-      const sessionSelector = new SessionSelector(config);
++      const sessionSelector = new SessionSelector(config.storage, config.getSessionId());
+       try {
+         const result = await sessionSelector.resolveSession(argv.resume);
+         resumedSessionData = {
+@@ -807,3 +822,19 @@ function setupAdminControlsListener() {
+     },
+   };
+ }
++
++async function resolveSessionId(
++  resumeArg: string | typeof RESUME_LATEST | undefined,
++  storage: Storage,
++): Promise<string> {
++  if (!resumeArg) {
++    return createSessionId();
++  }
++  const sessionSelector = new SessionSelector(storage);
++  try {
++    const result = await sessionSelector.resolveSession(resumeArg);
++    return result.sessionData.sessionId;
++  } catch {
++    return createSessionId();
++  }
++}
+diff --git a/packages/cli/src/interactiveCli.tsx b/packages/cli/src/interactiveCli.tsx
+index 965bc2769..4b307fb9d 100644
+--- a/packages/cli/src/interactiveCli.tsx
++++ b/packages/cli/src/interactiveCli.tsx
+@@ -107,7 +107,7 @@ export async function startInteractiveUI(
+               <TerminalProvider>
+                 <ScrollProvider>
+                   <OverflowProvider>
+-                    <SessionStatsProvider>
++                    <SessionStatsProvider sessionId={config.getSessionId()}>
+                       <VimModeProvider>
+                         <AppContainer
+                           config={config}
+diff --git a/packages/cli/src/test-utils/render.tsx b/packages/cli/src/test-utils/render.tsx
+index bf8ca468e..2afd06fb6 100644
+--- a/packages/cli/src/test-utils/render.tsx
++++ b/packages/cli/src/test-utils/render.tsx
+@@ -731,7 +731,7 @@ export const renderWithProviders = async (
+             <UIStateContext.Provider value={finalUiState}>
+               <VimModeProvider>
+                 <ShellFocusContext.Provider value={shellFocus}>
+-                  <SessionStatsProvider>
++                  <SessionStatsProvider sessionId={config?.getSessionId() ?? 'test-session-id'}>
+                     <StreamingContext.Provider
+                       value={finalUiState.streamingState}
+                     >
+diff --git a/packages/cli/src/ui/AppContainer.tsx b/packages/cli/src/ui/AppContainer.tsx
+index e61cada6b..efdc7223e 100644
+--- a/packages/cli/src/ui/AppContainer.tsx
++++ b/packages/cli/src/ui/AppContainer.tsx
+@@ -444,7 +444,7 @@ export const AppContainer = (props: AppContainerProps) => {
+ 
+   const [isConfigInitialized, setConfigInitialized] = useState(false);
+ 
+-  const logger = useLogger(config.storage);
++  const logger = useLogger(config);
+   const { inputHistory, addInput, initializeFromLogger } =
+     useInputHistoryStore();
+ 
+diff --git a/packages/cli/src/ui/commands/bugCommand.ts b/packages/cli/src/ui/commands/bugCommand.ts
+index 134bccc9f..e146491de 100644
+--- a/packages/cli/src/ui/commands/bugCommand.ts
++++ b/packages/cli/src/ui/commands/bugCommand.ts
+@@ -16,7 +16,6 @@ import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
+ import { formatBytes } from '../utils/formatters.js';
+ import {
+   IdeClient,
+-  sessionId,
+   getVersion,
+   INITIAL_HISTORY_LENGTH,
+   debugLogger,
+@@ -59,7 +58,7 @@ export const bugCommand: SlashCommand = {
+     let info = `
+ * **CLI Version:** ${cliVersion}
+ * **Git Commit:** ${GIT_COMMIT_INFO}
+-* **Session ID:** ${sessionId}
++* **Session ID:** ${config?.getSessionId() || 'Unknown'}
+ * **Operating System:** ${osVersion}
+ * **Sandbox Environment:** ${sandboxEnv}
+ * **Model Version:** ${modelVersion}
+diff --git a/packages/cli/src/ui/components/HistoryItemDisplay.test.tsx b/packages/cli/src/ui/components/HistoryItemDisplay.test.tsx
+index ddbc30c02..2f6e9e1b8 100644
+--- a/packages/cli/src/ui/components/HistoryItemDisplay.test.tsx
++++ b/packages/cli/src/ui/components/HistoryItemDisplay.test.tsx
+@@ -124,7 +124,7 @@ describe('<HistoryItemDisplay />', () => {
+       duration: '1s',
+     };
+     const { lastFrame, unmount } = await renderWithProviders(
+-      <SessionStatsProvider>
++      <SessionStatsProvider sessionId="test-session-id">
+         <HistoryItemDisplay {...baseItem} item={item} />
+       </SessionStatsProvider>,
+     );
+@@ -157,7 +157,7 @@ describe('<HistoryItemDisplay />', () => {
+       type: 'model_stats',
+     };
+     const { lastFrame, unmount } = await renderWithProviders(
+-      <SessionStatsProvider>
++      <SessionStatsProvider sessionId="test-session-id">
+         <HistoryItemDisplay {...baseItem} item={item} />
+       </SessionStatsProvider>,
+     );
+@@ -173,7 +173,7 @@ describe('<HistoryItemDisplay />', () => {
+       type: 'tool_stats',
+     };
+     const { lastFrame, unmount } = await renderWithProviders(
+-      <SessionStatsProvider>
++      <SessionStatsProvider sessionId="test-session-id">
+         <HistoryItemDisplay {...baseItem} item={item} />
+       </SessionStatsProvider>,
+     );
+@@ -190,7 +190,7 @@ describe('<HistoryItemDisplay />', () => {
+       duration: '1s',
+     };
+     const { lastFrame, unmount } = await renderWithProviders(
+-      <SessionStatsProvider>
++      <SessionStatsProvider sessionId="test-session-id">
+         <HistoryItemDisplay {...baseItem} item={item} />
+       </SessionStatsProvider>,
+     );
+diff --git a/packages/cli/src/ui/contexts/SessionContext.test.tsx b/packages/cli/src/ui/contexts/SessionContext.test.tsx
+index f07d28de8..2a1046b46 100644
+--- a/packages/cli/src/ui/contexts/SessionContext.test.tsx
++++ b/packages/cli/src/ui/contexts/SessionContext.test.tsx
+@@ -60,13 +60,14 @@ describe('SessionStatsContext', () => {
+     > = { current: undefined };
+ 
+     const { unmount } = await render(
+-      <SessionStatsProvider>
++      <SessionStatsProvider sessionId="test-session-id">
+         <TestHarness contextRef={contextRef} />
+       </SessionStatsProvider>,
+     );
+ 
+     const stats = contextRef.current?.stats;
+ 
++    expect(stats?.sessionId).toBe('test-session-id');
+     expect(stats?.sessionStartTime).toBeInstanceOf(Date);
+     expect(stats?.metrics).toBeDefined();
+     expect(stats?.metrics.models).toEqual({});
+@@ -79,7 +80,7 @@ describe('SessionStatsContext', () => {
+     > = { current: undefined };
+ 
+     const { unmount } = await render(
+-      <SessionStatsProvider>
++      <SessionStatsProvider sessionId="test-session-id">
+         <TestHarness contextRef={contextRef} />
+       </SessionStatsProvider>,
+     );
+@@ -162,7 +163,7 @@ describe('SessionStatsContext', () => {
+     };
+ 
+     const { unmount } = await render(
+-      <SessionStatsProvider>
++      <SessionStatsProvider sessionId="test-session-id">
+         <CountingTestHarness />
+       </SessionStatsProvider>,
+     );
+@@ -245,7 +246,7 @@ describe('SessionStatsContext', () => {
+     > = { current: undefined };
+ 
+     const { unmount } = await render(
+-      <SessionStatsProvider>
++      <SessionStatsProvider sessionId="test-session-id">
+         <TestHarness contextRef={contextRef} />
+       </SessionStatsProvider>,
+     );
+diff --git a/packages/cli/src/ui/contexts/SessionContext.tsx b/packages/cli/src/ui/contexts/SessionContext.tsx
+index 7f313bb44..6b8da667e 100644
+--- a/packages/cli/src/ui/contexts/SessionContext.tsx
++++ b/packages/cli/src/ui/contexts/SessionContext.tsx
+@@ -20,7 +20,7 @@ import type {
+   RoleMetrics,
+   ToolCallStats,
+ } from '@google/gemini-cli-core';
+-import { uiTelemetryService, sessionId } from '@google/gemini-cli-core';
++import { uiTelemetryService } from '@google/gemini-cli-core';
+ 
+ export enum ToolCallDecision {
+   ACCEPT = 'accept',
+@@ -183,9 +183,10 @@ const SessionStatsContext = createContext<SessionStatsContextValue | undefined>(
+ 
+ // --- Provider Component ---
+ 
+-export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
+-  children,
+-}) => {
++export const SessionStatsProvider: React.FC<{
++  sessionId: string;
++  children: React.ReactNode;
++}> = ({ sessionId, children }) => {
+   const [stats, setStats] = useState<SessionStatsState>({
+     sessionId,
+     sessionStartTime: new Date(),
+@@ -194,6 +195,13 @@ export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
+     promptCount: 0,
+   });
+ 
++  useEffect(() => {
++    setStats((prevState) => {
++      if (prevState.sessionId === sessionId) return prevState;
++      return { ...prevState, sessionId };
++    });
++  }, [sessionId]);
++
+   useEffect(() => {
+     const handleUpdate = ({
+       metrics,
+diff --git a/packages/cli/src/ui/hooks/useGeminiStream.ts b/packages/cli/src/ui/hooks/useGeminiStream.ts
+index a2621c454..353327bf5 100644
+--- a/packages/cli/src/ui/hooks/useGeminiStream.ts
++++ b/packages/cli/src/ui/hooks/useGeminiStream.ts
+@@ -263,7 +263,7 @@ export const useGeminiStream = (
+   const processedMemoryToolsRef = useRef<Set<string>>(new Set());
+   const { startNewPrompt, getPromptCount } = useSessionStats();
+   const storage = config.storage;
+-  const logger = useLogger(storage);
++  const logger = useLogger(config);
+   const gitService = useMemo(() => {
+     if (!config.getProjectRoot()) {
+       return;
+@@ -1580,6 +1580,7 @@ export const useGeminiStream = (
+           operation: options?.isContinuation
+             ? GeminiCliOperation.SystemPrompt
+             : GeminiCliOperation.UserPrompt,
++          sessionId: config.getSessionId(),
+         },
+         async ({ metadata: spanMetadata }) => {
+           spanMetadata.input = query;
+diff --git a/packages/cli/src/ui/hooks/useLogger.test.tsx b/packages/cli/src/ui/hooks/useLogger.test.tsx
+index c0791f5af..d159fd7ad 100644
+--- a/packages/cli/src/ui/hooks/useLogger.test.tsx
++++ b/packages/cli/src/ui/hooks/useLogger.test.tsx
+@@ -9,13 +9,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { renderHook } from '../../test-utils/render.js';
+ import { useLogger } from './useLogger.js';
+ import {
+-  sessionId as globalSessionId,
+   Logger,
+   type Storage,
+   type Config,
+ } from '@google/gemini-cli-core';
+-import { ConfigContext } from '../contexts/ConfigContext.js';
+-import type React from 'react';
++
+ 
+ let deferredInit: { resolve: (val?: unknown) => void };
+ 
+@@ -38,38 +36,17 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
+ });
+ 
+ describe('useLogger', () => {
+-  const mockStorage = {} as Storage;
+   const mockConfig = {
+     getSessionId: vi.fn().mockReturnValue('active-session-id'),
++    storage: {} as Storage,
+   } as unknown as Config;
+ 
+   beforeEach(() => {
+     vi.clearAllMocks();
+   });
+ 
+-  it('should initialize with the global sessionId by default', async () => {
+-    const { result } = await renderHook(() => useLogger(mockStorage));
+-
+-    expect(result.current).toBeNull();
+-
+-    await act(async () => {
+-      deferredInit.resolve();
+-    });
+-
+-    expect(result.current).not.toBeNull();
+-    expect(Logger).toHaveBeenCalledWith(globalSessionId, mockStorage);
+-  });
+-
+-  it('should initialize with the active sessionId from ConfigContext when available', async () => {
+-    const wrapper = ({ children }: { children: React.ReactNode }) => (
+-      <ConfigContext.Provider value={mockConfig}>
+-        {children}
+-      </ConfigContext.Provider>
+-    );
+-
+-    const { result } = await renderHook(() => useLogger(mockStorage), {
+-      wrapper,
+-    });
++  it('should initialize with the sessionId and storage from config', async () => {
++    const { result } = await renderHook(() => useLogger(mockConfig));
+ 
+     expect(result.current).toBeNull();
+ 
+@@ -78,6 +55,6 @@ describe('useLogger', () => {
+     });
+ 
+     expect(result.current).not.toBeNull();
+-    expect(Logger).toHaveBeenCalledWith('active-session-id', mockStorage);
++    expect(Logger).toHaveBeenCalledWith('active-session-id', mockConfig.storage);
+   });
+ });
+diff --git a/packages/cli/src/ui/hooks/useLogger.ts b/packages/cli/src/ui/hooks/useLogger.ts
+index 2c9309821..34a200d19 100644
+--- a/packages/cli/src/ui/hooks/useLogger.ts
++++ b/packages/cli/src/ui/hooks/useLogger.ts
+@@ -4,24 +4,21 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
+-import { useState, useEffect, useContext } from 'react';
++import { useState, useEffect } from 'react';
+ import {
+-  sessionId as globalSessionId,
+   Logger,
+-  type Storage,
++  type Config,
+ } from '@google/gemini-cli-core';
+-import { ConfigContext } from '../contexts/ConfigContext.js';
+ 
+ /**
+  * Hook to manage the logger instance.
+  */
+-export const useLogger = (storage: Storage): Logger | null => {
++export const useLogger = (config: Config): Logger | null => {
+   const [logger, setLogger] = useState<Logger | null>(null);
+-  const config = useContext(ConfigContext);
+ 
+   useEffect(() => {
+-    const activeSessionId = config?.getSessionId() ?? globalSessionId;
+-    const newLogger = new Logger(activeSessionId, storage);
++    const activeSessionId = config.getSessionId();
++    const newLogger = new Logger(activeSessionId, config.storage);
+ 
+     /**
+      * Start async initialization, no need to await. Using await slows down the
+@@ -34,7 +31,7 @@ export const useLogger = (storage: Storage): Logger | null => {
+         setLogger(newLogger);
+       })
+       .catch(() => {});
+-  }, [storage, config]);
++  }, [config]);
+ 
+   return logger;
+ };
+diff --git a/packages/cli/src/utils/sessionUtils.ts b/packages/cli/src/utils/sessionUtils.ts
+index cf95b0f54..f288fe8af 100644
+--- a/packages/cli/src/utils/sessionUtils.ts
++++ b/packages/cli/src/utils/sessionUtils.ts
+@@ -9,7 +9,7 @@ import {
+   partListUnionToString,
+   SESSION_FILE_PREFIX,
+   CoreToolCallStatus,
+-  type Config,
++  type Storage,
+   type ConversationRecord,
+   type MessageRecord,
+ } from '@google/gemini-cli-core';
+@@ -399,17 +399,35 @@ export const getSessionFiles = async (
+  * Utility class for session discovery and selection.
+  */
+ export class SessionSelector {
+-  constructor(private config: Config) {}
++  private storage: Storage;
++  private activeSessionId?: string;
++
++  constructor(
++    storageOrConfig: Storage | { storage: Storage; getSessionId?: () => string },
++    activeSessionId?: string,
++  ) {
++    if (storageOrConfig && 'storage' in storageOrConfig) {
++      this.storage = storageOrConfig.storage;
++      this.activeSessionId =
++        activeSessionId ??
++        (typeof storageOrConfig.getSessionId === 'function'
++          ? storageOrConfig.getSessionId()
++          : undefined);
++    } else {
++      this.storage = storageOrConfig;
++      this.activeSessionId = activeSessionId;
++    }
++  }
+ 
+   /**
+    * Lists all available sessions for the current project.
+    */
+   async listSessions(): Promise<SessionInfo[]> {
+     const chatsDir = path.join(
+-      this.config.storage.getProjectTempDir(),
++      this.storage.getProjectTempDir(),
+       'chats',
+     );
+-    return getSessionFiles(chatsDir, this.config.getSessionId());
++    return getSessionFiles(chatsDir, this.activeSessionId);
+   }
+ 
+   /**
+@@ -453,7 +471,7 @@ export class SessionSelector {
+     }
+ 
+     const chatsDir = path.join(
+-      this.config.storage.getProjectTempDir(),
++      this.storage.getProjectTempDir(),
+       'chats',
+     );
+     throw SessionError.invalidSessionIdentifier(trimmedIdentifier, chatsDir);
+@@ -493,7 +511,7 @@ export class SessionSelector {
+         }
+         // Wrap unexpected errors with context
+         throw new Error(
+-          `Failed to find session "${trimmedResumeArg}": ${error instanceof Error ? error.message : String(error)}`,
++            `Failed to find session "${trimmedResumeArg}": ${error instanceof Error ? error.message : String(error)}`,
+         );
+       }
+     }
+@@ -508,7 +526,7 @@ export class SessionSelector {
+     sessionInfo: SessionInfo,
+   ): Promise<SessionSelectionResult> {
+     const chatsDir = path.join(
+-      this.config.storage.getProjectTempDir(),
++      this.storage.getProjectTempDir(),
+       'chats',
+     );
+     const sessionPath = path.join(chatsDir, sessionInfo.fileName);
+diff --git a/packages/cli/src/utils/sessions.ts b/packages/cli/src/utils/sessions.ts
+index 9a4def499..fd9e77100 100644
+--- a/packages/cli/src/utils/sessions.ts
++++ b/packages/cli/src/utils/sessions.ts
+@@ -21,7 +21,7 @@ export async function listSessions(config: Config): Promise<void> {
+   // Generate summary for most recent session if needed
+   await generateSummary(config);
+ 
+-  const sessionSelector = new SessionSelector(config);
++  const sessionSelector = new SessionSelector(config.storage, config.getSessionId());
+   const sessions = await sessionSelector.listSessions();
+ 
+   if (sessions.length === 0) {
+@@ -55,7 +55,7 @@ export async function deleteSession(
+   config: Config,
+   sessionIndex: string,
+ ): Promise<void> {
+-  const sessionSelector = new SessionSelector(config);
++  const sessionSelector = new SessionSelector(config.storage, config.getSessionId());
+   const sessions = await sessionSelector.listSessions();
+ 
+   if (sessions.length === 0) {
+diff --git a/packages/core/src/agents/subagent-tool.ts b/packages/core/src/agents/subagent-tool.ts
+index 3ef9f0aa8..e689098f5 100644
+--- a/packages/core/src/agents/subagent-tool.ts
++++ b/packages/core/src/agents/subagent-tool.ts
+@@ -182,6 +182,7 @@ class SubAgentInvocation extends BaseToolInvocation<AgentInputs, ToolResult> {
+       {
+         operation: GeminiCliOperation.AgentCall,
+         logPrompts: this.context.config.getTelemetryLogPromptsEnabled(),
++        sessionId: this.context.config.getSessionId(),
+         attributes: {
+           [GEN_AI_AGENT_NAME]: this.definition.name,
+           [GEN_AI_AGENT_DESCRIPTION]: this.definition.description,
+diff --git a/packages/core/src/core/loggingContentGenerator.ts b/packages/core/src/core/loggingContentGenerator.ts
+index c9350593e..027a7ae62 100644
+--- a/packages/core/src/core/loggingContentGenerator.ts
++++ b/packages/core/src/core/loggingContentGenerator.ts
+@@ -350,6 +350,7 @@ export class LoggingContentGenerator implements ContentGenerator {
+       {
+         operation: GeminiCliOperation.LLMCall,
+         logPrompts: this.config.getTelemetryLogPromptsEnabled(),
++        sessionId: this.config.getSessionId(),
+         attributes: {
+           [GEN_AI_REQUEST_MODEL]: req.model,
+           [GEN_AI_PROMPT_NAME]: userPromptId,
+@@ -440,6 +441,7 @@ export class LoggingContentGenerator implements ContentGenerator {
+       {
+         operation: GeminiCliOperation.LLMCall,
+         logPrompts: this.config.getTelemetryLogPromptsEnabled(),
++        sessionId: this.config.getSessionId(),
+         attributes: {
+           [GEN_AI_REQUEST_MODEL]: req.model,
+           [GEN_AI_PROMPT_NAME]: userPromptId,
+@@ -594,6 +596,7 @@ export class LoggingContentGenerator implements ContentGenerator {
+       {
+         operation: GeminiCliOperation.LLMCall,
+         logPrompts: this.config.getTelemetryLogPromptsEnabled(),
++        sessionId: this.config.getSessionId(),
+         attributes: {
+           [GEN_AI_REQUEST_MODEL]: req.model,
+         },
+diff --git a/packages/core/src/index.ts b/packages/core/src/index.ts
+index 130ca9c2a..04456a296 100644
+--- a/packages/core/src/index.ts
++++ b/packages/core/src/index.ts
+@@ -252,7 +252,7 @@ export * from './telemetry/index.js';
+ export * from './telemetry/billingEvents.js';
+ export { logBillingEvent } from './telemetry/loggers.js';
+ export * from './telemetry/constants.js';
+-export { sessionId, createSessionId } from './utils/session.js';
++export { createSessionId } from './utils/session.js';
+ export * from './utils/compatibility.js';
+ export * from './utils/browser.js';
+ export { Storage } from './config/storage.js';
+diff --git a/packages/core/src/scheduler/scheduler.ts b/packages/core/src/scheduler/scheduler.ts
+index e35993d54..2f9574859 100644
+--- a/packages/core/src/scheduler/scheduler.ts
++++ b/packages/core/src/scheduler/scheduler.ts
+@@ -197,6 +197,7 @@ export class Scheduler {
+       {
+         operation: GeminiCliOperation.ScheduleToolCalls,
+         logPrompts: this.context.config.getTelemetryLogPromptsEnabled(),
++        sessionId: this.context.config.getSessionId(),
+       },
+       async ({ metadata: spanMetadata }) => {
+         const requests = Array.isArray(request) ? request : [request];
+diff --git a/packages/core/src/scheduler/tool-executor.ts b/packages/core/src/scheduler/tool-executor.ts
+index 464810d8f..3910aaee4 100644
+--- a/packages/core/src/scheduler/tool-executor.ts
++++ b/packages/core/src/scheduler/tool-executor.ts
+@@ -84,6 +84,7 @@ export class ToolExecutor {
+       {
+         operation: GeminiCliOperation.ToolCall,
+         logPrompts: this.config.getTelemetryLogPromptsEnabled(),
++        sessionId: this.config.getSessionId(),
+         attributes: {
+           [GEN_AI_TOOL_NAME]: toolName,
+           [GEN_AI_TOOL_CALL_ID]: callId,
+diff --git a/packages/core/src/telemetry/trace.test.ts b/packages/core/src/telemetry/trace.test.ts
+index ba2ad9c44..4485ab601 100644
+--- a/packages/core/src/telemetry/trace.test.ts
++++ b/packages/core/src/telemetry/trace.test.ts
+@@ -110,7 +110,7 @@ describe('runInDevTraceSpan', () => {
+     const fn = vi.fn(async () => 'result');
+ 
+     const result = await runInDevTraceSpan(
+-      { operation: GeminiCliOperation.LLMCall },
++      { operation: GeminiCliOperation.LLMCall, sessionId: 'test-session-id' },
+       fn,
+     );
+ 
+@@ -125,7 +125,7 @@ describe('runInDevTraceSpan', () => {
+ 
+   it('should set default attributes on the span metadata', async () => {
+     await runInDevTraceSpan(
+-      { operation: GeminiCliOperation.LLMCall },
++      { operation: GeminiCliOperation.LLMCall, sessionId: 'test-session-id' },
+       async ({ metadata }) => {
+         expect(metadata.attributes[GEN_AI_OPERATION_NAME]).toBe(
+           GeminiCliOperation.LLMCall,
+@@ -143,7 +143,7 @@ describe('runInDevTraceSpan', () => {
+ 
+   it('should set span attributes from metadata on completion', async () => {
+     await runInDevTraceSpan(
+-      { operation: GeminiCliOperation.LLMCall },
++      { operation: GeminiCliOperation.LLMCall, sessionId: 'test-session-id' },
+       async ({ metadata }) => {
+         metadata.input = { query: 'hello' };
+         metadata.output = { response: 'world' };
+@@ -169,7 +169,7 @@ describe('runInDevTraceSpan', () => {
+   it('should handle errors in the wrapped function', async () => {
+     const error = new Error('test error');
+     await expect(
+-      runInDevTraceSpan({ operation: GeminiCliOperation.LLMCall }, async () => {
++      runInDevTraceSpan({ operation: GeminiCliOperation.LLMCall, sessionId: 'test-session-id' }, async () => {
+         throw error;
+       }),
+     ).rejects.toThrow(error);
+@@ -189,7 +189,7 @@ describe('runInDevTraceSpan', () => {
+     }
+ 
+     const resultStream = await runInDevTraceSpan(
+-      { operation: GeminiCliOperation.LLMCall },
++      { operation: GeminiCliOperation.LLMCall, sessionId: 'test-session-id' },
+       async () => testStream(),
+     );
+ 
+@@ -212,7 +212,7 @@ describe('runInDevTraceSpan', () => {
+     }
+ 
+     const resultStream = await runInDevTraceSpan(
+-      { operation: GeminiCliOperation.LLMCall },
++      { operation: GeminiCliOperation.LLMCall, sessionId: 'test-session-id' },
+       async () => errorStream(),
+     );
+ 
+@@ -231,7 +231,7 @@ describe('runInDevTraceSpan', () => {
+     });
+ 
+     await runInDevTraceSpan(
+-      { operation: GeminiCliOperation.LLMCall },
++      { operation: GeminiCliOperation.LLMCall, sessionId: 'test-session-id' },
+       async ({ metadata }) => {
+         metadata.input = 'trigger error';
+       },
+diff --git a/packages/core/src/telemetry/trace.ts b/packages/core/src/telemetry/trace.ts
+index 905934049..86447eb35 100644
+--- a/packages/core/src/telemetry/trace.ts
++++ b/packages/core/src/telemetry/trace.ts
+@@ -23,7 +23,6 @@ import {
+   SERVICE_DESCRIPTION,
+   SERVICE_NAME,
+ } from './constants.js';
+-import { sessionId } from '../utils/session.js';
+ 
+ import { truncateString } from '../utils/textUtils.js';
+ 
+@@ -96,10 +95,14 @@ export interface SpanMetadata {
+  * @returns The result of the function.
+  */
+ export async function runInDevTraceSpan<R>(
+-  opts: SpanOptions & { operation: GeminiCliOperation; logPrompts?: boolean },
++  opts: SpanOptions & {
++    operation: GeminiCliOperation;
++    logPrompts?: boolean;
++    sessionId: string;
++  },
+   fn: ({ metadata }: { metadata: SpanMetadata }) => Promise<R>,
+ ): Promise<R> {
+-  const { operation, logPrompts, ...restOfSpanOpts } = opts;
++  const { operation, logPrompts, sessionId, ...restOfSpanOpts } = opts;
+ 
+   const tracer = trace.getTracer(TRACER_NAME, TRACER_VERSION);
+   return tracer.startActiveSpan(operation, restOfSpanOpts, async (span) => {
+diff --git a/packages/core/src/utils/session.ts b/packages/core/src/utils/session.ts
+index 2a0ec5211..d1906f235 100644
+--- a/packages/core/src/utils/session.ts
++++ b/packages/core/src/utils/session.ts
+@@ -6,8 +6,7 @@
+ 
+ import { randomUUID } from 'node:crypto';
+ 
+-export const sessionId = randomUUID();
+-
+ export function createSessionId(): string {
+   return randomUUID();
+ }
++
