@@ -286,4 +286,120 @@ description: Test sanitization
       'https://antigravity.google/docs/cli-getting-started',
     );
   });
+
+  it('should discover a skill with a UTF-8 BOM in SKILL.md file', async () => {
+    const skillDir = path.join(testRootDir, 'bom-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `\uFEFF---\nname: bom-skill\ndescription: A BOM skill\n---\n# Instructions\nDo something.\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('bom-skill');
+    expect(skills[0].description).toBe('A BOM skill');
+  });
+
+  it('should discover a skill with trailing spaces after the --- frontmatter markers', async () => {
+    const skillDir = path.join(testRootDir, 'trailing-spaces-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---   \nname: trailing-spaces-skill\ndescription: Trailing spaces skill\n---  \n# Instructions\nDo something.\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('trailing-spaces-skill');
+    expect(skills[0].description).toBe('Trailing spaces skill');
+  });
+
+  it('should parse skill with case-insensitive keys and spaces before colons', async () => {
+    const skillDir = path.join(testRootDir, 'case-insensitive-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---
+Name : case-insensitive-skill
+DESCRIPTION   : Case insensitive description
+---
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('case-insensitive-skill');
+    expect(skills[0].description).toBe('Case insensitive description');
+  });
+
+  it('should parse multi-line description without sacrificing indented name key', async () => {
+    const skillDir = path.join(testRootDir, 'multiline-name-under-desc');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---
+description:
+  This is a multiline description
+  that goes on multiple lines
+  name: multiline-name-under-desc
+---
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('multiline-name-under-desc');
+    expect(skills[0].description).toBe('This is a multiline description that goes on multiple lines');
+  });
+
+  it('should parse multi-line description containing a line starting with Note:', async () => {
+    const skillDir = path.join(testRootDir, 'multiline-note');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---
+name: multiline-note
+description:
+  This is my skill description
+  Note: This skill should be used with caution
+---
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('multiline-note');
+    expect(skills[0].description).toBe('This is my skill description Note: This skill should be used with caution');
+  });
+
+  it('should fallback to simple parser to treat non-string YAML values as strings', async () => {
+    const skillDir = path.join(testRootDir, 'non-string-yaml');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---
+name: 12345
+description: true
+---
+`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('12345');
+    expect(skills[0].description).toBe('true');
+  });
 });
