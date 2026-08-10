@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 18811,
+  "title": "\u2715 [API Error: Failed to generate content: Request contains an invalid argument.]",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report provides clear context and error logs indicating that following an automatic CLI update notice ('Gemini CLI update available! 0.27.4 -> 0.28.0'), submitting prompt turns (or 'continue') results in '[API Error: Failed to generate content: Request contains an invalid argument.]'. Client details and OS environment are included.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing API invalid argument errors triggered after automatic update notifications requires ensuring system and notification history items added during update events in packages/cli are properly excluded or sanitized when constructing conversation history payloads for packages/core LLM requests."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#18811",
+    "summary": {
+      "problem": "Sending prompts after an automatic CLI update notification triggers an API error: '[API Error: Failed to generate content: Request contains an invalid argument.]'.",
+      "root_cause": "System and update notification messages added to the CLI history stack during the auto-update workflow (via setUpdateHandler) are incorrectly included or formatted as LLM content turns during subsequent prompt submissions, causing the API payload to contain invalid message roles or structures.",
+      "context": "When auto-update notifies the user or completes, informational history items are dispatched to history. If these items are not filtered out before converting conversation history into Gemini API requests in useGeminiStream.ts or geminiChat.ts, the Gemini API rejects the payload with an invalid argument error."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/utils/handleAutoUpdate.ts",
+        "packages/cli/src/ui/hooks/useGeminiStream.ts"
+      ],
+      "steps": [
+        "Inspect history item creation in packages/cli/src/utils/handleAutoUpdate.ts when update events (e.g., update-received, update-success, update-failed) are emitted.",
+        "Ensure UI-only informational items (e.g., MessageType.INFO or notification banners) are designated as non-conversational so they are excluded from the Content[] payload sent to the Gemini API in packages/cli/src/ui/hooks/useGeminiStream.ts.",
+        "Update history conversion logic in useGeminiStream.ts to filter out update notification messages before sending messages to the LLM."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/handleAutoUpdate.test.ts",
+      "expected_behavior": "Auto-update notification and completion messages are displayed in the CLI UI but excluded from LLM history payloads, preventing API invalid argument errors on subsequent turns.",
+      "verification_steps": [
+        "Add unit tests in packages/cli/src/utils/handleAutoUpdate.test.ts to verify that update notifications do not inject invalid conversation turns into session history.",
+        "Verify that sending prompts after auto-update completion succeeds without API errors."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:47:05Z",
+  "execution_time_seconds": 52.96
+}

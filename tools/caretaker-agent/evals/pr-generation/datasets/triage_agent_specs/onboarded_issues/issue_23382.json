@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 23382,
+  "title": "fix(core): MCP tool schemas with missing type:'object' cause provider rejection",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a bug where third-party MCP or extension tools with missing or invalid root schema types cause API rejection in strict mode. It provides exact reproduction details, root causes, affected components, and a proposed fix.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix involves adding a small schema normalization helper function and applying it to two tool constructors in packages/core/src/tools/. The logic is localized, deterministic, and easily tested with unit tests."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#23382",
+    "summary": {
+      "problem": "MCP servers and extension tools can provide parameter schemas that are undefined, null, non-objects, or missing type 'object' at root, leading to request rejection by strict providers such as Vertex AI in strict mode.",
+      "root_cause": "DiscoveredMCPTool and DiscoveredTool pass tool parameter schemas directly through without normalizing or ensuring that the root object contains type: 'object'.",
+      "context": "Providers enforcing JSON Schema requirements strictly expect every tool input schema root to specify type: 'object'. Non-standard or malformed tool input schemas from third-party MCP servers fail validation when forwarded to strict providers."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/mcp-tool.ts",
+        "packages/core/src/tools/tool-registry.ts"
+      ],
+      "steps": [
+        "Implement a normalizeToolSchema(schema: unknown): Record<string, unknown> helper function in packages/core/src/tools/mcp-tool.ts that wraps undefined, null, primitive, or array input schemas into { type: 'object', properties: {} }, and ensures object schemas without type: 'object' have type: 'object' injected at root.",
+        "Export normalizeToolSchema from packages/core/src/tools/mcp-tool.ts.",
+        "Update the DiscoveredMCPTool constructor in packages/core/src/tools/mcp-tool.ts to normalize the received parameterSchema using normalizeToolSchema.",
+        "Update the DiscoveredTool constructor in packages/core/src/tools/tool-registry.ts to normalize parameterSchema using normalizeToolSchema imported from mcp-tool.ts."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/mcp-tool.test.ts",
+      "expected_behavior": "Tool parameter schemas for both DiscoveredMCPTool and DiscoveredTool are normalized so that primitive, null, missing, or untyped schema objects always have type 'object' at root.",
+      "verification_steps": [
+        "Add unit tests for normalizeToolSchema covering null, undefined, primitive types, arrays, empty objects, and objects missing type 'object'.",
+        "Add unit tests in packages/core/src/tools/mcp-tool.test.ts verifying that DiscoveredMCPTool initializes with a normalized root schema containing type: 'object'.",
+        "Add unit tests in packages/core/src/tools/tool-registry.test.ts verifying that DiscoveredTool initializes with a normalized parameter schema."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:43Z",
+  "execution_time_seconds": 50.29
+}

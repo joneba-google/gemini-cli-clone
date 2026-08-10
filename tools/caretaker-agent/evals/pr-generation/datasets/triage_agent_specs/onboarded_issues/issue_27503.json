@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27503,
+  "title": "SearchText fails with Exit Code 64 \u2014 `git grep` fallback erroneously retains `--json` flag",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed and actionable report of a bug in SearchText tool execution where ripgrep failure in a sandboxed environment (e.g., Snap) causes SearchText to fail due to git grep fallback erroneously retaining the --json flag. Steps to reproduce, expected vs actual behavior, log output, and proof of concept are all clearly documented.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Investigating platform-specific child process execution failures (Snap sandboxed ripgrep binaries) and ensuring smooth runtime fallback from RipGrepTool to GrepTool / git grep without invalid flags requires careful error handling across tools and Vitest test mocking."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27503",
+    "summary": {
+      "problem": "SearchText fails with Exit Code 64 when ripgrep fails in a sandboxed/confined environment (e.g., Snap package) because the search fallback mechanism retains the --json flag when calling git grep.",
+      "root_cause": "RipGrepTool constructs arguments including --json for ripgrep. When ripgrep fails at runtime in restricted environments, the tool fallback attempts to invoke git grep or GrepTool without stripping the ripgrep-specific --json option, causing git grep to fail with POSIX exit code 64 (unknown flag).",
+      "context": "The repository contains two search tools in packages/core/src/tools: RipGrepTool (ripGrep.ts) and GrepTool (grep.ts). RipGrepTool uses ripgrep with --json output. When runtime ripgrep execution fails, fallback logic must strip --json before invoking git grep or fallback to GrepTool."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/ripGrep.ts"],
+      "steps": [
+        "In packages/core/src/tools/ripGrep.ts, catch runtime execution failures from ripgrep (e.g. Snap confinement errors or process exit code failures).",
+        "Implement fallback execution to GrepTool or git grep when ripgrep fails.",
+        "Ensure argument arrays constructed for fallback commands (e.g. git grep) filter out ripgrep-specific flags like --json."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/ripGrep.test.ts",
+      "expected_behavior": "When ripgrep fails during execution, SearchText successfully falls back to git grep or system grep without passing --json, returning expected search results.",
+      "verification_steps": [
+        "Add a test in packages/core/src/tools/ripGrep.test.ts mocking ripgrep process failure.",
+        "Verify that fallback execution succeeds and does not pass --json to git grep or fallback commands."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:53Z",
+  "execution_time_seconds": 187.58
+}

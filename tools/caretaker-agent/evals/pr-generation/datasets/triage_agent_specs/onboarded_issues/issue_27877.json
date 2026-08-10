@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27877,
+  "title": "Session information loss on upgrade from 0.45.x to 0.46",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a bug where upgrading gemini-cli to version 0.46 causes `gemini --resume` to lose session history despite session files existing on disk. The reporter provided exact terminal output, file locations, version details, and expected behavior.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing this issue requires updating session history restoration logic across `GeminiChat` and `GeminiClient` in `packages/core`, ensuring `ChatRecordingService` properly merges resumed conversation records with initial context turns without overwriting session files on disk."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27877",
+    "summary": {
+      "problem": "When running `gemini --resume`, previous chat session history is lost and overwritten with a fresh session state.",
+      "root_cause": "When resuming a chat session, `startChat` in `packages/core/src/core/client.ts` generates initial environment history (`[envTurn]`), causing `history.length > 0` to evaluate to true in the `GeminiChat` constructor. This bypasses the `else if (resumedSessionData)` branch that loads persisted messages. Subsequently, `chatRecordingService.updateMessagesFromHistory` is called with only the environment context turn, which compares message lengths, detects a mismatch, and overwrites the session file on disk with only the environment turn.",
+      "context": "Session persistence stores messages in JSONL files under the project's temporary directory (`chats/`). When `gemini --resume` is executed, `resumedSessionData` is loaded from disk, but initial environment turns passed to `GeminiChat` cause the persisted message turns to be ignored and overwritten."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/geminiChat.ts",
+        "packages/core/src/core/client.ts"
+      ],
+      "steps": [
+        "In `packages/core/src/core/geminiChat.ts`, update the constructor logic so that when `resumedSessionData` is present, persisted conversation messages from `resumedSessionData.conversation.messages` are included in `initialHistory` even when `history` contains initial environment turns.",
+        "In `packages/core/src/core/geminiChat.ts`, update `initialize` and `updateMessagesFromHistory` to prevent overwriting existing recorded messages in `cachedConversation` when initializing with resumed session data.",
+        "In `packages/core/src/core/client.ts`, ensure `startChat` and `resumeChat` correctly pass `resumedSessionData` and combine environment turns with resumed conversation turns."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/geminiChat.test.ts",
+      "expected_behavior": "When initializing `GeminiChat` with `resumedSessionData`, previous session messages are preserved in both memory and the persisted session log.",
+      "verification_steps": [
+        "Add a test in `packages/core/src/core/geminiChat.test.ts` that passes `resumedSessionData` containing existing user and model turns along with initial environment history turns.",
+        "Verify that `chat.agentHistory` contains the resumed conversation turns.",
+        "Verify that `chatRecordingService.getConversation()?.messages` retains the existing conversation turns after `chat.initialize(resumedSessionData)` runs."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:29Z",
+  "execution_time_seconds": 106.56
+}

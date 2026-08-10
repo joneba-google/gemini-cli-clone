@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28648,
+  "title": "bug: Whisper transcription drops records split across stdout chunks",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report detailing how stdout data chunks split across boundaries cause Whisper transcription lines to be dropped in packages/core/src/voice/whisperTranscriptionProvider.ts. It includes accurate code references and a concrete reproduction scenario.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The issue involves modifying how streaming stdout data buffers are accumulated, decoded, and parsed in an asynchronous voice provider. Updating stdout chunk parsing, handling edge cases like split line boundaries and UTF-8 multibyte characters, and adding comprehensive streaming test coverage requires 2-3 days of effort according to the guidelines."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28648",
+    "summary": {
+      "problem": "Local Whisper transcription provider drops transcription lines that are split across stdout data event chunks.",
+      "root_cause": "In packages/core/src/voice/whisperTranscriptionProvider.ts, each process stdout data chunk is immediately converted to string and split on newlines in parseOutput() without maintaining a pending buffer for incomplete trailing lines across chunks.",
+      "context": "Node streams emit stdout data events as arbitrary chunks rather than whole lines. When a timestamped record is split across chunks, neither chunk independently matches the timestamp regular expression, causing transcription records to be silently dropped."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/voice/whisperTranscriptionProvider.ts"
+      ],
+      "steps": [
+        "Add a private line buffer property to WhisperTranscriptionProvider to maintain incomplete line fragments across stdout data events.",
+        "Reset the line buffer in connect().",
+        "Update the stdout data event handler in connect() to append incoming chunks to the buffer and split on newlines.",
+        "Process all complete lines up to the last newline, updating the buffer to hold any remaining incomplete trailing fragment.",
+        "On process close/exit, flush and parse any remaining non-empty line fragment stored in the buffer."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/voice/whisperTranscriptionProvider.test.ts",
+      "expected_behavior": "Transcription lines split across multiple stdout chunks or UTF-8 byte boundaries should be buffered and parsed correctly without dropping transcription events.",
+      "verification_steps": [
+        "Add unit test simulating child process stdout emitting a timestamped transcription line split across multiple data chunks (e.g. splitting inside the timestamp string). Verify that the 'transcription' event is emitted with the complete text.",
+        "Add unit test for stdout chunk split across a multi-byte UTF-8 character boundary to verify no string corruption occurs.",
+        "Add unit test verifying that any un-terminated string remaining in the buffer is flushed and parsed when the process closes."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:31:48Z",
+  "execution_time_seconds": 56.78
+}

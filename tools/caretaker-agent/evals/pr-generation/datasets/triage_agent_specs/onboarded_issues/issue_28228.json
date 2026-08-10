@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28228,
+  "title": "docs+DX: mcpServers env-var expansion syntax is undocumented; silent-fail on unexpanded/missing paths",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes an actionable defect in error visibility (silent failure when MCP server command paths do not exist or fail to expand) and missing documentation for environment variable expansion syntax in mcpServers configuration, complete with reproduction steps and references to source files.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue requires updating documentation in docs/reference/configuration.md to clarify environment variable expansion syntax ($VAR, ${VAR}, %VAR%), and modifying packages/core/src/tools/mcp-client.ts to expand env vars in the MCP server command/args and emit a warning when a command path is empty or missing on disk. The changes are localized to a single source file and documentation with straightforward unit test additions in mcp-client.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28228",
+    "summary": {
+      "problem": "Environment variable expansion in mcpServers configuration is undocumented, and unexpanded or missing command paths fail silently without clear warning or diagnostic messages.",
+      "root_cause": "mcpServerConfig.command and args are passed directly to StdioClientTransport without running expandEnvVars or verifying that the expanded command path exists, causing silent failure ('Disconnected' status) when environment variables fail to expand or point to non-existent executables. Additionally, docs lack explicit guidelines on supported expansion syntax ($VAR, ${VAR}, %VAR%).",
+      "context": "mcpServers configuration supports env-var expansion using expandEnvVars in packages/core/src/utils/envExpansion.ts, which processes POSIX variables and Windows %VAR% constructs. Missing variables expand to empty strings, and unsupported syntax like {{HOME}} or ~ remains unexpanded, leading to failed spawn calls without visible warning logs."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "docs/reference/configuration.md",
+        "packages/core/src/tools/mcp-client.ts"
+      ],
+      "steps": [
+        "Update docs/reference/configuration.md under the mcpServers section to document environment variable expansion behavior, including supported syntax ($VAR, ${VAR}, %VAR% on Windows), unsupported syntax ({{HOME}}, ~), and empty string resolution for missing variables.",
+        "In packages/core/src/tools/mcp-client.ts, run expandEnvVars on mcpServerConfig.command and mcpServerConfig.args before instantiating StdioClientTransport.",
+        "In packages/core/src/tools/mcp-client.ts, validate that the expanded command is non-empty and exists on disk (or is accessible) for stdio transport; if not, log a WARN level message detailing the missing path and referencing configuration documentation."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/mcp-client.test.ts",
+      "expected_behavior": "MCP server command paths with environment variables ($VAR, %VAR%) are expanded correctly before spawning, and a warning is logged when the expanded command path is empty or non-existent.",
+      "verification_steps": [
+        "Add a test in packages/core/src/tools/mcp-client.test.ts verifying environment variables in command and args are expanded using expandEnvVars.",
+        "Add a test verifying that when an expanded command path is missing or non-existent, a warning log is generated with details about the unresolvable or missing command path."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:05Z",
+  "execution_time_seconds": 61.25
+}

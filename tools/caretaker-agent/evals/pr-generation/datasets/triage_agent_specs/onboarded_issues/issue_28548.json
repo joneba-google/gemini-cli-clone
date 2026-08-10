@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28548,
+  "title": "Plan Mode: the read-only restriction for MCP tools depends on an unverified, server-controlled annotation",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed security and UX bug report regarding unverified MCP server 'readOnlyHint' annotations in Plan Mode. It includes exact code locations, reproduction steps, and a clear proposal to display provenance warnings during confirmation.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Addressing this issue requires adding a clear provenance warning message in 'ToolConfirmationMessage.tsx' and passing the relevant annotation details in MCP confirmation types, alongside unit tests in 'ToolConfirmationMessage.test.tsx'. This is a localized UI and type enhancement."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28548",
+    "summary": {
+      "problem": "Plan Mode relies on server-provided 'readOnlyHint' annotations to promote MCP tools to 'ask_user' confirmation. Unverified or malicious MCP servers can set 'readOnlyHint: true' on destructive tools, prompting the user for approval in Plan Mode without warning them that the read-only claim is server-supplied and unverified.",
+      "root_cause": "The Plan Mode policy in 'plan.toml' elevates MCP tools with 'readOnlyHint = true' to 'ask_user'. However, 'ToolConfirmationMessage.tsx' does not inform the user that the read-only status originates from the external MCP server and has not been verified by Gemini CLI.",
+      "context": "Although confirmation is still required before execution, users in Plan Mode expect tools offered for approval to be read-only. Displaying a provenance warning in the confirmation dialog informs the user of the unverified server assertion."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/components/messages/ToolConfirmationMessage.tsx",
+        "packages/core/src/confirmation-bus/types.ts",
+        "packages/core/src/tools/mcp-tool.ts"
+      ],
+      "steps": [
+        "Update 'packages/core/src/confirmation-bus/types.ts' and 'packages/core/src/tools/mcp-tool.ts' to pass MCP tool annotation metadata (such as 'readOnlyHint' or server read-only claim status) within the MCP confirmation details payload.",
+        "Modify 'packages/cli/src/ui/components/messages/ToolConfirmationMessage.tsx' to display a provenance warning notice when an MCP tool is presented for confirmation via 'readOnlyHint', informing the user that the tool's read-only claim was declared by the MCP server and is unverified."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/messages/ToolConfirmationMessage.test.tsx",
+      "expected_behavior": "The tool confirmation UI displays an unverified read-only claim warning message when prompting the user for an MCP tool elevated by 'readOnlyHint'.",
+      "verification_steps": [
+        "Add a unit test in 'ToolConfirmationMessage.test.tsx' that renders an MCP tool confirmation message with 'readOnlyHint' metadata and verifies the disclaimer warning text is displayed."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:22Z",
+  "execution_time_seconds": 217.61
+}

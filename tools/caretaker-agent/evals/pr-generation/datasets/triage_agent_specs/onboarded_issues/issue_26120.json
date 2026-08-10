@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 26120,
+  "title": "Misleading Gemini Code Assist for individuals Privacy Notice in VScode extension",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides clear details, screenshots, and reproduction steps explaining the contradictory and misleading phrasing between the privacy notice text and the settings toggle.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Updating the privacy notice wording and setting prompt in CloudFreePrivacyNotice.tsx is a minor UI text adjustment accompanied by updating unit test assertions in CloudFreePrivacyNotice.test.tsx."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26120",
+    "summary": {
+      "problem": "Misleading and contradictory privacy notice wording where the introductory text states users can opt out below, but the setting option is an opt-in selection.",
+      "root_cause": "Inconsistent framing between the introductory explanatory text and the opt-in/opt-out toggle options.",
+      "context": "The issue highlights user confusion regarding whether selecting the privacy setting enables or disables data collection for machine learning models."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/privacy/CloudFreePrivacyNotice.tsx"
+      ],
+      "steps": [
+        "Align the introductory privacy notice text with the selection toggle in CloudFreePrivacyNotice.tsx so the opt-in/opt-out behavior is clear and consistent.",
+        "Ensure the option labels and prompt question explicitly clarify whether the user is granting or denying permission for product improvement data collection."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/privacy/CloudFreePrivacyNotice.test.tsx",
+      "expected_behavior": "The privacy notice UI renders consistent text and choices for data collection opt-in/opt-out preferences.",
+      "verification_steps": [
+        "Update tests in CloudFreePrivacyNotice.test.tsx to assert the revised, clear privacy notice text and selection options.",
+        "Execute vitest run packages/cli/src/ui/privacy/CloudFreePrivacyNotice.test.tsx to verify all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:05Z",
+  "execution_time_seconds": 62.62
+}

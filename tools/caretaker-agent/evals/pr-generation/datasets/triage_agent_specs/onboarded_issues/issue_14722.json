@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 14722,
+  "title": "Hooks - SessionEnd Logout Matcher",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports that SessionEndReason.Logout enum value in packages/core/src/hooks/types.ts is defined but never triggered during authentication logout/signout.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires adding a call to fireSessionEndEvent(SessionEndReason.Logout) in authLogoutCommand in packages/cli/src/ui/commands/authCommand.ts and adding a corresponding unit test in packages/cli/src/ui/commands/authCommand.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#14722",
+    "summary": {
+      "problem": "The SessionEndReason.Logout enum value exists in core hook types but is never triggered when logging out in Gemini CLI.",
+      "root_cause": "The authLogoutCommand action in packages/cli/src/ui/commands/authCommand.ts clears cached credentials and settings but does not invoke config.getHookSystem().fireSessionEndEvent(SessionEndReason.Logout).",
+      "context": "SessionEndReason.Logout was included for ending sessions on authentication changes, but the command handling user signout/logout was missing the hook invocation."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/commands/authCommand.ts"],
+      "steps": [
+        "Import SessionEndReason from '@google/gemini-cli-core' in packages/cli/src/ui/commands/authCommand.ts.",
+        "In the action handler of authLogoutCommand, retrieve the hook system via context.services.agentContext?.config?.getHookSystem().",
+        "Invoke hookSystem.fireSessionEndEvent(SessionEndReason.Logout) during logout execution before returning."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/commands/authCommand.test.ts",
+      "expected_behavior": "Executing the auth signout/logout subcommand action should fire the SessionEnd hook event with SessionEndReason.Logout.",
+      "verification_steps": [
+        "In packages/cli/src/ui/commands/authCommand.test.ts, mock or spy on hookSystem.fireSessionEndEvent.",
+        "Assert that calling the logout command action calls fireSessionEndEvent with SessionEndReason.Logout."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:48:42Z",
+  "execution_time_seconds": 58.03
+}

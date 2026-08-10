@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27593,
+  "title": "erro na hora de troca o tipo de Gemini ficado em carregado em infinito",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The reporter provides actionable information detailing a bug where switching Gemini model types upon reaching a daily limit causes the CLI to stay stuck in an infinite loading state. Environment metadata (CLI v0.44.1, OS win32) and issue context are provided.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing the infinite loading state during model fallback involves managing asynchronous stream state, React/Ink UI responsiveness flags (isResponding), and promise handling across useQuotaAndFallback.ts, useGeminiStream.ts, and core fallback handling."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27593",
+    "summary": {
+      "problem": "Switching to a fallback Gemini model upon reaching a daily/terminal quota limit causes the CLI UI to get stuck in an infinite loading state.",
+      "root_cause": "When a quota error occurs during streaming, handleFallback awaits user interaction with ProQuotaDialog. Accepting the recommended model fallback (retry_always) desynchronizes the streaming state in useGeminiStream and useQuotaAndFallback, leaving isResponding true indefinitely or preventing the retried stream from completing.",
+      "context": "Reported in CLI v0.44.1 on win32 when changing Gemini model after reaching daily quota limits during an interactive task."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/hooks/useQuotaAndFallback.ts",
+        "packages/cli/src/ui/hooks/useGeminiStream.ts",
+        "packages/core/src/fallback/handler.ts"
+      ],
+      "steps": [
+        "Inspect and update useQuotaAndFallback.ts to ensure handleProQuotaChoice cleanly resets isDialogPending and quota error flags when resolving fallback intents.",
+        "Update useGeminiStream.ts stream handling and error boundaries to ensure that retried stream attempts after model switching properly emit events and guarantee setIsResponding(false) on completion or failure.",
+        "Ensure packages/core/src/fallback/handler.ts correctly updates active model configuration when processIntent resolves retry_always without leaving unresolved promises."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useQuotaAndFallback.test.ts",
+      "expected_behavior": "When model fallback is selected during a quota error, the CLI should switch models and complete the request without remaining stuck in an infinite loading state.",
+      "verification_steps": [
+        "Add test coverage in useQuotaAndFallback.test.ts simulating a terminal quota error where retry_always is chosen.",
+        "Verify that the fallback request resolves, quota flags reset, and pending dialog state is cleared.",
+        "Run unit tests using Vitest to ensure all fallback test cases pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:39:30Z",
+  "execution_time_seconds": 59.23
+}

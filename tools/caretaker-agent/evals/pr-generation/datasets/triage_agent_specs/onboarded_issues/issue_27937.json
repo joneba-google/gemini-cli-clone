@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27937,
+  "title": "Gemini and Antigravity Echo Bug - Unified Diff Parser Crash via Context Poisoning",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed description of terminal UI artifacts (vertical borders '\u2502' and bullet characters '\u2022') being injected into the LLM context during file-reading and shell execution tools. Clear reproduction steps, expected behavior, and system details are included.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Modifying tool output sanitization and handling stdout/stderr buffers across core execution tools and text utilities requires multi-file updates in packages/core and adding unit tests to ensure UI artifacts are removed without corrupting genuine code contents."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27937",
+    "summary": {
+      "problem": "Terminal-specific UI artifacts (such as vertical border lines '\u2502' and bullet characters '\u2022') are leaking into tool stdout when executing file-reading tools (ReadFile, Bash). This context poisoning causes LLMs to mirror these characters in generated code blocks and diffs, breaking unified diff and search/replace parsers.",
+      "root_cause": "Tool output returned from shell execution and file reads is directly appended to the conversation context without sanitizing visual terminal framing decorators and UI characters.",
+      "context": "File contents and tool outputs must be clean raw strings when appended to LLM context history to prevent the LLM from adopting visual formatting characters in code generation."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/textUtils.ts",
+        "packages/core/src/tools/read-file.ts",
+        "packages/core/src/services/shellExecutionService.ts"
+      ],
+      "steps": [
+        "In packages/core/src/utils/textUtils.ts, implement or update a sanitization function to strip terminal UI framing characters (vertical borders '\u2502', bullet decorators '\u2022', and ANSI control characters) from tool output strings.",
+        "In packages/core/src/tools/read-file.ts, pass the file content through the sanitization helper before constructing the LLM content payload.",
+        "In packages/core/src/services/shellExecutionService.ts, ensure captured stdout/stderr streams strip terminal UI artifacts prior to returning output to the model."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/read-file.test.ts",
+      "expected_behavior": "Tool outputs returned to the LLM context will be free of terminal UI borders and bullet characters, preserving raw file text so that LLM diff and code generation remain valid.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/tools/read-file.test.ts that pass mock file content containing terminal UI border and bullet artifacts.",
+        "Verify that the executed tool result contains sanitized llmContent without '\u2502' or '\u2022' characters.",
+        "Run vitest on packages/core/src/tools/read-file.test.ts to ensure all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:39:10Z",
+  "execution_time_seconds": 171.72
+}

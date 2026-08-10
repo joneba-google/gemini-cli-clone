@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28004,
+  "title": "Gemini CLI sends duplicate results for completed shell tool calls",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, reproducible bug report detailing that Gemini CLI sends duplicate tool results for completed shell tool calls when interacting with a Gemini-compatible provider.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Resolving duplicate tool result submissions requires tracking completed tool call IDs and deduplicating tool result parts across turn history and execution contexts in packages/core."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28004",
+    "summary": {
+      "problem": "Gemini CLI sends duplicate tool results for completed shell tool calls upon follow-up model turns.",
+      "root_cause": "Completed tool calls and their results are retained and re-submitted in subsequent turn messages without deduplicating against previously sent functionResponse call IDs.",
+      "context": "Gemini-compatible providers expect at most one functionResponse for each functionCall ID. Duplicate submission causes provider desynchronization or unexpected execution loops."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/geminiChat.ts",
+        "packages/core/src/agents/local-executor.ts"
+      ],
+      "steps": [
+        "Maintain tracking of submitted functionResponse call IDs in the chat session state.",
+        "Deduplicate functionResponse parts before sending tool execution results back to the model.",
+        "Ensure completed shell tool call results are only recorded and sent once per tool call ID."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/geminiChat.test.ts",
+      "expected_behavior": "Gemini CLI sends at most one functionResponse per tool call ID and does not re-submit completed tool call results on follow-up turns.",
+      "verification_steps": [
+        "Add a test case in geminiChat.test.ts that simulates a sequence of multiple tool call turns.",
+        "Assert that functionResponse contents sent to the client do not contain duplicate tool call IDs across turns."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:36:31Z",
+  "execution_time_seconds": 55.26
+}

@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28204,
+  "title": "enhancement: Ensure a2a-server is compatible with V2 nested settings structure",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a valid and actionable bug/compatibility report. It clearly describes that a2a-server fails to correctly handle the V2 nested settings structure (defined in settings.schema.json) when reading user configuration, and points directly to the TODO comment in packages/a2a-server/src/config/settings.ts.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The required changes are localized within packages/a2a-server/src/config/settings.ts to update the Settings interface, implement migration and nested settings resolution, matching the pattern in packages/cli/src/config/settings.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28204",
+    "summary": {
+      "problem": "a2a-server lacks support for the V2 nested settings structure and legacy V1 migration logic, causing it to fail parsing user settings migrated by the main CLI.",
+      "root_cause": "packages/a2a-server/src/config/settings.ts only parses flat/V1 settings fields and lacks the migration and nested settings resolution logic present in packages/cli/src/config/settings.ts.",
+      "context": "When a user runs the main CLI, settings.json is migrated to the V2 nested structure defined in settings.schema.json. Subsequent execution of a2a-server fails to parse nested configuration options like telemetry, allowed/excluded tools, folder trust, and file filtering."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/a2a-server/src/config/settings.ts"],
+      "steps": [
+        "Update the Settings interface in packages/a2a-server/src/config/settings.ts to incorporate V2 nested settings definitions.",
+        "Implement legacy V1 to V2 settings migration and key resolution logic within loadSettings.",
+        "Ensure nested configuration options are correctly extracted and merged between user and workspace settings."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/a2a-server/src/config/settings.test.ts",
+      "expected_behavior": "a2a-server successfully parses and merges both V2 nested settings structures and legacy V1 settings configurations.",
+      "verification_steps": [
+        "Add unit tests in packages/a2a-server/src/config/settings.test.ts to test loadSettings with V2 nested settings.json files.",
+        "Add unit tests for fallback and migration when loading legacy V1 flat settings.json files.",
+        "Run tests using vitest run in packages/a2a-server to verify all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:22Z",
+  "execution_time_seconds": 58.26
+}

@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28341,
+  "title": "Infinite auth loop",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report clearly describes a bug where Gemini CLI gets stuck in an infinite OAuth authentication loop on Windows upon restart. Sufficient details and reproduction steps are provided.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Resolving this issue requires investigating credential persistence/retrieval mechanisms (OAuth credential storage and token loading) on Windows, ensuring tokens are reliably flushed before relaunching, and updating unit tests in oauth2.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28341",
+    "summary": {
+      "problem": "Gemini CLI repeatedly enters the OAuth authentication flow on Windows after sign-in succeeds and the application restarts.",
+      "root_cause": "When OAuth authentication completes, cached credentials are either not persisted correctly on Windows or fail to load during process relaunch in `initOauthClient`, leading `refreshAuth` to treat the session as unauthenticated and initiate the browser OAuth flow again.",
+      "context": "Upon application restart, `gemini.tsx` calls `refreshAuth(LOGIN_WITH_GOOGLE)`. If `fetchCachedCredentials()` returns null or fails to validate existing credentials, `initOauthClient()` triggers `authWithWeb()`, creating a loop of authentication prompts and application restarts."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/code_assist/oauth2.ts",
+        "packages/core/src/code_assist/oauth-credential-storage.ts"
+      ],
+      "steps": [
+        "Update `fetchCachedCredentials` in `packages/core/src/code_assist/oauth2.ts` to reliably handle Windows file paths and credential storage fallbacks.",
+        "Ensure `cacheCredentials` in `packages/core/src/code_assist/oauth2.ts` and `OAuthCredentialStorage` successfully persist refreshed or initial tokens before triggering process relaunch.",
+        "Add robust error handling in `initOauthClient` so that failure to load existing credentials reports an auth error rather than silently re-launching the web OAuth flow."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/code_assist/oauth2.test.ts",
+      "expected_behavior": "When valid OAuth credentials are cached in storage, `initOauthClient` loads and uses them directly without launching the OAuth web browser flow.",
+      "verification_steps": [
+        "Add unit tests in `packages/core/src/code_assist/oauth2.test.ts` verifying that `initOauthClient` loads cached credentials correctly.",
+        "Test that token cache operations handle missing or corrupted credential files gracefully without causing an infinite restart loop."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:31Z",
+  "execution_time_seconds": 147.5
+}

@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28207,
+  "title": "bug: ignore patterns in ls tool do not work for path-relative/nested globs",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a specific bug in ls.ts where ignore patterns fail for path-relative/nested globs due to passing only the file basename to shouldIgnore and using a naive regex replacement. Code locations and clear expected behavior are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to a single source file (packages/core/src/tools/ls.ts) and its unit test. It involves replacing the custom regex logic with picomatch and evaluating relative paths."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#28207",
+    "summary": {
+      "problem": "The ls tool ignore parameter does not work for path-relative or nested glob patterns because entries are evaluated against only their basename using a naive regex converter.",
+      "root_cause": "In packages/core/src/tools/ls.ts, shouldIgnore converts globs using simple string replacement and tests only path.basename(fullPath).",
+      "context": "picomatch is already present as a dependency in packages/core. Replacing the custom regex with picomatch and evaluating relative paths resolves the issue."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/ls.ts"],
+      "steps": [
+        "Import picomatch in packages/core/src/tools/ls.ts.",
+        "Refactor LSToolInvocation.shouldIgnore to utilize picomatch for pattern matching with options dot: true and matchBase: true.",
+        "Update the execution loop in LSToolInvocation.execute to check relative paths against shouldIgnore rather than only path.basename(fullPath)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/ls.test.ts",
+      "expected_behavior": "ls tool successfully filters out files when ignore patterns contain path separators or nested glob wildcards (e.g., 'subdir/*.txt' or 'nested/**/ignore.log').",
+      "verification_steps": [
+        "Add test cases in packages/core/src/tools/ls.test.ts for nested ignore patterns such as 'subdir/*.txt' and '**/ignored.log'.",
+        "Run Vitest on packages/core/src/tools/ls.test.ts to verify all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:58Z",
+  "execution_time_seconds": 44.59
+}

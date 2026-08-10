@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27634,
+  "title": "[Bug] Windows CLI text window automatically scrolls up to older messages while typing.",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a platform-specific bug where typing in the CLI text window on Windows (win32) causes the viewport to automatically scroll up to older messages instead of staying at the active prompt.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "This issue involves terminal rendering, viewport scroll synchronization, and input state management during React/Ink redraws on Windows (win32). Platform-specific terminal bugs require cross-environment testing and validation, placing this in the MEDIUM effort category."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27634",
+    "summary": {
+      "problem": "On Windows (win32), typing in the CLI text input prompt causes the terminal window to automatically scroll up to older messages rather than remaining anchored at the bottom prompt line.",
+      "root_cause": "When characters are typed into the InputPrompt component, state updates trigger Ink re-renders. Visual row and scroll index calculations in InputPrompt and ScrollableList trigger scroll adjustments that shift the viewport offset upwards to older scrollback items when typing.",
+      "context": "The interactive CLI relies on Ink rendering and text-buffer state tracking. Viewport scroll calculations in InputPrompt.tsx and ScrollableList.tsx need to maintain stable scroll anchoring at the active input line."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/components/InputPrompt.tsx",
+        "packages/cli/src/ui/components/shared/ScrollableList.tsx",
+        "packages/cli/src/interactiveCli.tsx"
+      ],
+      "steps": [
+        "Inspect cursor visual row calculations and scrollToIndex logic inside InputPrompt.tsx during text buffer updates.",
+        "Ensure viewport auto-scrolling logic keeps the active cursor row visible without jumping upward to historical messages during typing.",
+        "Verify terminal line wrapping and viewport bounds synchronization for Windows terminal compatibility in interactiveCli.tsx."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/InputPrompt.test.tsx",
+      "expected_behavior": "When typing text into the input prompt on Windows CLI, the viewport remains pinned to the active prompt cursor line and does not scroll up to historical messages.",
+      "verification_steps": [
+        "Add a unit test in InputPrompt.test.tsx simulating typing keypresses with historical message entries present.",
+        "Assert that the viewport scrollTop remains steady and does not scroll up to previous messages during text input."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:26Z",
+  "execution_time_seconds": 122.0
+}

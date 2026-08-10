@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28512,
+  "title": "CRITICAL: Unhandled Promise Rejection! \u2502 ========================================= \u2502 Reason: Error: OAuth callback timeout \u2502 Stack trace: \u2502 Error: OAuth callback timeout \u2502 at Timeout._onTimeout (file:///usr/local/lib/node_modules/@google/gemini-cli/bundle/",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The user reported a clear bug with stack trace and environment info: an unhandled promise rejection ('OAuth callback timeout') occurs when the OAuth callback server times out after 5 minutes during login.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "This is a localized fix in packages/core/src/utils/oauth-flow.ts to prevent unhandled promise rejections when the OAuth callback server times out and to clean up timers on server close."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28512",
+    "summary": {
+      "problem": "Unhandled Promise Rejection occurs when the OAuth callback server times out after 5 minutes during authentication flow.",
+      "root_cause": "startCallbackServer creates responsePromise which rejects on a 5-minute timeout. If the callback response is not immediately awaited or caught (e.g. while waiting for consent or if the auth flow is abandoned), Node.js treats the rejection as unhandled and triggers a CRITICAL Unhandled Promise Rejection error.",
+      "context": "In packages/core/src/utils/oauth-flow.ts, startCallbackServer starts an HTTP callback server and sets a 5-minute timeout. Attaching a catch handler (responsePromise.catch(() => {})) prevents unhandled rejection crashes when the promise is abandoned while still allowing callers awaiting responsePromise to receive the rejection."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/utils/oauth-flow.ts"],
+      "steps": [
+        "In packages/core/src/utils/oauth-flow.ts, attach a no-op catch handler to responsePromise (responsePromise.catch(() => {})) inside startCallbackServer to prevent unhandled promise rejections.",
+        "Clear timeoutId using clearTimeout(timeoutId) when the server closes in the server 'close' event listener."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/oauth-flow.test.ts",
+      "expected_behavior": "When startCallbackServer times out after 5 minutes without an immediate await, no unhandled promise rejection is emitted, and awaiting responsePromise still rejects with 'OAuth callback timeout'.",
+      "verification_steps": [
+        "In packages/core/src/utils/oauth-flow.test.ts, verify that advancing fake timers past 5 minutes on a startCallbackServer instance does not produce an unhandled rejection.",
+        "Ensure awaiting server.response correctly rejects with the 'OAuth callback timeout' error."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:32:53Z",
+  "execution_time_seconds": 60.65
+}

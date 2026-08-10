@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22167,
+  "title": "scripts/telemetry.js does not validate telemetry.target from settings.json",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report detailing that scripts/telemetry.js fails to validate telemetry.target loaded from settings.json, including reproduction steps, root cause analysis, expected behavior, and suggested code changes.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires adding a localized validation check in scripts/telemetry.js to ensure target values from settings.json are present in allowedTargets before proceeding."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#22167",
+    "summary": {
+      "problem": "scripts/telemetry.js does not validate telemetry.target when loaded from settings.json, leading to downstream script execution crashes.",
+      "root_cause": "Validation against allowedTargets is only performed when --target is supplied via command-line arguments. Unvalidated values loaded from settings.json cause targetScripts[target] to evaluate to undefined.",
+      "context": "Specifying an invalid telemetry.target (such as 'dummy') in settings.json causes node to attempt executing an undefined script path, resulting in an uninformative error."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["scripts/telemetry.js"],
+      "steps": [
+        "In scripts/telemetry.js, check if telemetrySettings?.target is defined when process.argv does not contain a --target argument.",
+        "Validate telemetrySettings.target against allowedTargets ('local', 'gcp', 'genkit').",
+        "If the target from settings.json is invalid, log an error message listing the allowed targets and call process.exit(1) to fail early."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "scripts/tests/telemetry.test.ts",
+      "expected_behavior": "When settings.json contains an invalid telemetry target, the script logs a clear validation error and exits with code 1.",
+      "verification_steps": [
+        "Create unit test in scripts/tests/telemetry.test.ts that mocks settings.json with an invalid target value.",
+        "Assert that process.exit(1) is called and that an error message listing allowed targets is logged to stderr."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:31Z",
+  "execution_time_seconds": 90.64
+}

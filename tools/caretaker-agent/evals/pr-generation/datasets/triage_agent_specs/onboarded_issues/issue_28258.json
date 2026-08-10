@@ -1,0 +1,48 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28258,
+  "title": "refactor(cli): decouple useGeminiStream from lookahead logic for parallel agents",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes an architectural problem in useGeminiStream.ts where UI lookahead logic is used to stitch together parallel agent executions. It identifies the target files and explains how packages/core should be refactored to emit structured ToolBatch/Turn objects instead.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Decoupling useGeminiStream from tactical lookahead logic requires refactoring event/batch representations in packages/core and updating the UI streaming hooks in packages/cli to process structured batch events, making it a cross-package refactor."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28258",
+    "summary": {
+      "problem": "useGeminiStream in packages/cli currently uses tactical lookahead logic and refs to stitch together contiguous parallel agent tool calls to prevent UI tearing when agents finish out of sync.",
+      "root_cause": "packages/core does not emit structured ToolBatch or Turn semantic boundaries for parallel agent executions, forcing the UI layer to handle batch completion timing manually.",
+      "context": "Moving batch boundary responsibility from the UI layer (useGeminiStream) to packages/core simplifies UI state management and ensures robust rendering of parallel agent executions."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/turn.ts",
+        "packages/core/src/scheduler/scheduler.ts",
+        "packages/cli/src/ui/hooks/useGeminiStream.ts"
+      ],
+      "steps": [
+        "Define structured ToolBatch or Turn abstractions in packages/core to encapsulate execution boundaries for tool and agent calls.",
+        "Update scheduler and turn handling in packages/core to emit ToolBatch objects when parallel executions complete.",
+        "Refactor useGeminiStream in packages/cli/src/ui/hooks/useGeminiStream.ts to consume core-emitted batch objects directly.",
+        "Remove lookahead logic and contiguous agent timing refs from useGeminiStream.ts."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useGeminiStream.test.tsx",
+      "expected_behavior": "useGeminiStream renders parallel agent execution results based on semantic batch boundaries emitted from core without implementing UI-side lookahead logic.",
+      "verification_steps": [
+        "Run unit tests for useGeminiStream in packages/cli/src/ui/hooks/useGeminiStream.test.tsx using Vitest.",
+        "Verify tool execution batch rendering when handling parallel agent tools.",
+        "Ensure no regressions in stream output ordering or tool completion handling."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:39Z",
+  "execution_time_seconds": 42.05
+}

@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27980,
+  "title": "bug(web-fetch): hardcoded UTF-8 decoding garbles non-UTF-8 pages (charset=gbk, iso-8859-1, shift_jis, etc.)",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed and actionable bug report explaining that web-fetch hardcodes UTF-8 decoding and ignores the charset parameter in the Content-Type header, leading to garbled text for non-UTF-8 encodings. It includes specific code locations, expected behavior, reproduction steps, and context.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires adding a helper to extract the charset from the Content-Type header and using TextDecoder with fallback to utf-8 across response decoding locations in packages/core/src/tools/web-fetch.ts. Unit tests will be updated/added in packages/core/src/tools/web-fetch.test.ts. This is a localized single-file logic fix with straightforward parsing and decoding."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27980",
+    "summary": {
+      "problem": "The web-fetch tool always decodes response bodies using `bodyBuffer.toString('utf8')`, ignoring the `charset` parameter in the `Content-Type` header, which garbles response text for non-UTF-8 encodings like GBK, ISO-8859-1, or Shift_JIS.",
+      "root_cause": "Response body buffers are decoded using hardcoded 'utf8' encoding across multiple response handling paths in `packages/core/src/tools/web-fetch.ts` without inspecting the `charset` parameter in the response Content-Type header.",
+      "context": "When fetching webpages that use non-UTF-8 charsets, hardcoding 'utf8' results in mojibake/garbled text before passing content to downstream processes like html-to-text conversion or LLM context."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/web-fetch.ts"],
+      "steps": [
+        "Implement a helper function `decodeResponseBody(bodyBuffer: Buffer, contentType: string): string` in `packages/core/src/tools/web-fetch.ts` that parses the `charset` parameter from the `Content-Type` header.",
+        "In `decodeResponseBody`, extract `charset` from `contentType` using regex `charset=([^;\\s]+)`. Standardize the charset name and use `TextDecoder` to decode `bodyBuffer` using that charset, falling back to 'utf-8' if the charset is invalid, unsupported, or missing.",
+        "Replace hardcoded `bodyBuffer.toString('utf8')` calls in `packages/core/src/tools/web-fetch.ts` (fallback path, error response path, text/plain/application/json path, text/html path, and unknown content type fallback path) with the new decoding helper passing the response `contentType`."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/web-fetch.test.ts",
+      "expected_behavior": "Web fetch decodes non-UTF-8 response bodies using the encoding specified in Content-Type header charset parameter, returning properly decoded text without garbled characters.",
+      "verification_steps": [
+        "Add unit tests in `packages/core/src/tools/web-fetch.test.ts` for response decoding with non-UTF-8 content types such as `text/html; charset=gbk` or `text/plain; charset=iso-8859-1`.",
+        "Assert that the returned text is correctly decoded according to the specified charset.",
+        "Verify that unsupported or missing charset headers safely fall back to UTF-8 decoding without throwing errors."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:36:39Z",
+  "execution_time_seconds": 48.44
+}

@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28579,
+  "title": "bug(core): 400 Bad Request: \"Function call is missing a thought_signature in functionCall parts\" during parallel tool calls",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report detailing a 400 Bad Request / INVALID_ARGUMENT error during parallel tool calls and history hardening with Gemini 3+ / Vertex AI models due to missing thought_signature on functionCall parts.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The bug root cause is localized to clear logic checks in geminiChat.ts and historyHardening.ts where loops break early or only process the first function call in a turn instead of all parallel function calls."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28579",
+    "summary": {
+      "problem": "Executing parallel tool calls or history hardening causes 400 Bad Request / INVALID_ARGUMENT errors when using Gemini 3+ or Vertex AI models because functionCall parts beyond the first in a turn are missing thoughtSignature.",
+      "root_cause": "In packages/core/src/core/geminiChat.ts, the loop enforcing thought signatures on functionCall parts breaks after processing the first functionCall in a message turn. Similarly, in packages/core/src/utils/historyHardening.ts, pairToolsAndEnforceSignatures only attaches SYNTHETIC_THOUGHT_SIGNATURE to the first function call in a model turn rather than all functionCall parts.",
+      "context": "Gemini 3+ and Vertex AI models strictly enforce that all functionCall parts in a model turn include a thought_signature property."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/geminiChat.ts",
+        "packages/core/src/utils/historyHardening.ts"
+      ],
+      "steps": [
+        "In packages/core/src/core/geminiChat.ts, update the loop in active loop thought signature enforcement to iterate through all parts without breaking early after the first functionCall part, ensuring every functionCall part lacking a thoughtSignature receives SYNTHETIC_THOUGHT_SIGNATURE.",
+        "In packages/core/src/utils/historyHardening.ts, update pairToolsAndEnforceSignatures so that all functionCall parts in a model turn lacking a thoughtSignature are updated with SYNTHETIC_THOUGHT_SIGNATURE rather than only the first one."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/geminiChat.test.ts",
+      "expected_behavior": "All functionCall parts in a model turn (including parallel tool calls) will have thoughtSignature attached when sent in request contents or hardened history, preventing 400 Bad Request API errors.",
+      "verification_steps": [
+        "Run existing unit tests using Vitest to ensure no regressions.",
+        "Add unit tests in packages/core/src/core/geminiChat.test.ts and packages/core/src/utils/historyHardening.test.ts verifying that multiple parallel functionCall parts in a single model turn all receive thoughtSignature when missing."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:32:20Z",
+  "execution_time_seconds": 50.32
+}

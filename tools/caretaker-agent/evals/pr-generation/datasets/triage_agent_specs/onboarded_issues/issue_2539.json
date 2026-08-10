@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 2539,
+  "title": "Gemini CLI File Access Issues",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report provides a clear, actionable bug description of path resolution and glob pattern failures on Windows (win32) when using read_file and read_many_files, complete with expected vs actual behavior, CLI version, and system environment details.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The issue involves platform-specific (Windows / win32) path handling, backslash normalization, and glob matching across `read_file` and `read_many_files`. Per effort guidelines, platform-specific bugs carry additional testing and verification overhead and are rated as MEDIUM effort."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#2539",
+    "summary": {
+      "problem": "The read_file tool fails path validation for Windows absolute paths containing backslashes, and read_many_files fails to match subdirectory files when using glob patterns on Windows.",
+      "root_cause": "Path normalization in read_file and read_many_files does not consistently normalize Windows backslashes and drive letter paths before performing workspace path validation and glob searches.",
+      "context": "On Windows environments, passing backslash paths (e.g. C:\\path\\to\\file.py) or subdirectory glob patterns (e.g. components/**/*.py) causes path validation mismatches or empty glob result sets."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/read-file.ts",
+        "packages/core/src/tools/read-many-files.ts"
+      ],
+      "steps": [
+        "In `read-file.ts`, normalize backslashes in `file_path` prior to path resolution and workspace access validation.",
+        "In `read-many-files.ts`, normalize `include` glob patterns and workspace paths to POSIX format so glob search operates correctly across subdirectories on Windows.",
+        "Ensure relative path calculation and path validation in `read-many-files.ts` handle mixed path separators consistently."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/read-file.test.ts",
+      "expected_behavior": "`read_file` successfully reads files when provided with Windows-style absolute backslash paths, and `read_many_files` correctly matches files in subdirectories using glob patterns on Windows.",
+      "verification_steps": [
+        "Add unit tests in `read-file.test.ts` for Windows-style absolute and relative paths with backslashes.",
+        "Add unit tests in `read-many-files.test.ts` testing subdirectory glob pattern matching with Windows path separators.",
+        "Run Vitest test suite to confirm all tool tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:50:15Z",
+  "execution_time_seconds": 99.56
+}

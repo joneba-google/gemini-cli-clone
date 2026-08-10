@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28554,
+  "title": "Gemma 4 31B API returns no output in Gemini CLI while REST API works",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The user provided a detailed and actionable bug report specifying the model ('gemma-4-31b-it'), environment details (OS, Node version, CLI version v0.52.0), expected vs actual behavior, and a control test showing the REST API works with the same model and key.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is a localized configuration error in packages/core/src/config/defaultModelConfigs.ts where Gemma 4 models inherit thinkingConfig settings that Gemma models do not support."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#28554",
+    "summary": {
+      "problem": "Requests to gemma-4-31b-it in Gemini CLI return no output and cancel with 0 tokens generated.",
+      "root_cause": "In defaultModelConfigs.ts, 'gemma-4-31b-it' and 'gemma-4-26b-a4b-it' extend 'chat-base-3', which includes thinkingConfig ({ includeThoughts: true, thinkingLevel: 'HIGH' }). Gemma 4 models do not support thinkingConfig, causing backend API requests to fail or produce no output. Additionally, modelDefinitions lists thinking: true for Gemma 4 models.",
+      "context": "The REST API succeeds because raw REST calls do not pass Gemini 3 thinking parameters to Gemma models, whereas Gemini CLI passes thinkingConfig derived from chat-base-3."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/config/defaultModelConfigs.ts"],
+      "steps": [
+        "Update the alias definitions for 'gemma-4-31b-it' and 'gemma-4-26b-a4b-it' in defaultModelConfigs.ts to extend a base configuration without thinkingConfig.",
+        "Update modelDefinitions for 'gemma-4-31b-it' and 'gemma-4-26b-a4b-it' in defaultModelConfigs.ts so that features.thinking is set to false.",
+        "Update golden files in packages/core/src/services/test-data/ (resolved-aliases.golden.json and resolved-aliases-retry.golden.json) to reflect the removal of thinkingConfig for Gemma 4 models."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/config/models.test.ts",
+      "expected_behavior": "Resolving model configuration for 'gemma-4-31b-it' returns a config without thinkingConfig, and its model definition reflects thinking: false.",
+      "verification_steps": [
+        "Add unit test cases in models.test.ts verifying that Gemma 4 model configurations do not include thinkingConfig.",
+        "Run Vitest tests for packages/core to confirm modelConfigService correctly resolves Gemma 4 model configs."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:36:13Z",
+  "execution_time_seconds": 271.14
+}

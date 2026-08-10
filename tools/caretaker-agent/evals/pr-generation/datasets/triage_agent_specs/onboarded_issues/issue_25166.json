@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25166,
+  "title": "Shell command execution gets stuck with \"Waiting input\" after command completes",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report provides a clear description of a bug on Windows (win32) where Gemini CLI hangs and displays 'Awaiting user input' / 'Shell awaiting input' after a simple shell command has completed, along with client version (0.37.1) and OS details.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "The issue involves platform-specific pseudo-terminal (node-pty / ConPTY) process lifecycle, child process exit handling on Windows (win32), and UI inactivity state tracking in React/Ink components across core and cli packages."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25166",
+    "summary": {
+      "problem": "On Windows (win32), after executing shell commands, Gemini CLI gets stuck in a state showing shell execution active and 'Awaiting user input' even though the command execution has finished.",
+      "root_cause": "When running under ConPTY on Windows, process exit signals or stream close events from node-pty may not properly finalize or clear active shell session handles (activePtyId), leaving the UI inactivity monitor (useShellInactivityStatus) believing the interactive shell process is still awaiting focus/input.",
+      "context": "The interactive shell lifecycle is managed via ShellExecutionService using node-pty and tracked in CLI state via activePtyId. On Windows, PTY process exit handlers must reliably trigger process cleanup and dispatch exit events so activePtyId is reset to null."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/shellExecutionService.ts",
+        "packages/cli/src/ui/hooks/useShellInactivityStatus.ts"
+      ],
+      "steps": [
+        "Ensure node-pty onExit listener in ShellExecutionService robustly handles Windows ConPTY process termination and guarantees exit event emission.",
+        "Ensure shell tool execution completion always cleans up activePtyId and notifies the UI state when shell process closes on Windows.",
+        "Update useShellInactivityStatus to properly check whether active PTY process is still running before flagging shouldShowFocusHint as true."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/shellExecutionService.windows.integration.test.ts",
+      "expected_behavior": "When a shell command finishes executing on Windows, the PTY process exits cleanly, the exit event is emitted, activePtyId is cleared, and the UI status returns to idle without remaining stuck on 'Awaiting user input'.",
+      "verification_steps": [
+        "Run simple shell commands using ShellExecutionService on Windows and verify that the execution handle resolves with an exit code 0.",
+        "Verify that onExit events fire and clean up PTY instances promptly without hanging."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:38Z",
+  "execution_time_seconds": 94.25
+}

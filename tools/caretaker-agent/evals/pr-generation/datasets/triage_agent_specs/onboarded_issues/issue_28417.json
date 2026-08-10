@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28417,
+  "title": "Nightly performance tests abort after ripgrep resolver rename",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable bug report detailing a runtime TypeError in perf-tests/globalSetup.ts caused by an outdated import of canUseRipgrep instead of resolveRipgrepPath, complete with failure stack traces and context.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is a localized update to a single setup file (perf-tests/globalSetup.ts) to import and invoke resolveRipgrepPath instead of the removed canUseRipgrep function."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28417",
+    "summary": {
+      "problem": "The scheduled nightly performance test workflow aborts during globalSetup execution with a TypeError because it attempts to import and call the obsolete 'canUseRipgrep' function.",
+      "root_cause": "When ripgrep path resolution was refactored, 'canUseRipgrep' in 'packages/core/src/tools/ripGrep.ts' was replaced by 'resolveRipgrepPath'. While 'integration-tests/globalSetup.ts' and 'memory-tests/globalSetup.ts' were updated to call 'resolveRipgrepPath', 'perf-tests/globalSetup.ts' was missed and continued referencing 'canUseRipgrep'.",
+      "context": "The missing export causes 'perf-tests/globalSetup.ts' to crash during Vitest global setup before any performance tests in 'perf-tests/perf-usage.test.ts' can run, causing the nightly performance workflow to fail continuously."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["perf-tests/globalSetup.ts"],
+      "steps": [
+        "In 'perf-tests/globalSetup.ts', update the import from '../packages/core/src/tools/ripGrep.js' to import 'resolveRipgrepPath' instead of 'canUseRipgrep'.",
+        "In the 'setup' function of 'perf-tests/globalSetup.ts', replace the call to 'canUseRipgrep()' with 'resolveRipgrepPath()'."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "perf-tests/perf-usage.test.ts",
+      "expected_behavior": "Global setup in 'perf-tests/globalSetup.ts' imports and executes 'resolveRipgrepPath()' successfully without throwing a TypeError, allowing performance tests to execute.",
+      "verification_steps": [
+        "Run the performance test suite using Vitest with the perf test configuration.",
+        "Verify that global setup completes successfully and 'perf-tests/perf-usage.test.ts' executes without import or runtime errors."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:32:52Z",
+  "execution_time_seconds": 42.86
+}

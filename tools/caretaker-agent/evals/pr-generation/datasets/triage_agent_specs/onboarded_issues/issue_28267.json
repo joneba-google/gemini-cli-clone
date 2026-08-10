@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28267,
+  "title": "React State Race Condition in ToolConfirmationMessage Causing Duplicate Renderings",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue gives a clear and actionable report of a React/Ink state race condition in ToolConfirmationMessage.tsx, including line references, root cause, and explanation.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Addressing Ink/React state race conditions and terminal redraw issues requires managing component lifecycle and state synchronization in interactive terminal UI components."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28267",
+    "summary": {
+      "problem": "Calling handleConfirm on keypress unmounts ToolConfirmationMessage while height constraints are being calculated, causing duplicate footers and terminal visual artifacts.",
+      "root_cause": "The component currently uses a useEffect state bridge (isCancelling) to delay confirmation to the next render cycle instead of decoupling state changes from height constraints.",
+      "context": "To support renderer updates, state management in ToolConfirmationMessage must be decoupled from height constraints so component updates and unmounting resolve synchronously without visual tearing."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/components/messages/ToolConfirmationMessage.tsx"
+      ],
+      "steps": [
+        "Refactor keypress handling for Command.ESCAPE in ToolConfirmationMessage.tsx to handle cancellation directly rather than relying on an intermediate isCancelling state.",
+        "Decouple height constraint updates from component state changes to allow synchronous state transitions on confirm/cancel actions.",
+        "Remove the temporary useEffect hook and isCancelling state variable."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/messages/ToolConfirmationMessage.test.tsx",
+      "expected_behavior": "ToolConfirmationMessage processes cancellation keypresses synchronously and calls confirm with ToolConfirmationOutcome.Cancel without causing height constraint desynchronization or visual rendering artifacts.",
+      "verification_steps": [
+        "Run unit tests in ToolConfirmationMessage.test.tsx using Vitest to confirm cancellation and approval behaviors function as expected.",
+        "Verify ESC keypress invokes confirm handler directly without requiring an additional render cycle."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:24Z",
+  "execution_time_seconds": 31.86
+}

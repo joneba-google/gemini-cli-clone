@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27721,
+  "title": "It deletes the history files after updating to 0.45.2",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides specific reproduction steps and context regarding history session files being deleted upon using /exit or /quit in CLI version 0.45.2, affecting session resumption via gemini --resume.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Investigating and fixing automatic session cleanup logic involves state management and asynchronous background retention checks across packages/cli (sessionCleanup.ts, sessionUtils.ts, gemini.tsx) to ensure valid session files in project temp directories are preserved."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27721",
+    "summary": {
+      "problem": "After executing /exit or /quit in CLI version 0.45.2, session history files in .gemini/tmp/projname are deleted, preventing session resumption using gemini --resume.",
+      "root_cause": "Automatic session cleanup in packages/cli/src/utils/sessionCleanup.ts triggered during CLI lifecycle misidentifies valid session files as corrupted or expired, or purges session directory artifacts when exiting.",
+      "context": "Session retention settings are managed via settings.general.sessionRetention. When /exit or /quit is run or during startup, cleanupExpiredSessions scans session files in .gemini/tmp/projname/chats. If session file parsing or retention rules misclassify valid session entries, files are unlinked and session directories removed."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/utils/sessionCleanup.ts",
+        "packages/cli/src/utils/sessionUtils.ts"
+      ],
+      "steps": [
+        "Inspect session file parsing and short-ID matching in packages/cli/src/utils/sessionCleanup.ts to ensure valid JSON/JSONL session files are not misclassified as corrupted (sessionInfo === null).",
+        "Verify identifySessionsToDelete to ensure active and recent sessions are properly preserved according to session retention policies.",
+        "Ensure cleanupSessionAndSubagentsAsync and session storage routines under .gemini/tmp/projname/chats correctly preserve active session data during /exit or /quit execution."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/sessionCleanup.test.ts",
+      "expected_behavior": "Executing /exit or /quit and running cleanupExpiredSessions preserves active session history files and enables session resumption via gemini --resume.",
+      "verification_steps": [
+        "Run npm test packages/cli/src/utils/sessionCleanup.test.ts using Vitest.",
+        "Add unit test cases confirming that active session files and directories are retained after session cleanup is invoked."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:26Z",
+  "execution_time_seconds": 64.42
+}

@@ -111,9 +111,8 @@ async def test_evaluate_single_diff_non_ok_qualities():
             "gemini_cli_12345", "", doc_dict, "{{PROPOSED_DIFF}} {{TRUE_DIFF}}", "gemini-3.6-flash"
         )
 
-        assert result["overall_score"] == 6
-        assert result["functional_score"] == 3
-        assert result["quality_score"] == 3
+        assert result["skipped"] is True
+        assert result["expected_quality"] == quality
         assert "PR generation skipped" in result["verdict_description"]
         assert quality in result["verdict_description"]
         assert result["success"] is True
@@ -171,7 +170,9 @@ def test_main_report_generation(mock_eval_single, tmp_path):
 
     input_dir = tmp_path / "golden_issues"
     input_dir.mkdir(parents=True, exist_ok=True)
-    (input_dir / "gemini_cli_25693.json").write_text(json.dumps({"github_metadata": {"issue_number": 25693}}), encoding="utf-8")
+    (input_dir / "gemini_cli_25693.json").write_text(
+        json.dumps({"expected_quality": "OK", "workable_spec": {"summary": {}}, "github_metadata": {"issue_number": 25693}}), encoding="utf-8"
+    )
 
     runs_dir = tmp_path / "eval" / "run_outputs" / "test_run_1"
     diffs_dir = runs_dir / "outputs" / "diffs"
@@ -218,7 +219,9 @@ async def test_eval_oversized_diff_feedback_prefix(mock_eval_single_diff, tmp_pa
     }
 
     spec_file = tmp_path / "gemini_cli_123.json"
-    spec_file.write_text(json.dumps({"github_metadata": {"issue_number": 123}}), encoding="utf-8")
+    spec_file.write_text(
+        json.dumps({"expected_quality": "OK", "workable_spec": {"summary": {}}, "github_metadata": {"issue_number": 123}}), encoding="utf-8"
+    )
 
     diffs_dir = tmp_path / "diffs"
     diffs_dir.mkdir(parents=True, exist_ok=True)

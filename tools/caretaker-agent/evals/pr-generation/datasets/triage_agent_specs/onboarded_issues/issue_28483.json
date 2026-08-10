@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28483,
+  "title": "Gemini Flash 3.6 is missing from the model selector",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report stating that Gemini Flash 3.6 is missing from the manual model selector options in CLI v0.51.0.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Adding the missing Flash model option to the manual model selection list in ModelDialog.tsx involves a localized logic update in a single UI component."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28483",
+    "summary": {
+      "problem": "When choosing a model manually in the CLI model dialog, Gemini Flash 3.6 is missing from the available selector options.",
+      "root_cause": "The manual model options list in ModelDialog.tsx omits the Gemini Flash 3.5/3.6 model constant from manualModels and manualOptions.",
+      "context": "ModelDialog.tsx defines options for manual model selection but lacks the constant for the 3.5/3.6 Flash model."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/components/ModelDialog.tsx"],
+      "steps": [
+        "Import DEFAULT_GEMINI_3_5_FLASH_MODEL in packages/cli/src/ui/components/ModelDialog.tsx.",
+        "Include DEFAULT_GEMINI_3_5_FLASH_MODEL in manualModels array and manualOptions list so it appears in the model selection dialog."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/ModelDialog.test.tsx",
+      "expected_behavior": "The Flash model option appears in the list of available models when opening manual model selection.",
+      "verification_steps": [
+        "Add a unit test in ModelDialog.test.tsx to verify that DEFAULT_GEMINI_3_5_FLASH_MODEL is rendered in manual model options."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:32:42Z",
+  "execution_time_seconds": 49.11
+}

@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 24587,
+  "title": "Misleading \"Admin Access\" Error for Personal Accounts",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides clear reproduction steps, environment details, expected behavior, and current behavior regarding a misleading error message shown to personal accounts.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue requires updating conditional error message logic in `useQuotaAndFallback.ts` to check account/user tier context before outputting workspace-specific admin error messages, along with corresponding unit test updates in `useQuotaAndFallback.test.ts`."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24587",
+    "summary": {
+      "problem": "When selecting a model that is not available for personal Google accounts, the CLI displays a misleading enterprise-specific error message referencing administrator settings and Preview Release Channels.",
+      "root_cause": "In `useQuotaAndFallback.ts`, the `ModelNotFoundError` handler hardcodes an enterprise-specific error message for valid Gemini models without checking whether the authenticated user is on a personal account or if enterprise admin controls apply.",
+      "context": "Personal account users (@gmail.com) do not have an administrator or release channel settings, causing confusion when presented with workspace-themed administrative error messages."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/hooks/useQuotaAndFallback.ts"],
+      "steps": [
+        "Inspect the user account type, tier, or admin controls context in `useQuotaAndFallback.ts` when processing a `ModelNotFoundError`.",
+        "Conditionally format the error message for `VALID_GEMINI_MODELS` based on whether the account is personal or managed by enterprise admin controls.",
+        "For personal accounts, present a clear, contextually relevant error message stating that the model is unavailable for personal accounts without referencing administrators or release channels.",
+        "For workspace/enterprise accounts where admin controls apply, retain the administrator and Preview Release Channel guidance."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useQuotaAndFallback.test.ts",
+      "expected_behavior": "Personal accounts encountering `ModelNotFoundError` receive a clear error message indicating model unavailability for personal accounts, while workspace accounts continue to receive administrator guidance.",
+      "verification_steps": [
+        "Add unit tests in `useQuotaAndFallback.test.ts` testing `ModelNotFoundError` when logged in as a personal account user.",
+        "Assert that the resulting error message for personal accounts does not contain references to 'admin' or 'Preview Release Channel'.",
+        "Assert that workspace/enterprise accounts retain the administrator guidance."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:11Z",
+  "execution_time_seconds": 52.46
+}

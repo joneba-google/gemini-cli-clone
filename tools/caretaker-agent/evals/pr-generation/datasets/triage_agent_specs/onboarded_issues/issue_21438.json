@@ -1,0 +1,63 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21438,
+  "title": "Docs: Clear up .md links across site and modify docs-writer skill to future-proof",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug description detailing how anchor links with the '.md#' extension fail to resolve properly on GeminiCLI.com, alongside a request to update the docs-writer skill to enforce this standard for future documentation.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix involves updating markdown documentation files across docs/ to remove '.md' from relative anchor links and updating guidelines in .gemini/skills/docs-writer/SKILL.md, requiring no complex code refactoring or test infrastructure changes."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21438",
+    "summary": {
+      "problem": "Anchor links formatted as 'XXX.md#ANCHOR' in documentation files do not resolve correctly when hosted on GeminiCLI.com, directing users to raw '.md' files instead of navigating to page anchors.",
+      "root_cause": "Documentation files use relative links containing '.md' extensions prior to section anchor hashes, and .gemini/skills/docs-writer/SKILL.md lacks explicit rules regarding anchor link syntax.",
+      "context": "Removing the '.md' extension before anchor fragments across docs/ and updating .gemini/skills/docs-writer/SKILL.md ensures compatibility across both GitHub and GeminiCLI.com."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        ".gemini/skills/docs-writer/SKILL.md",
+        "docs/changelogs/index.md",
+        "docs/cli/auto-memory.md",
+        "docs/cli/plan-mode.md",
+        "docs/cli/skills.md",
+        "docs/cli/telemetry.md",
+        "docs/cli/themes.md",
+        "docs/core/subagents.md",
+        "docs/extensions/index.md",
+        "docs/extensions/writing-extensions.md",
+        "docs/get-started/authentication.mdx",
+        "docs/get-started/index.md",
+        "docs/hooks/best-practices.md",
+        "docs/hooks/index.md",
+        "docs/local-development.md",
+        "docs/reference/configuration.md",
+        "docs/reference/keyboard-shortcuts.md",
+        "docs/reference/policy-engine.md",
+        "docs/reference/tools.md",
+        "docs/resources/quota-and-pricing.md"
+      ],
+      "steps": [
+        "Update .gemini/skills/docs-writer/SKILL.md under the Links section to instruct writers that anchor links must omit the '.md' file extension before section hashes (e.g., 'file#anchor' instead of 'file.md#anchor').",
+        "Scan docs/ and replace all occurrences of '.md#' in relative links to remove the '.md' file extension before the anchor fragment.",
+        "Run npm run format to ensure updated markdown and MDX files conform to repository formatting standards."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "Anchor links resolve correctly both on GitHub and GeminiCLI.com without routing to raw markdown files, and docs-writer skill guidelines prevent future '.md#' link usage.",
+      "verification_steps": [
+        "Perform a grep search across docs/ to confirm no relative links contain '.md#' patterns.",
+        "Run npm run format to confirm formatting checks pass."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:12Z",
+  "execution_time_seconds": 61.23
+}

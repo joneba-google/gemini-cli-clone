@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28652,
+  "title": "bug: OAuth callback timeout is retained after the flow completes",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report detailing a timer leak in the OAuth callback flow (packages/core/src/utils/oauth-flow.ts). It includes explicit steps to reproduce, root cause explanation, and expected behavior.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is restricted to packages/core/src/utils/oauth-flow.ts, where clearTimeout(timeoutId) needs to be called when the callback server closes or settles. Updating the cleanup in startCallbackServer and adding unit tests in oauth-flow.test.ts is straightforward and localized."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28652",
+    "summary": {
+      "problem": "The OAuth callback server in startCallbackServer sets a 5-minute timeout timer, but does not clear it when the server closes after completion or error, leading to retained timers and memory/closure leaks.",
+      "root_cause": "In startCallbackServer() (packages/core/src/utils/oauth-flow.ts), timeoutId is set with setTimeout to abort the flow after 5 minutes. When server.close() is called (upon success, OAuth error, state mismatch, or general error), clearTimeout(timeoutId) is never called in the server 'close' event handler or cleanup phase.",
+      "context": "While timeoutId.unref() prevents Node process exit blocking, the timer reference and its associated closures remain in memory until 5 minutes expire, which can cause delayed execution of stale callbacks and memory leaks in long-running processes."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/utils/oauth-flow.ts"],
+      "steps": [
+        "In startCallbackServer in packages/core/src/utils/oauth-flow.ts, ensure clearTimeout(timeoutId) is called whenever the callback server closes or settles.",
+        "Add clearTimeout(timeoutId) inside the server.on('close', ...) listener (or central cleanup function) to clear the timeout when the server closes."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/oauth-flow.test.ts",
+      "expected_behavior": "When startCallbackServer() completes (on success or error), clearTimeout is called so the 5-minute timeout timer does not remain active or fire after server closure.",
+      "verification_steps": [
+        "In packages/core/src/utils/oauth-flow.test.ts, add a unit test using fake timers or spying on clearTimeout.",
+        "Verify that after sending a successful callback request to startCallbackServer(), clearTimeout is called or advancing fake time by 5 minutes does not trigger any stale rejection/abort."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:31:24Z",
+  "execution_time_seconds": 33.52
+}

@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27725,
+  "title": "Calendar - Invalid input: expected record, received array",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report provides a clear description of a bug with tool mcp_google_workspace_calendar_listEvents, complete reproduction details, error message ('Invalid input: expected record, received array'), and client/environment details.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is caused by a localized logic error in McpComplianceTransport where JSON arrays are assigned to structuredContent. Fixing it requires a simple condition check in a single file and a corresponding unit test."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27725",
+    "summary": {
+      "problem": "The mcp_google_workspace_calendar_listEvents tool fails with 'Invalid input: expected record, received array' when listing calendar events.",
+      "root_cause": "McpComplianceTransport parses text content in tool results as JSON and automatically populates structuredContent. When the parsed JSON is an array (e.g. a list of calendar events), setting structuredContent to an array violates the MCP specification and Zod schema expectation that structuredContent must be an object/record.",
+      "context": "McpComplianceTransport intercepts JSON-RPC responses from MCP servers and populates missing structuredContent from content[0].text if it contains valid JSON. However, structuredContent is required to be an object (Record<string, unknown>)."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/mcp-compliance-transport.ts"
+      ],
+      "steps": [
+        "In packages/core/src/tools/mcp-compliance-transport.ts, update fixStructuredContent to verify that parsed JSON is a non-null, non-array object (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) before assigning it to result.structuredContent."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/mcp-compliance-transport.test.ts",
+      "expected_behavior": "When an MCP tool response contains a JSON array in content[0].text, McpComplianceTransport should leave structuredContent undefined rather than setting it to an array, preventing schema validation errors.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/tools/mcp-compliance-transport.test.ts verifying that tool results containing a JSON array in content[0].text do not set structuredContent.",
+        "Run vitest on packages/core/src/tools/mcp-compliance-transport.test.ts to verify the fix."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:16Z",
+  "execution_time_seconds": 59.18
+}

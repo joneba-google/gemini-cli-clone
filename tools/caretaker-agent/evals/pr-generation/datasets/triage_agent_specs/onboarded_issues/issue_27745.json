@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27745,
+  "title": "HTTP MCP OAuth: token acquired but not attached to request",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides comprehensive reproduction steps, CLI version information, error messages, and server-side logs detailing why OAuth tokens acquired for HTTP MCP servers are not being correctly attached or refreshed.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Requires updating the OAuth provider and token lookup/refresh mechanisms in packages/core to ensure stored client credentials (such as dynamically registered client IDs) are preserved and passed during token refresh calls, alongside adding unit tests for stored token refresh logic."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27745",
+    "summary": {
+      "problem": "After completing OAuth authentication for an HTTP MCP server, subsequent requests fail to attach the token or fail during token refresh with an error indicating missing client credentials or required provider methods.",
+      "root_cause": "When refreshing tokens in MCPOAuthProvider, getValidToken and getValidTokenWithMetadata evaluate clientId from the config object rather than falling back to credentials.clientId obtained from storage (e.g. from dynamic client registration). As a result, refreshAccessToken is called with an empty or incomplete config object missing clientId, causing token refresh to fail and delete stored credentials.",
+      "context": "Dynamic client registration stores the clientId in token storage. When non-interactive recovery or server re-connect triggers token validation/refresh, the server config oauth object lacks clientId, causing token validation and refresh to fail."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/mcp/oauth-provider.ts"],
+      "steps": [
+        "In MCPOAuthProvider.getValidToken, resolve clientId as 'config.clientId ?? credentials.clientId' and check if clientId is present before attempting token refresh.",
+        "Pass '{ ...config, clientId }' to refreshAccessToken in MCPOAuthProvider.getValidToken so that clientId is present during token refresh.",
+        "In MCPOAuthProvider.getValidTokenWithMetadata, pass '{ ...config, clientId }' instead of plain 'config' when calling refreshAccessToken."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/mcp/oauth-provider.test.ts",
+      "expected_behavior": "When getValidToken or getValidTokenWithMetadata is called with an expired stored token where clientId is stored in credentials rather than config, token refresh succeeds using credentials.clientId.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/mcp/oauth-provider.test.ts that simulates an expired token with credentials containing a stored clientId but an empty config object.",
+        "Assert that getValidToken and getValidTokenWithMetadata successfully invoke refreshAccessToken with the stored clientId and return the updated access token."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:04Z",
+  "execution_time_seconds": 58.08
+}

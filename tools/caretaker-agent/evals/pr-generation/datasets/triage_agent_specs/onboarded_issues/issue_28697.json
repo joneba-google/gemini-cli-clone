@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28697,
+  "title": "bug: Missing thought_signature in functionCall for Gemini 3/3.1 reasoning models",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report detailing a 400 Bad Request error when using Gemini 3/3.1 reasoning models with function calling, including the exact error message, root cause, and specific functions involved.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The required fix is localized to modifying how synthetic thought signatures are assigned and scrubbed inside functionCall objects within geminiChat.ts and historyHardening.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28697",
+    "summary": {
+      "problem": "Gemini 3/3.1 reasoning models throw a 400 Bad Request (INVALID_ARGUMENT) error ('Function call is missing a thought_signature in functionCall parts.') when using function calling.",
+      "root_cause": "The synthetic thought signature is currently added only at the root of the part object (part.thoughtSignature), but the Gemini API for 3/3.1 reasoning models requires thought_signature to be nested inside the part.functionCall object. Additionally, scrubPart strips non-standard properties on functionCall.",
+      "context": "Adding synthetic thought signatures to both the top-level part and nested within functionCall (using both thought_signature and thoughtSignature for camelCase/snake_case compatibility), and preserving them during history scrubbing, satisfies the API validation requirements."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/geminiChat.ts",
+        "packages/core/src/utils/historyHardening.ts"
+      ],
+      "steps": [
+        "Update ensureActiveLoopHasThoughtSignatures in packages/core/src/core/geminiChat.ts to populate thought_signature and thoughtSignature inside part.functionCall when attaching synthetic thought signatures.",
+        "Update pairToolsAndEnforceSignatures in packages/core/src/utils/historyHardening.ts to populate thought_signature and thoughtSignature inside part.functionCall when attaching synthetic thought signatures.",
+        "Update scrubPart in packages/core/src/utils/historyHardening.ts to preserve thought_signature and thoughtSignature on the functionCall object during scrubbing."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/geminiChat.test.ts",
+      "expected_behavior": "Function calls in active loop model turns have thought_signature and thoughtSignature populated on the nested functionCall object, surviving history scrubbing and preventing API validation failures on Gemini 3/3.1.",
+      "verification_steps": [
+        "Run Vitest test suite on packages/core/src/core/geminiChat.test.ts to verify ensureActiveLoopHasThoughtSignatures attaches thought_signature and thoughtSignature to functionCall.",
+        "Run Vitest test suite on packages/core/src/utils/historyHardening.test.ts to verify hardenHistory and scrubPart preserve thought_signature on functionCall."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:31:43Z",
+  "execution_time_seconds": 52.39
+}

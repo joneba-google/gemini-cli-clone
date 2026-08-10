@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 26911,
+  "title": "429 Too many Requests",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The reporter provides a clear and actionable bug report regarding HTTP 429 Rate Limit errors causing Gemini CLI to hang in a 'thinking' state for up to an hour without notifying the user (errors are only logged to debug logs). Environment, version, model, and auth type details are provided.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Handling 429 rate limit notifications and status feedback spans across package boundaries (`packages/core` retry logic and event emission, and `packages/cli` streaming hooks and loading indicator UI)."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26911",
+    "summary": {
+      "problem": "When the Gemini API returns HTTP 429 Rate Limit / Resource Exhausted errors, Gemini CLI hangs in a 'thinking' state for extended periods without notifying the user about the rate limit errors.",
+      "root_cause": "429 errors encountered during API requests are retried with backoff in `packages/core/src/utils/retry.ts` and logged to debug logs, but `packages/cli/src/ui/hooks/useLoadingIndicator.ts` suppresses explicit rate limit information in low verbosity mode, leaving the CLI looking stalled or stuck thinking indefinitely without giving feedback on rate limits.",
+      "context": "Users reaching rate limits see no indication in the terminal UI because 429 error messages are only recorded in debug logs. Surfacing rate limit retry status in the UI informs users of active rate limits and backoff attempts."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/retry.ts",
+        "packages/cli/src/ui/hooks/useGeminiStream.ts",
+        "packages/cli/src/ui/hooks/useLoadingIndicator.ts"
+      ],
+      "steps": [
+        "Update `retryWithBackoff` in `packages/core/src/utils/retry.ts` to include 429 rate limit details in the `onRetry` callback payload.",
+        "Update `useGeminiStream` in `packages/cli/src/ui/hooks/useGeminiStream.ts` to handle incoming retry events containing rate limit error details and update `retryStatus` state.",
+        "Update `useLoadingIndicator` in `packages/cli/src/ui/hooks/useLoadingIndicator.ts` to format user-facing messages informing the user of active 429 rate limit retries and attempt progress."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useLoadingIndicator.test.tsx",
+      "expected_behavior": "The loading indicator displays clear notification messaging when 429 rate limit retry events occur, informing the user about the rate limit and retry progress.",
+      "verification_steps": [
+        "Add unit test cases in `useLoadingIndicator.test.tsx` with a `retryStatus` containing 429 rate limit errors.",
+        "Verify that `currentLoadingPhrase` renders appropriate feedback indicating rate limit status during active retries."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:23Z",
+  "execution_time_seconds": 62.13
+}

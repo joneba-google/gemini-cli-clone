@@ -1,0 +1,48 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21409,
+  "title": "Generalist agent hangs",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear report of a systemic bug where delegating tasks to the generalist subagent causes gemini-cli to hang indefinitely. It includes client environment details (v0.32.1 on Linux) and notes a working workaround (instructing the model not to defer to subagents).",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Resolving hangs during asynchronous subagent execution requires investigating Promise chains, event loop propagation across derived MessageBus instances, and confirmation timeouts within the Scheduler."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21409",
+    "summary": {
+      "problem": "Delegating tasks to the generalist subagent causes gemini-cli to hang indefinitely when executing tools that trigger confirmation requests or await subagent responses.",
+      "root_cause": "Tool execution within a subagent uses an isolated Scheduler and derived MessageBus. When a tool requires confirmation (ASK_USER), the confirmation request can stall or remain unhandled across the subagent-parent message bus boundary, leading to an unhandled pending Promise.",
+      "context": "Subagent tool execution is governed by LocalAgentExecutor and scheduleAgentTools. Disabling subagents allows the main agent to run tool calls directly without stalling."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/agents/local-executor.ts",
+        "packages/core/src/scheduler/scheduler.ts",
+        "packages/core/src/scheduler/confirmation.ts"
+      ],
+      "steps": [
+        "Inspect the tool confirmation flow in resolveConfirmation when invoked from a subagent context.",
+        "Ensure tool confirmation requests published on a derived subagent MessageBus properly bubble up to parent listeners or resolve gracefully.",
+        "Add safeguards and timeouts in waitForConfirmation to prevent promises from hanging indefinitely when no confirmation listener responds.",
+        "Verify that subagent cancellation signals properly cancel pending confirmation waits and clean up message bus listeners."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/agents/local-executor.test.ts",
+      "expected_behavior": "Generalist subagent tool execution either completes upon confirmation or fails cleanly with a timeout/cancellation error without hanging the process.",
+      "verification_steps": [
+        "Add a unit test in local-executor.test.ts simulating a subagent tool call requiring confirmation.",
+        "Verify that unhandled confirmation requests fail or time out gracefully rather than hanging indefinitely.",
+        "Verify that valid confirmation responses allow subagent tools to proceed and return results."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:32Z",
+  "execution_time_seconds": 71.52
+}

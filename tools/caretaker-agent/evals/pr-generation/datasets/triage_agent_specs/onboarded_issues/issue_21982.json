@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21982,
+  "title": "Bug: run_shell_command fails with 'Cannot read properties of undefined (reading \\'publish\\')'",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable bug report describing an internal tool error ('Cannot read properties of undefined (reading 'publish')') when attempting to execute git checkout or git branch commands using run_shell_command.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The fix requires adding optional chaining and null/undefined checks for messageBus and getMessageBus() across both core (BaseToolInvocation) and cli packages (ToolActionsContext, useGeminiStream)."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21982",
+    "summary": {
+      "problem": "Executing git checkout or git branch commands via run_shell_command fails with an unhandled TypeError: Cannot read properties of undefined (reading 'publish').",
+      "root_cause": "BaseToolInvocation.publishPolicyUpdate and CLI context handlers attempt to invoke publish() directly on messageBus or config.getMessageBus() without optional chaining or validating that messageBus is defined.",
+      "context": "When running tools in environments or scenarios where messageBus is undefined or optional, triggering a policy update or confirmation response attempts to call .publish() on an undefined object, causing tool execution to crash."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/tools.ts",
+        "packages/cli/src/ui/contexts/ToolActionsContext.tsx",
+        "packages/cli/src/ui/hooks/useGeminiStream.ts"
+      ],
+      "steps": [
+        "In packages/core/src/tools/tools.ts, update BaseToolInvocation.publishPolicyUpdate to use optional chaining when calling this.messageBus?.publish(...).",
+        "In packages/cli/src/ui/contexts/ToolActionsContext.tsx, update config.getMessageBus().publish calls to use optional chaining config.getMessageBus()?.publish(...).",
+        "In packages/cli/src/ui/hooks/useGeminiStream.ts, update config.getMessageBus().publish calls to use optional chaining config.getMessageBus()?.publish(...)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/shell.test.ts",
+      "expected_behavior": "Shell commands and tool invocations handle policy updates gracefully without throwing a TypeError when messageBus is undefined.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/tools/shell.test.ts and packages/core/src/tools/base-tool-invocation.test.ts verifying that executing tool invocations with an undefined messageBus does not throw an error when publishPolicyUpdate is called."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:58Z",
+  "execution_time_seconds": 161.21
+}

@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27277,
+  "title": "Disk-full disables recording silently",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed and actionable description of a systemic bug where a disk-full error (ENOSPC) during chat recording silently disables recording by setting conversationFile to null, resulting in silent data loss without notifying the user or suppressing the exit resume command.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The fix requires changes across package boundaries (packages/core and packages/cli), including emitting user-visible feedback events when ENOSPC is encountered during recording and ensuring the CLI exit summary handles disabled recording state appropriately."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27277",
+    "summary": {
+      "problem": "When a disk-full error (ENOSPC) occurs during chat recording, the ChatRecordingService silently sets conversationFile to null and logs a debug warning, causing subsequent messages not to be saved while the CLI continues operating without informing the user and still presenting a resume command on exit.",
+      "root_cause": "ENOSPC error handling in ChatRecordingService disables recording by setting conversationFile to null without notifying the UI via coreEvents.emitFeedback or exposing a state that suppresses resume command generation in SessionSummaryDisplay.",
+      "context": "The CLI relies on ChatRecordingService to persist session history to JSONL files. Currently, ENOSPC errors are caught and logged only to debugLogger, preventing user feedback in the UI and leaving runtime session identifiers active so exit summaries erroneously suggest the session can be resumed."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/chatRecordingService.ts",
+        "packages/cli/src/ui/components/SessionSummaryDisplay.tsx"
+      ],
+      "steps": [
+        "In ChatRecordingService, update ENOSPC error handling in initialize and appendRecord to emit a user-visible warning via coreEvents.emitFeedback when disk full is encountered.",
+        "In ChatRecordingService, maintain an explicit state indicator or getter (e.g. isRecordingDisabled()) when recording has been permanently disabled due to ENOSPC.",
+        "In SessionSummaryDisplay (or via SessionContext), check whether session recording was disabled or if the recording file is absent, and suppress printing the 'gemini --resume' instruction if the session was not saved."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/chatRecordingService.test.ts",
+      "expected_behavior": "When an ENOSPC error occurs during chat recording initialization or message persistence, a user warning is emitted via coreEvents and the recording disabled state is accurately reflected so resume commands are not generated for unrecorded sessions.",
+      "verification_steps": [
+        "Add a unit test in chatRecordingService.test.ts verifying that coreEvents.emitFeedback is called with a warning when ENOSPC occurs.",
+        "Verify that ChatRecordingService correctly exposes the disabled recording state when ENOSPC occurs.",
+        "Add a test in SessionSummaryDisplay.test.tsx verifying that the resume command footer is omitted or updated when recording was disabled."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:00Z",
+  "execution_time_seconds": 73.82
+}

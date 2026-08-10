@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28351,
+  "title": "CLI silently halts when API returns finishReason: \"STOP\" with empty text",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report is clear, detailed, and actionable. It includes environment details, steps to reproduce, full API request/response payloads, trace IDs, and expected vs actual behavior when the model returns an empty string with finishReason: 'STOP'.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires localized logic adjustments in useGeminiStream.ts to detect when a turn finishes with finishReason 'STOP' without generating any text content or invoking tool calls, and display an appropriate warning or message to the user. Unit tests can be added in useGeminiStream.test.tsx using Vitest."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28351",
+    "summary": {
+      "problem": "The CLI silently halts without output or warning when the Gemini API returns an HTTP 200 response containing finishReason: 'STOP' and empty text with no tool calls.",
+      "root_cause": "In packages/cli/src/ui/hooks/useGeminiStream.ts, finishReasonMessages maps FinishReason.STOP to undefined. When the model responds with empty text ('') and no function calls, no content or tool call events are processed, and handleFinishedEvent suppresses any warning for FinishReason.STOP. As a result, the CLI silently completes the turn and returns control to the user prompt.",
+      "context": "This scenario typically occurs after a tool execution turn when the backend model completes generation without yielding output tokens or additional tool call requests."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/hooks/useGeminiStream.ts"],
+      "steps": [
+        "Track whether any text content or tool calls were received during the response stream for the active turn.",
+        "In handleFinishedEvent within packages/cli/src/ui/hooks/useGeminiStream.ts, check if finishReason is STOP and no text content or tool calls were yielded.",
+        "If an empty STOP response is detected, display a visible warning message to the user indicating that the model stopped generating without producing content."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useGeminiStream.test.tsx",
+      "expected_behavior": "When the API returns finishReason: 'STOP' with empty text content and zero tool calls, the CLI renders a user-facing warning message instead of silently halting.",
+      "verification_steps": [
+        "Add a unit test in packages/cli/src/ui/hooks/useGeminiStream.test.tsx that simulates a ServerGeminiFinishedEvent with FinishReason.STOP where no preceding content or tool calls were emitted.",
+        "Assert that an info/warning message item is added to the UI history alerting the user about the empty response."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:33:54Z",
+  "execution_time_seconds": 61.6
+}

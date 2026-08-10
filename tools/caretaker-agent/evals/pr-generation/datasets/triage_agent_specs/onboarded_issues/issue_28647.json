@@ -1,0 +1,48 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28647,
+  "title": "bug: voice providers resolve connect before transcription is ready",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable bug report describing premature resolution of connect() in both Whisper and Gemini Live transcription providers before readiness is established, including reproduction details and specific file paths.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing connection readiness requires refactoring asynchronous promise handling, process lifecycle listeners, timeout management, and WebSocket setup confirmation across two provider classes in packages/core."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28647",
+    "summary": {
+      "problem": "Voice transcription providers resolve connect() before transcription readiness is established, causing callers to send audio to dead or incompletely initialized providers.",
+      "root_cause": "WhisperTranscriptionProvider resolves unconditionally on a 10s timeout and fails to reject on process close prior to readiness. GeminiLiveTranscriptionProvider resolves connect() immediately after WebSocket open and sending setup, without waiting for setupComplete confirmation.",
+      "context": "Because audio recording begins immediately after connect() resolves, premature resolution causes lost initial audio recordings or connected UI states backed by inactive providers."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/voice/whisperTranscriptionProvider.ts",
+        "packages/core/src/voice/geminiLiveTranscriptionProvider.ts"
+      ],
+      "steps": [
+        "In whisperTranscriptionProvider.ts, update connect() to reject the connection promise if the child process closes before emitting 'main: processing'.",
+        "In whisperTranscriptionProvider.ts, clear the connection timeout timer on success, error, or close, and ensure the timeout handler rejects the connection promise instead of resolving.",
+        "In geminiLiveTranscriptionProvider.ts, update connect() to wait for a WebSocket message containing 'setupComplete' before resolving the connection promise.",
+        "In geminiLiveTranscriptionProvider.ts, handle WebSocket error and close events occurring prior to setup completion by rejecting the connect() promise and cleaning up listeners."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/voice/whisperTranscriptionProvider.test.ts",
+      "expected_behavior": "connect() resolves only when readiness is confirmed ('main: processing' for Whisper or 'setupComplete' for Gemini Live) and rejects promptly on early process close, socket error, or timeout.",
+      "verification_steps": [
+        "Verify Whisper connect() rejects when the spawned process exits before emitting 'main: processing'.",
+        "Verify Whisper connection timeout rejects when readiness is not observed.",
+        "Verify Gemini Live connect() resolves only after receiving setupComplete from the WebSocket.",
+        "Verify Gemini Live connect() rejects on WebSocket close or error occurring before setupComplete."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:32:34Z",
+  "execution_time_seconds": 103.63
+}

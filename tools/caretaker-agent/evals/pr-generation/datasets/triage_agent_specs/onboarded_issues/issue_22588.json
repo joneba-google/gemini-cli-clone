@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22588,
+  "title": "fix(core): MessageBus.request() silently hangs 60s when publish() fails",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear description of a bug in MessageBus.request() where an unhandled publish rejection causes process crashes or silent 60-second timeouts. The root cause and fix location are well defined.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The bug fix is a localized single-file logic change in MessageBus.request() to attach a .catch() handler to the publish call and clean up timers, accompanied by unit tests in Vitest."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#22588",
+    "summary": {
+      "problem": "MessageBus.request() contains an unhandled floating promise for this.publish(), leading to silent 60-second timeouts or uncaught process crashes when publish() rejects.",
+      "root_cause": "In MessageBus.request(), this.publish({ ...request, correlationId }) is called without awaiting or chaining a .catch() handler to clean up and reject the request promise.",
+      "context": "Failing to handle rejection in request() leaves the response subscription active and waits for the full 60-second timeout before failing fast."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/confirmation-bus/message-bus.ts"],
+      "steps": [
+        "Modify MessageBus.request() in packages/core/src/confirmation-bus/message-bus.ts to chain .catch() on the this.publish() call.",
+        "In the .catch() callback, call cleanup() to clear the request timeout and response listener, and reject the Promise with the caught error."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/confirmation-bus/message-bus.test.ts",
+      "expected_behavior": "When publish() rejects during a request() call, the request promise immediately rejects with the publish error instead of timing out after 60 seconds.",
+      "verification_steps": [
+        "Add a test case in packages/core/src/confirmation-bus/message-bus.test.ts that mocks publish() or triggers a publish failure during request(), and asserts that request() rejects fast with the expected error."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:44:22Z",
+  "execution_time_seconds": 31.36
+}

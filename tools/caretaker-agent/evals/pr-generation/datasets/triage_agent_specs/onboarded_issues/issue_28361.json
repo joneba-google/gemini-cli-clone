@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28361,
+  "title": "Any settings.tools.core value (even []) emits a wildcard DENY that silently excludes all MCP tools \u2013 breaks run-gemini-cli's shipped pr-review example",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a detailed and actionable bug report identifying a specific defect in policy enforcement where setting tools.core creates a wildcard DENY rule that unintentionally blocks MCP tools, complete with reproduction steps, root cause analysis, and affected source locations.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The required change is a localized fix within packages/core/src/policy/config.ts to adjust the core tool default DENY rule so that it does not override MCP tool permissions, alongside adding unit tests in packages/core/src/policy/config.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28361",
+    "summary": {
+      "problem": "Setting tools.core in settings (including tools.core: []) creates a wildcard DENY policy rule that outranks MCP tool allow rules, silently excluding all MCP tools from the registry.",
+      "root_cause": "In packages/core/src/policy/config.ts, when settings.tools.core is present, a wildcard DENY rule (toolName: '*') is added at priority CORE_TOOLS_FLAG_PRIORITY - 0.01 (4.24). This priority outranks TRUSTED_MCP_SERVER_PRIORITY (4.20) and ALLOWED_MCP_SERVER_PRIORITY (4.10), causing all MCP tools to be excluded by PolicyEngine.getExcludedTools().",
+      "context": "The tools.core setting is documented to restrict built-in core tools with an allowlist, but the wildcard DENY rule affects all tools including MCP tools. The rule needs to be scoped to core built-in tools or exclude MCP tools so that MCP trust and allow rules continue to work as intended."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/policy/config.ts"],
+      "steps": [
+        "In packages/core/src/policy/config.ts, modify the default DENY rule emitted when settings.tools?.core is present.",
+        "Ensure the default DENY rule only applies to non-MCP / core tools (or explicitly excludes mcp_* prefix / MCP server tools) so that TRUSTED_MCP_SERVER_PRIORITY and ALLOWED_MCP_SERVER_PRIORITY rules are preserved for MCP tools."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/policy/config.test.ts",
+      "expected_behavior": "When settings.tools.core is specified (e.g. []), trusted or allowed MCP tools remain allowed and are not blocked by the core tools default DENY rule.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/policy/config.test.ts setting tools.core along with trusted mcpServers.",
+        "Verify that MCP tools are properly allowed and not matched or excluded by the core tools default DENY rule."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:33:53Z",
+  "execution_time_seconds": 75.32
+}

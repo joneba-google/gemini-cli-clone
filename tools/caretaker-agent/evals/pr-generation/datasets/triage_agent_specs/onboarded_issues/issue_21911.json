@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21911,
+  "title": "evals/ directory missing tsconfig.json causes root npm run build to fail",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report identifying that the evals/ directory contains TypeScript files but lacks a tsconfig.json, causing root-level build and typecheck commands to fail.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Adding evals/tsconfig.json and ensuring it extends the root TypeScript configuration and properly maps module path references is a localized configuration update."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21911",
+    "summary": {
+      "problem": "The evals/ directory contains TypeScript files but lacks a tsconfig.json configuration, causing root-level build and typecheck processes to fail.",
+      "root_cause": "The root build/typecheck command (tsc -b) or package build processes expect all subdirectories containing TypeScript files, such as evals/, to have a valid tsconfig.json extending the root tsconfig.json and referencing project dependencies like @google/gemini-cli-core and @google/gemini-cli.",
+      "context": "Other subdirectories like integration-tests/, memory-tests/, and perf-tests/ have dedicated tsconfig.json files that extend ../tsconfig.json and define path mappings or project references."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["evals/tsconfig.json", "package.json"],
+      "steps": [
+        "Create or update evals/tsconfig.json extending ../tsconfig.json with noEmit: true, path mappings for @google/gemini-cli-core and @google/gemini-cli, and project references to ../packages/core and ../packages/cli.",
+        "Update package.json to include evals/tsconfig.json in the root typecheck script (tsc -b evals/tsconfig.json ...)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "Running npm run typecheck or npm run build at the repository root completes successfully without TypeScript configuration errors for the evals/ directory.",
+      "verification_steps": [
+        "Run npm run typecheck at root to verify tsc -b evals/tsconfig.json passes without errors.",
+        "Run npm run build at root to ensure full build execution succeeds."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:12Z",
+  "execution_time_seconds": 44.49
+}

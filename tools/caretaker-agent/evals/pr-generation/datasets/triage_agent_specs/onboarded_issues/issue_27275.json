@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27275,
+  "title": "Missing projectHash makes a real JSONL session unlistable",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue reports a bug with clear code pointers where missing projectHash metadata in a JSONL chat recording file triggers a fallback to the legacy JSON parser, which fails to parse multi-line JSONL and returns null, making the session unlistable.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to chatRecordingService.ts in packages/core to loosen the requirement of projectHash when loading JSONL conversation records, falling back to an empty string if missing rather than failing out to parseLegacyRecordFallback."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27275",
+    "summary": {
+      "problem": "A valid JSONL session file with a valid sessionId but a missing projectHash field cannot be loaded or listed, causing the session to become unlistable and return null.",
+      "root_cause": "In loadConversationRecord (chatRecordingService.ts), the condition if (!metadata.sessionId || !metadata.projectHash) redirects execution to parseLegacyRecordFallback. parseLegacyRecordFallback calls JSON.parse on the entire file content, which fails on newline-delimited JSONL files and returns null.",
+      "context": "JSONL files store newline-separated JSON records rather than a single JSON document. projectHash is useful metadata, but missing projectHash should not invalidate a JSONL session when sessionId is present."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/services/chatRecordingService.ts"],
+      "steps": [
+        "In loadConversationRecord in packages/core/src/services/chatRecordingService.ts, update the metadata validation check to only check for !metadata.sessionId instead of requiring both sessionId and projectHash.",
+        "Ensure projectHash in the returned session object falls back to an empty string (or metadata.projectHash ?? '') if metadata.projectHash is undefined."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/chatRecordingService.test.ts",
+      "expected_behavior": "A JSONL session file containing a valid sessionId but missing projectHash should successfully load as a conversation record without falling back to the legacy parser.",
+      "verification_steps": [
+        "Add a unit test in chatRecordingService.test.ts that constructs a temporary JSONL session file with sessionId but without projectHash.",
+        "Call loadConversationRecord on the file path and verify that it returns a valid ConversationRecord object containing the sessionId and an empty string for projectHash."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:38Z",
+  "execution_time_seconds": 51.83
+}

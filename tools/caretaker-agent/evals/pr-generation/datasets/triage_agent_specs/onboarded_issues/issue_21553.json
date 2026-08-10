@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21553,
+  "title": "[Bug] Automatic update fails silently or becomes ineffective due to PATH shadowing and non-standard NPM prefixes",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report detailing how automatic updates can fail silently or become ineffective due to PATH shadowing and npm prefix mismatches between the running binary and the package manager target location.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Addressing PATH shadowing and prefix mismatches requires updating installation detection logic in `installationInfo.ts`, verifying updated binary path alignment in `handleAutoUpdate.ts`, and adding test cases covering multi-installation environments."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21553",
+    "summary": {
+      "problem": "Automatic update completes with a success status but the running binary remains an outdated version due to PATH shadowing and global package manager prefix mismatches.",
+      "root_cause": "`getInstallationInfo` determines `updateCommand` based on `process.argv[1]` string matching without verifying if the package manager prefix aligns with the path of the currently executing binary, and `handleAutoUpdate` does not check if the active binary in PATH was updated.",
+      "context": "Common in Linux/WSL environments with multiple global binary locations (e.g., `/usr/local/bin` and `/usr/bin`), where `npm install -g` installs to the current prefix while PATH resolves `gemini` to a different binary."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/utils/installationInfo.ts",
+        "packages/cli/src/utils/handleAutoUpdate.ts"
+      ],
+      "steps": [
+        "In `installationInfo.ts`, detect whether the active executing binary location matches the expected global installation prefix directory for the detected package manager.",
+        "In `installationInfo.ts`, include PATH shadowing details or adjust the installation info to prevent silent failure when the global prefix differs from the executing binary.",
+        "In `handleAutoUpdate.ts`, validate that the update process targets the active executable path or warn the user if a PATH mismatch is detected."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/installationInfo.test.ts",
+      "expected_behavior": "The system detects when the executing binary path differs from the package manager global prefix directory and avoids reporting false-positive update success.",
+      "verification_steps": [
+        "Add test cases in `installationInfo.test.ts` simulating `process.argv[1]` pointing to `/usr/local/bin/gemini` while npm global prefix is configured to `/usr/bin`.",
+        "Verify that `getInstallationInfo` correctly identifies PATH shadowing scenarios and provides appropriate warning or update instructions."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:33Z",
+  "execution_time_seconds": 34.76
+}

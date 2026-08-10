@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28339,
+  "title": "Infinite Fallback Loop on retryable errors (429 RESOURCE_EXHAUSTED)",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable report of a bug in the fallback handling mechanism when errors occur on specific non-session models (like background tasks on gemini-3.1-flash-lite), including root cause analysis and a reproduction test case.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is a localized single-line logic change in packages/core/src/fallback/handler.ts to pass failedModel into resolvePolicyChain, alongside a corresponding unit test in packages/core/src/fallback/handler.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28339",
+    "summary": {
+      "problem": "When a recoverable API error (such as 429 RESOURCE_EXHAUSTED) occurs on a specialized model used for background tasks or subagents (e.g., gemini-3.1-flash-lite), the CLI enters an infinite background retry loop.",
+      "root_cause": "In handleFallback (packages/core/src/fallback/handler.ts), resolvePolicyChain(config) is called without passing failedModel. It defaults to the active session model (e.g., gemini-3.5-flash), creating a chain disconnect where failedModel cannot be found in the resolved chain, returning index -1 and resetting candidate retry cycles endlessly.",
+      "context": "Background operations explicitly request specialized models to optimize latency and token cost. Passing failedModel into resolvePolicyChain ensures the policy chain is built for the model that actually failed."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/fallback/handler.ts"],
+      "steps": [
+        "In packages/core/src/fallback/handler.ts, update the handleFallback function to call resolvePolicyChain(config, failedModel) instead of resolvePolicyChain(config)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/fallback/handler.test.ts",
+      "expected_behavior": "When handleFallback is called for a failed model that differs from the active session model, resolvePolicyChain resolves the chain for the failed model, allowing fallback candidates to be stepped through until exhaustion and cleanly breaking retry loops.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/fallback/handler.test.ts that invokes handleFallback with a failed model (gemini-3.1-flash-lite) while the active session model is set to gemini-3.5-flash.",
+        "Verify that handleFallback correctly resolves the candidate chain for gemini-3.1-flash-lite and transitions to gemini-2.5-flash, and returns null when fallback options are exhausted."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:06Z",
+  "execution_time_seconds": 61.0
+}

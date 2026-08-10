@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28395,
+  "title": "Blocking Synchronous I/O on the Main Thread Causes UI Stutter",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable description of a performance defect caused by synchronous I/O blocking the main Node.js event loop in shell.ts. It includes affected components, root cause, reproduction steps, and a clear fix.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is a highly localized change in a single source file (packages/core/src/tools/shell.ts), replacing fs.mkdtempSync with await fsPromises.mkdtemp inside the asynchronous ShellToolInvocation.execute method. The root cause and solution are clear and straightforward."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28395",
+    "summary": {
+      "problem": "Synchronous filesystem operation (fs.mkdtempSync) in shell tool execution blocks the main Node.js event loop, causing UI stuttering and input lag in the CLI interface.",
+      "root_cause": "ShellToolInvocation.execute calls fs.mkdtempSync synchronously on the main event loop immediately prior to spawning shell processes. Because React Ink UI rendering shares the main event loop, synchronous I/O blocks frame rendering and event handling.",
+      "context": "Since ShellToolInvocation.execute is already an asynchronous function, replacing fs.mkdtempSync with await fsPromises.mkdtemp non-blockingly resolves temporary directory creation without changing function signatures."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/shell.ts"],
+      "steps": [
+        "In packages/core/src/tools/shell.ts, replace the synchronous call fs.mkdtempSync(path.join(os.tmpdir(), 'gemini-shell-')) with await fsPromises.mkdtemp(path.join(os.tmpdir(), 'gemini-shell-')).",
+        "Ensure all temporary directory creation and error handling operate asynchronously in ShellToolInvocation.execute."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/shell.test.ts",
+      "expected_behavior": "Shell execution creates temporary directories asynchronously via fsPromises.mkdtemp without blocking the event loop or causing UI stutter.",
+      "verification_steps": [
+        "Run vitest packages/core/src/tools/shell.test.ts to verify that all shell tool unit tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:33:00Z",
+  "execution_time_seconds": 39.3
+}

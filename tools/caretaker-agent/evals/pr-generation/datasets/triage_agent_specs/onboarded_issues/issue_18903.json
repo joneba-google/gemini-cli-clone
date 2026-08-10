@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 18903,
+  "title": "Request contains an invalid argument",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides sufficient context including CLI version (0.28.2), model configuration ('auto-gemini-2.5'), OS, auth method, GCP project, and exact API 400 Bad Request error response from the streamGenerateContent endpoint. This allows clear investigation into model alias resolution.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is a localized logic fix in model resolution and configuration handling in packages/core/src/config/models.ts and config.ts to properly normalize deprecated model alias 'auto-gemini-2.5' before making backend API calls."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#18903",
+    "summary": {
+      "problem": "The CLI fails with API Error 400 Bad Request 'Request contains an invalid argument' when configured with the legacy model alias 'auto-gemini-2.5'.",
+      "root_cause": "The deprecated model alias 'auto-gemini-2.5' (DEFAULT_GEMINI_MODEL_AUTO) is not normalized or resolved to a valid concrete model name (such as 'gemini-2.5-pro') before requests are sent to the Cloud Code backend streamGenerateContent endpoint.",
+      "context": "In packages/core/src/config/models.ts, resolveModel handles DEFAULT_GEMINI_MODEL_AUTO, but in certain execution or dynamic configuration paths, the un-resolved 'auto-gemini-2.5' string is passed in request payloads/headers, leading to a 400 INVALID_ARGUMENT error from the API server."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/config/models.ts",
+        "packages/core/src/config/config.ts"
+      ],
+      "steps": [
+        "Update resolveModel and dynamic model resolution services in packages/core/src/config/models.ts to ensure 'auto-gemini-2.5' is consistently normalized to 'gemini-2.5-pro' across all model resolution Contexts.",
+        "Update default configuration getters in packages/core/src/config/config.ts to avoid setting or defaulting to un-resolvable legacy model alias strings."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/config/models.test.ts",
+      "expected_behavior": "Resolving 'auto-gemini-2.5' returns 'gemini-2.5-pro' without leaving the deprecated alias string in outgoing API request parameters.",
+      "verification_steps": [
+        "Add unit test cases in packages/core/src/config/models.test.ts verifying that resolveModel('auto-gemini-2.5') and resolveClassifierModel('auto-gemini-2.5', ...) return valid model IDs under all feature flag contexts.",
+        "Run Vitest on models.test.ts to verify that all model resolution tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:47:03Z",
+  "execution_time_seconds": 57.27
+}

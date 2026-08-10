@@ -30,13 +30,13 @@ def test_get_gcs_blob_prefix_eval_mode(monkeypatch):
     monkeypatch.delenv("EVAL_GCS_RUN_NAME", raising=False)
     monkeypatch.delenv("EVAL_GCS_RUN_TIMESTAMP", raising=False)
     prefix_prod = _get_gcs_blob_prefix("google-gemini", "gemini-cli", "coding_agent")
-    assert prefix_prod == "google-gemini_gemini-cli/coding_agent"
+    assert prefix_prod == "google-gemini_gemini-cli/agent_traces"
 
     # Eval mode with run_name and timestamp
     monkeypatch.setenv("EVAL_GCS_RUN_NAME", "benchmark_run_1")
     monkeypatch.setenv("EVAL_GCS_RUN_TIMESTAMP", "20260729_215645")
     prefix_eval = _get_gcs_blob_prefix("google-gemini", "gemini-cli", "coding_agent")
-    assert prefix_eval == "runs/benchmark_run_1_20260729_215645/coding_agent"
+    assert prefix_eval == "runs/benchmark_run_1_20260729_215645/agent_traces"
 
 
 def test_serialize_chunks_consolidates_text_deltas():

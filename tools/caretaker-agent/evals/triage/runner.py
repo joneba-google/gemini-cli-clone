@@ -93,11 +93,17 @@ def eval_issue(
 
         metadata = result.get("triage_metadata", {})
         predicted_spec = result.get("workable_spec", {})
-        expected_quality = result.get(
-            "quality", result.get("expected_quality", golden_issue.get("expected_quality", "OK"))
+        expected_quality = (
+            metadata.get("quality")
+            or result.get("quality")
+            or result.get("expected_quality")
+            or golden_issue.get("expected_quality", "OK")
         )
-        expected_effort = result.get(
-            "effort", result.get("expected_effort", golden_issue.get("expected_effort", "MEDIUM"))
+        expected_effort = (
+            metadata.get("effort_estimate")
+            or result.get("effort")
+            or result.get("expected_effort")
+            or golden_issue.get("expected_effort", "MEDIUM")
         )
 
         if not judge:

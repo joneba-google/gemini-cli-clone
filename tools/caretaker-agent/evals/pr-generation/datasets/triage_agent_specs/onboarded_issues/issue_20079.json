@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 20079,
+  "title": "~/.gemini/agents/filename.md is not recognized as an agent if filename.md is a symlink",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a bug where subagent definition markdown files (*.md) located in agent directories (e.g., ~/.gemini/agents/) are not recognized if they are symbolic links. Clear reproduction details and expectations are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires a localized update in packages/core/src/agents/agentLoader.ts (and packages/core/src/services/FolderTrustDiscoveryService.ts) to check entry.isSymbolicLink() in addition to entry.isFile() when scanning directory entries, along with a simple unit test."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#20079",
+    "summary": {
+      "problem": "Subagent markdown files in agent directories (such as ~/.gemini/agents/) are not recognized or loaded if the file is a symbolic link.",
+      "root_cause": "loadAgentsFromDirectory in packages/core/src/agents/agentLoader.ts checks entry.isFile() on fs.readdir Dirent objects. Node.js Dirent.isFile() returns false for symbolic links, causing symlinked agent files to be filtered out.",
+      "context": "Users frequently store agent configuration files in a central directory (e.g., dotfiles) and symlink them into ~/.gemini/agents/. Supporting symlinks allows these custom subagents to be properly detected."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/agents/agentLoader.ts",
+        "packages/core/src/services/FolderTrustDiscoveryService.ts"
+      ],
+      "steps": [
+        "In packages/core/src/agents/agentLoader.ts, update loadAgentsFromDirectory so that the file filtering check accepts symlinks via (entry.isFile() || entry.isSymbolicLink()).",
+        "In packages/core/src/services/FolderTrustDiscoveryService.ts, update discoverAgents to also check (entry.isFile() || entry.isSymbolicLink()) when identifying agent files."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/agents/agentLoader.test.ts",
+      "expected_behavior": "Symlinked agent markdown files in an agents directory should be loaded as valid agent definitions.",
+      "verification_steps": [
+        "Add a test case under loadAgentsFromDirectory in packages/core/src/agents/agentLoader.test.ts that creates a valid agent markdown file outside or inside the test folder, creates a symlink pointing to it with a .md extension, and verifies that loadAgentsFromDirectory successfully parses and returns the agent."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:10Z",
+  "execution_time_seconds": 36.31
+}

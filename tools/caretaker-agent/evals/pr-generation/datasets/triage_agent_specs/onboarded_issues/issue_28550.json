@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28550,
+  "title": "Heap OOM in non-interactive runs: ignore-matcher (path-scurry + minimatch) appears to be rebuilt per file, heap scales with files \u00d7 .gitignore rules",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides detailed reproduction steps, environment details, heap snapshot analysis, and pinpoints a memory leak/excessive allocations in file discovery and ignore matching.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "This is a performance and memory issue involving diagnosing and fixing massive heap memory leaks and excessive allocations during file discovery and gitignore pattern compilation on large repositories."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28550",
+    "summary": {
+      "problem": "Non-interactive runs on repositories with many files and .gitignore rules cause JavaScript heap out of memory (OOM) due to excessive object allocations during file discovery and ignore matching.",
+      "root_cause": "GitIgnoreParser.isIgnored repeatedly instantiates new ignore() objects and re-adds/re-compiles gitignore and extra patterns for every directory level of every file evaluated during file discovery, allocating hundreds of thousands of _PathPosix and _Pattern objects.",
+      "context": "The issue manifests during headless file discovery across large monorepos with multiple .gitignore files, where minimatch pattern compilation and path-scurry walker creation scale with (files x ignore rules) instead of being cached once per root/directory."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/gitIgnoreParser.ts",
+        "packages/core/src/services/fileDiscoveryService.ts"
+      ],
+      "steps": [
+        "Refactor GitIgnoreParser in packages/core/src/utils/gitIgnoreParser.ts to cache and reuse compiled ignore matchers per directory instead of instantiating new ignore() instances on every isIgnored call.",
+        "Avoid re-compiling extra patterns and global patterns repeatedly by reusing pre-compiled ignore instances or memoizing cumulative ignore filters per directory path.",
+        "Update FileDiscoveryService in packages/core/src/services/fileDiscoveryService.ts if necessary to reuse ignore parser instances or pass down cached matchers during traversal."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/gitIgnoreParser.test.ts",
+      "expected_behavior": "GitIgnoreParser should correctly evaluate gitignore and extra ignore rules without creating redundant ignore instances or thrashing memory on large file sets.",
+      "verification_steps": [
+        "Run unit tests in packages/core/src/utils/gitIgnoreParser.test.ts using Vitest.",
+        "Verify that gitignore matching correctness is maintained across nested directories and extra patterns.",
+        "Run file discovery tests in packages/core/src/services/fileDiscoveryService.test.ts to verify performance and correctness."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:33:31Z",
+  "execution_time_seconds": 107.01
+}

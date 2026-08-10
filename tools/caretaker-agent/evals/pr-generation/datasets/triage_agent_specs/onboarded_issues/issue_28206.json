@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28206,
+  "title": "bug: JSON.parse in cli/index.ts fails to parse settings.json with comments",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed and actionable bug report describing how JSON.parse in packages/cli/index.ts fails when settings.json contains comments, causing autoConfigureMemory to silently fall back to true. Specific code locations and context are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue requires a localized fix in a single file (packages/cli/index.ts) to strip JSON comments using the existing 'strip-json-comments' dependency before passing raw settings text to JSON.parse. The logic is straightforward and low-risk."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28206",
+    "summary": {
+      "problem": "JSON.parse in packages/cli/index.ts fails when settings.json contains comments, silently defaulting autoConfigureMemory to true.",
+      "root_cause": "getMemoryNodeArgs() reads settings.json and passes rawSettings directly to JSON.parse(). Because standard JSON.parse() does not support comments, it throws a SyntaxError, which is swallowed in the catch block, overriding the user's autoConfigureMemory setting.",
+      "context": "Other parts of the codebase, such as packages/cli/src/config/settings.ts, already use strip-json-comments to strip comments before parsing settings.json. strip-json-comments is already included in the CLI dependencies."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/index.ts"],
+      "steps": [
+        "Dynamically import stripJsonComments from 'strip-json-comments' inside getMemoryNodeArgs() in packages/cli/index.ts.",
+        "Pass rawSettings through stripJsonComments(rawSettings) prior to calling JSON.parse()."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/settings.test.ts",
+      "expected_behavior": "settings.json files with single-line or multi-line comments should be parsed cleanly without throwing JSON syntax errors, correctly respecting user configuration for autoConfigureMemory.",
+      "verification_steps": [
+        "Add unit tests to verify that settings content containing comments is parsed correctly with comment stripping.",
+        "Assert that autoConfigureMemory is set to false when configured in a settings.json file that contains comments."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:01Z",
+  "execution_time_seconds": 44.11
+}

@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 19985,
+  "title": "CLI hangs/freezes when using `@filename:line` or `@filename:range` syntax",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides clear steps to reproduce, client environment details, and expected behavior when using line or range specifiers with @ file references (e.g., @app.js:10, @src/main.js:15-25, @src/main.js#L10). The reported bug causes the CLI to freeze/hang indefinitely.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Addressing this issue requires updating the @-command path parsing and resolution logic across packages/core (atCommandUtils / path-validator) and packages/cli (atCommandProcessor). The fix involves parsing line and range specifiers from @ file references, resolving the underlying base file path, and preventing invalid glob fallback attempts when line suffixes are present."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#19985",
+    "summary": {
+      "problem": "Referencing files with line or line-range specifiers using @ syntax (e.g., @src/main.js:10, @src/main.js:15-25, @src/main.js#L10) causes the CLI to hang or freeze indefinitely.",
+      "root_cause": "When @path syntax includes line or range suffixes like :line, :start-end, #Lline, or #Lstart-#Lend, atCommandProcessor passes the raw string to resolveAtCommandPath. validatePath treats the string as a valid filename, but fs.stat fails to find the file with the line suffix attached. The failure triggers a glob search fallback with patterns like **/*src/main.js:15-25*, which fails or hangs due to invalid glob characters or unhandled matching.",
+      "context": "The CLI should sanitize and parse line number or range specifiers from @file path references, stripping line specifiers before attempting path resolution and file existence checks, and gracefully handling line selection or failing with a clear error if the file is not found."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/atCommandUtils.ts",
+        "packages/cli/src/ui/hooks/atCommandProcessor.ts"
+      ],
+      "steps": [
+        "Update resolveAtCommandPath in packages/core/src/utils/atCommandUtils.ts to parse and extract line or range suffixes (e.g., :line, :start-end, #Lline, #Lstart-#Lend, :line:col) from the path string prior to path validation and fs.stat checks.",
+        "Ensure tryExtractPath or path resolution strips trailing line number and range specifiers from @file inputs so that the base file path can be validated and resolved against workspace directories.",
+        "Update atCommandProcessor.ts in packages/cli/src/ui/hooks/atCommandProcessor.ts to handle line range specifiers when reading local files, or gracefully ignore invalid line suffixes without invoking recursive glob searches on raw line specifiers."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/atCommandUtils.test.ts",
+      "expected_behavior": "Passing file references with line or line-range specifiers (e.g. @src/main.js:10, @src/main.js:15-25, @src/main.js#L10) resolves to the target file (src/main.js) without error or hanging.",
+      "verification_steps": [
+        "Add unit tests in atCommandUtils.test.ts testing resolveAtCommandPath with file paths containing line specifiers like file.ts:10, file.ts:15-25, and file.ts#L10.",
+        "Verify that resolveAtCommandPath successfully resolves the base file path and returns status 'resolved' with the correct relative and absolute paths.",
+        "Verify that invalid or non-existent file paths with line specifiers return 'not_found' cleanly without unhandled exceptions or hangs."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:47:09Z",
+  "execution_time_seconds": 92.93
+}

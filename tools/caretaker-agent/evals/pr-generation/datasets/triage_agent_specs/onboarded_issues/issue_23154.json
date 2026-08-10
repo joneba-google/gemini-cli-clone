@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 23154,
+  "title": "Bug: Model reverts to gemini-3-flash-preview after cancel and rewind despite gemini-3.1-pro-preview selection",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides clear reproduction details, client environment details, and expected vs actual behavior regarding model selection reverting to flash preview after cancel and rewind operations.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing this bug requires coordinating model sequence state and stream cancellation across packages/core (GeminiClient) and packages/cli (rewind command and stream hooks). Testing requires verifying state synchronization during async stream abort and rewind cycles."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#23154",
+    "summary": {
+      "problem": "After cancelling a request and rewinding a conversation, the model reverts to gemini-3-flash-preview for subsequent requests despite gemini-3.1-pro-preview being configured and shown as selected.",
+      "root_cause": "When a request is cancelled or rewound, GeminiClient's internal sticky state (currentSequenceModel) and temporary model fallback overrides are not cleared. As a result, model routing continues to use the sticky sequence model from the cancelled or rewound turn instead of re-evaluating the user's configured model.",
+      "context": "The CLI UI continues to display gemini-3.1-pro-preview in the footer because config.getActiveModel() returns the primary configured model, but GeminiClient.sendMessageStream prioritizes currentSequenceModel when starting turns."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/client.ts",
+        "packages/cli/src/ui/commands/rewindCommand.tsx",
+        "packages/cli/src/ui/hooks/useGeminiStream.ts"
+      ],
+      "steps": [
+        "In packages/core/src/core/client.ts, ensure setHistory and stream cancellation handlers reset currentSequenceModel so sticky sequence model overrides do not persist across rewinds or aborted turns.",
+        "In packages/cli/src/ui/commands/rewindCommand.tsx, explicitly invoke client.clearCurrentSequenceModel() during rewindConversation to clear stale model sequence state when jumping back in chat history.",
+        "In packages/cli/src/ui/hooks/useGeminiStream.ts, trigger client.clearCurrentSequenceModel() when handling user cancellation or stream aborts."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/client.test.ts",
+      "expected_behavior": "When a turn is cancelled or a conversation is rewound, clearCurrentSequenceModel() resets sticky sequence model state so subsequent requests correctly route to the user's selected model.",
+      "verification_steps": [
+        "Add a unit test in client.test.ts verifying that calling clearCurrentSequenceModel() or rewinding resets currentSequenceModel to null.",
+        "Verify that sending a new message after cancellation/rewind routes to the primary configured model rather than the sticky model from the previous turn."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:04Z",
+  "execution_time_seconds": 103.33
+}

@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 26126,
+  "title": "Stuck at thinking",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a valid, actionable bug report describing Gemini CLI hanging indefinitely in the 'Thinking' state during streaming requests without timeout or error feedback, complete with OS, CLI version, and environment details.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The bug involves intermittent streaming request hangs, requiring timeout handling and error state propagation across the core LLM streaming client and CLI UI hooks."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26126",
+    "summary": {
+      "problem": "Gemini CLI intermittently remains stuck in the 'Thinking' state without receiving further stream chunks, timing out, or displaying error messages to the user.",
+      "root_cause": "The streaming response processing loop in GeminiChat and useGeminiStream lacks an inactivity/idle chunk timeout or robust stream stall recovery mechanism, causing the CLI UI to stay in responding mode indefinitely when connection or API stalls happen during thinking content generation.",
+      "context": "Reported in CLI version 0.39.1 on Windows. The CLI hangs on 'Thinking' without outputting an error, requiring users to interrupt or restart."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/geminiChat.ts",
+        "packages/cli/src/ui/hooks/useGeminiStream.ts"
+      ],
+      "steps": [
+        "Add a stream chunk inactivity timeout mechanism in geminiChat.ts or stream generator to abort or throw a timeout error when no stream events or chunks are received within the expected timeframe.",
+        "Ensure abort signals and stream timeout rejections are caught in useGeminiStream.ts, transitioning the streaming state from Responding back to Idle.",
+        "Display a clear user-facing error message or timeout notification in the UI when a response stream stalls or times out while in the thinking phase."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useGeminiStream.test.tsx",
+      "expected_behavior": "When an API response stream stalls or encounters a timeout while emitting thinking chunks, Gemini CLI catches the error, displays a timeout notification, and safely exits the responding state.",
+      "verification_steps": [
+        "Mock a streaming response that hangs or halts emitting chunks during the thinking phase.",
+        "Verify that a stream timeout triggers and throws or emits an error event.",
+        "Assert that useGeminiStream handles the timeout gracefully, displays an error message, and sets streaming state to Idle."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:03Z",
+  "execution_time_seconds": 62.8
+}

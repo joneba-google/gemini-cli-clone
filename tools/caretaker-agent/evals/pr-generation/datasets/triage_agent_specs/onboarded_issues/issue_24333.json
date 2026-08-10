@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 24333,
+  "title": "fix(cli): reset slash-command conflict dedupe when conflicts reappear",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a logic bug in SlashCommandConflictHandler where notifiedConflicts grows indefinitely and prevents re-notifying users if a previously resolved slash command conflict reappears. It specifies the affected file, root cause, expected behavior, and a suggested fix.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to a single source file (packages/cli/src/services/SlashCommandConflictHandler.ts) where handleConflicts needs to sync notifiedConflicts with active conflict keys from incoming payloads. Unit testing in packages/cli/src/services/SlashCommandConflictHandler.test.ts is straightforward."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24333",
+    "summary": {
+      "problem": "SlashCommandConflictHandler retains notified conflict keys permanently in a process-lifetime set, preventing re-notification if a conflict is resolved and subsequently reappears.",
+      "root_cause": "handleConflicts adds conflict keys to notifiedConflicts without ever pruning or resetting keys when conflicts are no longer present in subsequent event payloads.",
+      "context": "SlashCommandConflictHandler batches conflict events to display user feedback when command name collisions occur. Deduplication should track currently active conflicts rather than all historical conflicts forever."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/services/SlashCommandConflictHandler.ts"
+      ],
+      "steps": [
+        "In SlashCommandConflictHandler.ts, update handleConflicts to construct a Set of active conflict keys from payload.conflicts.",
+        "Remove keys from this.notifiedConflicts that are not present in the current active conflict keys set.",
+        "Filter payload.conflicts against this.notifiedConflicts to identify new conflicts, and add new keys to this.notifiedConflicts.",
+        "Schedule a flush if there are any new conflicts to notify."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/services/SlashCommandConflictHandler.test.ts",
+      "expected_behavior": "When a previously resolved conflict reappears in a subsequent payload, SlashCommandConflictHandler notifies the user again.",
+      "verification_steps": [
+        "In SlashCommandConflictHandler.test.ts, add a unit test that simulates a conflict event and verifies feedback is emitted.",
+        "Simulate an event payload where the conflict is resolved (not present).",
+        "Simulate the conflict event again and verify that feedback is emitted once more."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:09Z",
+  "execution_time_seconds": 42.09
+}

@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27890,
+  "title": "GoogleSearch execution never completes, continuing to waste tokens",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides clear reproduction steps and reports an actionable bug where GoogleSearch execution fails to complete.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is caused by passing this.context.config instead of this.context to WebSearchToolInvocation in packages/core/src/tools/web-search.ts. Fixing this requires a single-file code edit in web-search.ts and updating its corresponding test in packages/core/src/tools/web-search.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27890",
+    "summary": {
+      "problem": "When using GoogleSearch (e.g. running queries like 'Search online for how to use Flutter's Riverpod package and explain it.'), tool execution fails to complete properly.",
+      "root_cause": "In packages/core/src/tools/web-search.ts, WebSearchTool.createInvocation passes this.context.config instead of this.context to WebSearchToolInvocation. Because this.context.config is a Config instance rather than an AgentLoopContext, WebSearchToolInvocation lacks proper execution context during tool execution.",
+      "context": "WebFetchTool correctly passes this.context to its invocation constructor, but WebSearchTool erroneously passed this.context.config. Additionally, unit tests in packages/core/src/tools/web-search.test.ts masked this issue by mocking .config to point back to the mock config."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/web-search.ts"],
+      "steps": [
+        "In packages/core/src/tools/web-search.ts, update WebSearchTool.createInvocation to pass this.context instead of this.context.config when instantiating WebSearchToolInvocation."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/web-search.test.ts",
+      "expected_behavior": "WebSearchToolInvocation receives the full AgentLoopContext instance during instantiation and executes web search queries successfully.",
+      "verification_steps": [
+        "In packages/core/src/tools/web-search.test.ts, update test context setup to mock a proper AgentLoopContext object containing config and geminiClient without adding a circular config.config property.",
+        "Run npm test packages/core/src/tools/web-search.test.ts using Vitest to verify all web search tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:37:43Z",
+  "execution_time_seconds": 65.3
+}

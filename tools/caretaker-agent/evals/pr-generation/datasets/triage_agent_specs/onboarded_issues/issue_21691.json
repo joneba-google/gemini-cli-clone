@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21691,
+  "title": "OAuth refresh token lost during token refresh, causing 'No refresh token is set' after ~1 hour",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report provides a clear, actionable bug description detailing the root cause, steps to reproduce, expected behavior, and environment details for both OAuth refresh token loss and credential deletion errors.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix involves straightforward changes in two files within packages/core: merging existing refresh tokens during token cache updates in oauth2.ts and making deleteCredentials non-throwing for missing keys in keychain-token-storage.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21691",
+    "summary": {
+      "problem": "OAuth refresh token is lost during token refreshes, causing session failure after ~1 hour, and deleteCredentials throws errors when trying to clear already-deleted credentials.",
+      "root_cause": "The tokens event during OAuth token refresh provides a new access_token without resending refresh_token. cacheCredentials in oauth2.ts overwrites stored credentials without merging existing refresh tokens. Furthermore, KeychainTokenStorage.deleteCredentials throws when credentials are not found, creating a cascading error loop during re-authentication.",
+      "context": "Occurs when using OAuth authentication after initial access token expiration (~1 hour), affecting both file-based and encrypted token storage paths."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/code_assist/oauth2.ts",
+        "packages/core/src/mcp/token-storage/keychain-token-storage.ts"
+      ],
+      "steps": [
+        "In packages/core/src/code_assist/oauth2.ts, update cacheCredentials to read existing credentials from disk if present and merge existing refresh_token when the new token payload lacks a refresh_token.",
+        "In packages/core/src/mcp/token-storage/keychain-token-storage.ts, modify deleteCredentials so that deleting a non-existent server account succeeds silently without throwing an error."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/code_assist/oauth2.test.ts",
+      "expected_behavior": "Cache updates during access token refresh preserve the stored refresh_token, and deleteCredentials on non-existent credentials completes cleanly without throwing.",
+      "verification_steps": [
+        "Add unit tests in oauth2.test.ts testing cacheCredentials when updating tokens without a refresh_token to ensure existing refresh_token is retained.",
+        "Add unit tests in keychain-token-storage.test.ts verifying that calling deleteCredentials on a non-existent account does not throw an error."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:56Z",
+  "execution_time_seconds": 59.26
+}

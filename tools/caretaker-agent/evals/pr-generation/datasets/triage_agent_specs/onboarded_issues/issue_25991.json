@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25991,
+  "title": "Gemini cli bot marks issue as stale and closes it in the same minute",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear report with an example of the bot marking an issue as stale and closing it in the same minute, pointing directly to the lifecycle management workflow behavior.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires localized logic changes in a single GitHub workflow script (.github/scripts/gemini-lifecycle-manager.cjs) to prevent processing newly stale issues in Step 3 during the same script run."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25991",
+    "summary": {
+      "problem": "The Gemini CLI lifecycle management bot marks an issue as stale and closes it within the same minute.",
+      "root_cause": "In .github/scripts/gemini-lifecycle-manager.cjs, Step 2 adds the stale label to inactive issues, and Step 3 immediately processes stale issues in the same script run. If an issue had a prior stale label event or if timeline event indexing is delayed/missing, Step 3 evaluates the stale issue against an old timestamp or fails to detect that it was newly labeled in the current run, closing it prematurely.",
+      "context": "Issues marked as stale should remain open for a 14-day grace period (CLOSE_DAYS) before being automatically closed."
+    },
+    "implementation_plan": {
+      "files_to_modify": [".github/scripts/gemini-lifecycle-manager.cjs"],
+      "steps": [
+        "Track issues that were marked as stale in Step 2 during the current execution run.",
+        "In Step 3, skip closure evaluation for any issue that was marked stale during the current run.",
+        "Ensure the stale event lookup verifies that the stale label addition timestamp is older than CLOSE_DAYS (14 days) before attempting to close the issue."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "When an issue is marked as stale, it will not be closed in the same execution run and will remain open for at least 14 days before closure.",
+      "verification_steps": [
+        "Run the gemini-lifecycle-manager script in DRY_RUN mode on candidate issues.",
+        "Verify that Step 3 does not schedule closure for issues newly marked stale in Step 2."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:55Z",
+  "execution_time_seconds": 52.76
+}

@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22814,
+  "title": "File descriptor leak in ShellExecutionService.background() when command exits before 200ms delay",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable, and detailed bug report describing a file descriptor leak in ShellExecutionService.background() when a command exits before the delay timer. It includes exact code locations, step-by-step failure sequences, and root cause analysis.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires modifying ExecutionLifecycleService.background to return a boolean indicating success and gating log stream creation in ShellExecutionService.background on that return value. Both affected files are in packages/core with straightforward logic and existing test files."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#22814",
+    "summary": {
+      "problem": "When a command marked for background execution exits before the delay timer fires, ShellExecutionService creates an fs.WriteStream and registers background log PIDs after ExecutionLifecycleService has already cleaned up the resolver, permanently leaking the write stream.",
+      "root_cause": "ShellExecutionService.background() unconditionally sets up background logging and registers PIDs before calling ExecutionLifecycleService.background(). ExecutionLifecycleService.background() returns void and exits early if the resolver was deleted by process exit, leaving the newly opened WriteStream without cleanup.",
+      "context": "ExecutionLifecycleService.settleExecution deletes the active resolver when a command exits. When ShellExecutionService.background fires 200ms later, ExecutionLifecycleService returns early, but ShellExecutionService has already registered backgroundLogStreams and backgroundLogPids."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/executionLifecycleService.ts",
+        "packages/core/src/services/shellExecutionService.ts"
+      ],
+      "steps": [
+        "Update ExecutionLifecycleService.background() to return a boolean (returning false if resolver or execution is missing, true otherwise).",
+        "Update ShellExecutionService.background() to call ExecutionLifecycleService.background() and gate the creation of fs.WriteStream, backgroundLogStreams, backgroundLogPids, and history tracking on a true return value."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/shellExecutionService.test.ts",
+      "expected_behavior": "When ExecutionLifecycleService.background() returns false because an execution has already exited, ShellExecutionService.background() skips log stream creation and does not leak file descriptors.",
+      "verification_steps": [
+        "Add a test in shellExecutionService.test.ts verifying that ShellExecutionService.background() does not create a log stream or register PIDs if ExecutionLifecycleService.background() returns false.",
+        "Add unit tests in executionLifecycleService.test.ts verifying return values of ExecutionLifecycleService.background()."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:44:59Z",
+  "execution_time_seconds": 95.31
+}

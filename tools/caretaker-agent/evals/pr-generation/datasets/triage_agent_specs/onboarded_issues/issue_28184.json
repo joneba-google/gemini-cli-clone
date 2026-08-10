@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28184,
+  "title": "security: web_fetch SSRF guard bypassed by DNS names resolving to private IPs",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue reports a clear, valid security bug in WebFetchTool.isBlockedHost() where DNS hostnames resolving to private IPs bypass the SSRF guard, complete with reproduction vector and root cause analysis.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to packages/core/src/tools/web-fetch.ts, replacing synchronous isPrivateIp calls with the existing async isPrivateIpAsync DNS resolution helper and updating callers to await the result, along with updating test mocks in packages/core/src/tools/web-fetch.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28184",
+    "summary": {
+      "problem": "WebFetchTool.isBlockedHost() relies on synchronous IP checking that only blocks IP literals, failing to perform DNS resolution on hostnames. This allows SSRF bypasses via DNS names that resolve to private IP ranges (e.g., 127.0.0.1.nip.io).",
+      "root_cause": "isBlockedHost() calls the synchronous isPrivateIp() function, which returns false for non-IP literal strings without resolving their DNS records.",
+      "context": "The asynchronous function isPrivateIpAsync() already exists in packages/core/src/utils/fetch.ts and performs DNS lookup using node:dns/promises to check resolved IP addresses against private network ranges."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/web-fetch.ts"],
+      "steps": [
+        "Import isPrivateIpAsync alongside isPrivateIp in packages/core/src/tools/web-fetch.ts.",
+        "Update WebFetchTool.isBlockedHost to be an async function returning Promise<boolean> and call await isPrivateIpAsync(urlStr).",
+        "Update WebFetchTool.filterAndValidateUrls to be an async function that awaits isBlockedHost for each candidate URL.",
+        "Update callers of isBlockedHost and filterAndValidateUrls in packages/core/src/tools/web-fetch.ts (execute, executeExperimental, and executeFallbackForUrl) to await their results."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/web-fetch.test.ts",
+      "expected_behavior": "WebFetchTool blocks fetch requests targeting hostnames that resolve to loopback or private IP addresses, preventing SSRF attacks.",
+      "verification_steps": [
+        "Update test mocks in packages/core/src/tools/web-fetch.test.ts to mock isPrivateIpAsync instead of isPrivateIp.",
+        "Add test cases in packages/core/src/tools/web-fetch.test.ts verifying that URLs with DNS hostnames resolving to private IPs (e.g., 127.0.0.1.nip.io) are blocked.",
+        "Run tests with vitest to verify that all web fetch tool tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:25Z",
+  "execution_time_seconds": 233.41
+}

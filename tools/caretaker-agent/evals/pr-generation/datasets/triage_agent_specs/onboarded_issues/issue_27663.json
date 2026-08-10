@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27663,
+  "title": "mcp-oauth-tokens.json corruption during token refresh since v0.44.0",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear problem description, steps to reproduce, client information, and expected vs actual behavior detailing JSON file corruption in mcp-oauth-tokens.json during token refresh.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is a localized logic error in MCPOAuthTokenStorage (packages/core/src/mcp/oauth-token-storage.ts). Replacing direct file writes with an atomic write-then-rename pattern and preserving existing credential fields during token save is a straightforward single-file fix with unit tests."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27663",
+    "summary": {
+      "problem": "mcp-oauth-tokens.json becomes corrupted or malformed when OAuth tokens are refreshed.",
+      "root_cause": "MCPOAuthTokenStorage writes updated token arrays directly using fs.writeFile without atomic writes. Concurrent token updates or process interrupts during disk writes cause partial writes or truncated files, leading to corrupted JSON.",
+      "context": "Token refresh operations trigger setCredentials in MCPOAuthTokenStorage. Non-atomic writes to mcp-oauth-tokens.json break JSON parsing in subsequent CLI calls until the file is manually deleted."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/mcp/oauth-token-storage.ts"],
+      "steps": [
+        "Implement an atomic file writing helper in MCPOAuthTokenStorage that writes data to a temporary file in the target directory before renaming it to the final destination path.",
+        "Update setCredentials and deleteCredentials in MCPOAuthTokenStorage to use atomic file writes when modifying mcp-oauth-tokens.json.",
+        "Update saveToken in MCPOAuthTokenStorage to preserve existing credential metadata (clientId, tokenUrl, mcpServerUrl) if omitted during a token refresh.",
+        "Ensure proper error handling and temporary file cleanup on write failures."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/mcp/oauth-token-storage.test.ts",
+      "expected_behavior": "Token storage operations perform atomic writes to mcp-oauth-tokens.json, ensuring valid JSON structure and preserving existing credential metadata across token refreshes.",
+      "verification_steps": [
+        "Add a unit test in oauth-token-storage.test.ts verifying that setCredentials writes to disk atomically and maintains valid JSON content.",
+        "Add a unit test verifying that concurrent token save operations do not result in malformed or corrupted JSON.",
+        "Add a unit test verifying that saveToken retains existing clientId, tokenUrl, and mcpServerUrl when saving a refreshed token."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:39:00Z",
+  "execution_time_seconds": 48.92
+}

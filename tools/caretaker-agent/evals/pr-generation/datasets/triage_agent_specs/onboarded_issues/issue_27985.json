@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27985,
+  "title": "ACP: PromptResponse usage omits cached/thought tokens, inflating client cost estimates",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed, actionable report with clear reproduction context and pinpoints the specific file packages/cli/src/acp/acpSession.ts where cached and thought tokens are omitted from ACP usage reporting.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to packages/cli/src/acp/acpSession.ts to capture cachedContentTokenCount and thoughtsTokenCount from usageMetadata and populate standard usage fields in the ACP PromptResponse object, alongside corresponding unit test additions in acpSession.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27985",
+    "summary": {
+      "problem": "When running as an ACP server, token usage reporting omits cached and thought token counts from Gemini usageMetadata.",
+      "root_cause": "In packages/cli/src/acp/acpSession.ts, the GeminiEventType.Finished handler only reads promptTokenCount and candidatesTokenCount from usageMetadata, ignoring cachedContentTokenCount and thoughtsTokenCount.",
+      "context": "ACP clients estimating costs treat all input tokens as uncached when cachedReadTokens is omitted or zero, significantly overestimating costs during long agentic sessions."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/acp/acpSession.ts"],
+      "steps": [
+        "In packages/cli/src/acp/acpSession.ts, extract cachedContentTokenCount and thoughtsTokenCount from usageMetadata in the GeminiEventType.Finished event handler.",
+        "Accumulate total cached and thought tokens across session turns in prompt().",
+        "Populate standard PromptResponse usage fields including inputTokens, outputTokens, cachedReadTokens, thoughtTokens, and totalTokens in prompt()."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/acp/acpSession.test.ts",
+      "expected_behavior": "PromptResponse returned by Session.prompt includes cachedReadTokens and thoughtTokens matching the usageMetadata provided in Gemini stream events.",
+      "verification_steps": [
+        "Add unit tests in packages/cli/src/acp/acpSession.test.ts with usageMetadata containing promptTokenCount, candidatesTokenCount, cachedContentTokenCount, and thoughtsTokenCount.",
+        "Assert that prompt() returns usage metadata containing accurate inputTokens, outputTokens, cachedReadTokens, and thoughtTokens."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:37:03Z",
+  "execution_time_seconds": 78.42
+}

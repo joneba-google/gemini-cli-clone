@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27387,
+  "title": "Can't select Apply this change? 1 2 3 options",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear, actionable bug report detailing a failure of the Enter key to select options in the tool confirmation dialog ('Apply this change?'), complete with reproduction steps, expected behavior, and client environment details (CLI version 0.43.0, OS win32).",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The bug involves platform-specific (win32/VS Code terminal) terminal input event handling, keypress priority, and state synchronization in Ink/React UI components (`ToolConfirmationMessage`, `RadioButtonSelect`, `useSelectionList`, `KeypressContext`). Issues involving platform-specific terminal raw mode input and key event buffering require medium effort to test and resolve."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27387",
+    "summary": {
+      "problem": "Users on Windows (win32) / VS Code terminal cannot select options (such as 'Allow once') in the tool confirmation dialog ('Apply this change?') using the Enter key.",
+      "root_cause": "In terminal raw mode on Windows, pressing Enter produces key sequence variations (\r\n) where fast return buffering or key priority handling in KeypressContext and useSelectionList can convert or fail to match the Return command (Command.RETURN), preventing selection handling in RadioButtonSelect and ToolConfirmationMessage.",
+      "context": "Tool confirmation dialogs rely on RadioButtonSelect and the useSelectionList hook to capture keyboard shortcuts (1, 2, 3 or Enter/Return). When Enter keypress events are modified (e.g., converted to Shift+Enter via bufferFastReturn due to fast input or misclassified key events in Windows terminals), keyMatchers[Command.RETURN] does not match, blocking option selection."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/hooks/useSelectionList.ts",
+        "packages/cli/src/ui/components/messages/ToolConfirmationMessage.tsx",
+        "packages/cli/src/ui/contexts/KeypressContext.tsx"
+      ],
+      "steps": [
+        "Update useSelectionList to ensure Return/Enter key presses (including Shift+Enter or newline sequences in dialog selection lists) properly trigger selection for the current active item.",
+        "Pass priority handling from ToolConfirmationMessage down to RadioButtonSelect and useSelectionList so keypress events are captured reliably.",
+        "Refine KeypressContext fast return buffering and CRLF key event translation on win32 to prevent Enter keypresses from unintentionally converting to Shift+Enter when selecting list items."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/messages/ToolConfirmationMessage.test.tsx",
+      "expected_behavior": "Pressing the Enter key on a tool confirmation prompt selects the currently highlighted option (e.g., 'Allow once') and submits the confirmation outcome.",
+      "verification_steps": [
+        "Add a test case in ToolConfirmationMessage.test.tsx verifying that pressing the Enter key resolves the tool confirmation with the expected outcome (e.g., ToolConfirmationOutcome.ProceedOnce).",
+        "Run Vitest on packages/cli/src/ui/components/messages/ToolConfirmationMessage.test.tsx to verify all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:02Z",
+  "execution_time_seconds": 103.0
+}

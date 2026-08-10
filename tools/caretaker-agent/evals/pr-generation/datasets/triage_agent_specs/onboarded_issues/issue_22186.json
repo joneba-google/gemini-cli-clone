@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22186,
+  "title": "get-shit-done output hook causes crash",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report provides a clear description of the crash occurring when an output stream is aborted, including a complete stack trace (AbortError thrown in node-fetch during GeminiClient.processTurn/sendMessageStream) and full client environment information. The issue is actionable and represents a code defect in error handling during stream cancellation.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is an unhandled AbortError promise rejection during streaming turn execution with a clear stack trace. Fixing it involves updating the catch block in Turn.run() to check for isAbortError(e) in addition to signal.aborted, and making isAbortError in errors.ts resilient to AbortError objects across different runtimes."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#22186",
+    "summary": {
+      "problem": "When a request or stream is aborted during execution (e.g., via an output hook or user signal), node-fetch throws an AbortError. Turn.run() only checks signal.aborted in its catch block and does not check isAbortError(e), causing unhandled AbortErrors to bubble up and crash the CLI.",
+      "root_cause": "In Turn.run() (packages/core/src/core/turn.ts), the catch block checks 'if (signal.aborted)' to yield UserCancelled. If node-fetch throws an AbortError before signal.aborted is evaluated or if isAbortError(e) is not checked in Turn.run(), the error is treated as an unexpected failure rather than a user cancellation. Additionally, isAbortError in packages/core/src/utils/errors.ts strictly requires 'error instanceof Error', which can fail if AbortError originates from a DOMException or node-fetch object without matching the global Error prototype.",
+      "context": "Handling AbortError gracefully in Turn.run() and strengthening isAbortError ensures that stream cancellation events yield GeminiEventType.UserCancelled and fail gracefully without crashing the CLI process."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/turn.ts",
+        "packages/core/src/utils/errors.ts"
+      ],
+      "steps": [
+        "Update isAbortError in packages/core/src/utils/errors.ts to check if error has name 'AbortError', code 'ABORT_ERR', or type 'aborted', in addition to instanceof Error.",
+        "In packages/core/src/core/turn.ts, update the catch block in the run method to check 'if (signal?.aborted || isAbortError(e))' so that AbortError exceptions are caught and yield GeminiEventType.UserCancelled."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/turn.test.ts",
+      "expected_behavior": "When an AbortError is thrown during turn execution, Turn.run() catches it and yields a UserCancelled event instead of letting the AbortError crash the process.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/core/turn.test.ts that simulates an AbortError being thrown during sendMessageStream.",
+        "Verify that Turn.run() handles the AbortError gracefully and yields GeminiEventType.UserCancelled."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:26Z",
+  "execution_time_seconds": 89.45
+}

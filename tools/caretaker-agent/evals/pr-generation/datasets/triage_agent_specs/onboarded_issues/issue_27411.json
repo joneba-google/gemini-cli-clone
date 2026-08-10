@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27411,
+  "title": "Critical routing flaw in Gemini CLI \u2013 Background utility limits block main Pro model",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear and actionable bug report detailing a flaw in model routing and fallback handling, where rate limits on background utility models cause the CLI to switch or block the primary active model (gemini-3.1-pro-preview). Complete client environment details were provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires a targeted logic adjustment in packages/core/src/config/config.ts to ensure activateFallbackMode only updates the active model if the primary model failed, alongside updated fallback handler logic in packages/core/src/fallback/handler.ts and unit tests in packages/core/src/fallback/handler.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27411",
+    "summary": {
+      "problem": "Rate limiting or failure in background utility models (e.g. utility_router, utility_loop_detector) switches or blocks the explicitly configured main model (e.g. gemini-3.1-pro-preview).",
+      "root_cause": "In packages/core/src/config/config.ts, activateFallbackMode unconditionally mutates the main active model (_activeModel) whenever a fallback occurs, even when the failure occurred in a non-active background utility model.",
+      "context": "Background utility tasks execute using dedicated or lightweight models. When these models experience quota/rate limits, the fallback mechanism should register runtime overrides for the specific failed utility model without altering the user's explicitly configured primary model."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/config/config.ts",
+        "packages/core/src/fallback/handler.ts"
+      ],
+      "steps": [
+        "In packages/core/src/config/config.ts, modify activateFallbackMode(model, failedModel) so that setModel(model, true) is only invoked when failedModel is undefined or matches the active model.",
+        "In packages/core/src/config/config.ts, ensure that when failedModel is distinct from activeModel, activateFallbackMode records the fallback override mapping without mutating _activeModel.",
+        "In packages/core/src/fallback/handler.ts, verify processIntent passes failedModel to activateFallbackMode when an auxiliary model fails so that only the utility model override is updated."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/fallback/handler.test.ts",
+      "expected_behavior": "When a background utility model fails, fallback overrides are set for that utility model while the primary model remains unchanged and active.",
+      "verification_steps": [
+        "Add a unit test in handler.test.ts simulating a fallback event where failedModel differs from activeModel.",
+        "Verify that activateFallbackMode sets fallbackOverrides for failedModel without changing activeModel.",
+        "Execute Vitest suite to ensure no regressions in fallback behavior."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:09Z",
+  "execution_time_seconds": 58.89
+}

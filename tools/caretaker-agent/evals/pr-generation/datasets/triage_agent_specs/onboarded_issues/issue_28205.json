@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28205,
+  "title": "bug: Gracefully handle failed extension updates in extension-manager.ts",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report regarding extension update failures destroying previous working extensions. It identifies the exact source file (packages/cli/src/config/extension-manager.ts), line location, and existing TODO comment, with explicit reproduction context.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The bug fix is localized to a single file (packages/cli/src/config/extension-manager.ts). It requires creating a temporary backup directory of the extension before updating/uninstalling, wrapping the update and loading step in a try/catch block, and restoring the backup if extension loading fails."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28205",
+    "summary": {
+      "problem": "When updating an extension in extension-manager.ts, the existing extension directory is uninstalled and overwritten before loading the new extension. If loadExtension fails, the user is left with a broken or deleted extension.",
+      "root_cause": "The extension update process does not create a backup copy of the existing extension directory prior to deleting and overwriting it, so failures during extension loading cannot roll back to the previous working version.",
+      "context": "There is an existing TODO comment in packages/cli/src/config/extension-manager.ts at line 450 noting that failed loadExtension calls should restore a backup of the old extension."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/config/extension-manager.ts"],
+      "steps": [
+        "In packages/cli/src/config/extension-manager.ts, update installOrUpdateExtension to create a backup copy of the existing extension directory prior to uninstalling/overwriting it when isUpdate is true.",
+        "Wrap the extension installation and loadExtension call in a try/catch block.",
+        "If loadExtension or installation steps fail during an update, catch the error, restore the backup directory to the original destination path, and re-load the previous extension version.",
+        "Clean up any temporary backup directory created during the update in a finally block or after a successful update/restore."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/extension-manager.test.ts",
+      "expected_behavior": "When an extension update fails during loadExtension, extension-manager should catch the error, restore the old extension files from backup, reload the previous working extension, and rethrow/report the failure gracefully.",
+      "verification_steps": [
+        "Add a unit test in packages/cli/src/config/extension-manager.test.ts simulating a failed extension update where loadExtension throws an error.",
+        "Verify that the extension directory content is restored to the pre-update state.",
+        "Verify that the previous extension version is reloaded.",
+        "Verify that temporary backup directories are cleaned up after the failure handling."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:03Z",
+  "execution_time_seconds": 45.1
+}

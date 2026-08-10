@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27280,
+  "title": "Logger keeps stale session ID after /clear",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a bug where `useLogger` holds onto a stale session ID after `/clear` command because `useLogger` depends on the `config` object reference which remains unchanged. It provides file references and clear expected vs actual behavior.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is a localized logic fix within `useLogger.ts` hook. By subscribing to `uiTelemetryService.on('clear')` inside `useEffect`, `useLogger` can recreate and initialize the `Logger` instance with the updated session ID whenever a session is cleared."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27280",
+    "summary": {
+      "problem": "The useLogger hook creates a Logger instance with config.getSessionId() only on initial mount or when the config reference changes. When the /clear command is executed, a new session ID is generated and updated on config, but useLogger keeps using the old session ID, causing log entries to be saved under the stale session ID.",
+      "root_cause": "useLogger's useEffect dependency array is [config]. Because config is a stable object reference across session clears, the effect does not re-run when config.getSessionId() updates after /clear.",
+      "context": "uiTelemetryService emits a 'clear' event when a session is cleared. SessionStatsProvider in SessionContext.tsx already listens to uiTelemetryService.on('clear') to handle session resets."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/hooks/useLogger.ts"],
+      "steps": [
+        "Import uiTelemetryService from '@google/gemini-cli-core' in packages/cli/src/ui/hooks/useLogger.ts.",
+        "In useLogger, update useEffect to subscribe to the 'clear' event on uiTelemetryService.",
+        "In the 'clear' event listener, create and initialize a new Logger instance using config.getSessionId() and config.storage.",
+        "Ensure the useEffect cleanup function unsubscribes from uiTelemetryService using uiTelemetryService.off('clear', handleClear)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useLogger.test.tsx",
+      "expected_behavior": "When uiTelemetryService emits a 'clear' event, useLogger should create and initialize a new Logger instance with the updated session ID from config.getSessionId().",
+      "verification_steps": [
+        "Add a test case in useLogger.test.tsx that simulates clearing a session via uiTelemetryService.clear().",
+        "Verify that Logger constructor is called with the new session ID returned by config.getSessionId() after the clear event."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:21Z",
+  "execution_time_seconds": 45.13
+}

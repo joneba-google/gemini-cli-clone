@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27901,
+  "title": "Trust dialog discloses the inverse of what executes: nested SessionStart hooks run on one click but are never shown (flat hooks shown but discarded)",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a valid and actionable bug report describing a discrepancy between hook discovery in FolderTrustDiscoveryService and hook execution in HookRegistry, complete with technical details, code references, and reproduction steps.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to updating the hook command extraction logic in `FolderTrustDiscoveryService.ts` to inspect nested `hooks` arrays in hook definitions, along with adding unit tests in `FolderTrustDiscoveryService.test.ts`."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27901",
+    "summary": {
+      "problem": "The workspace-trust dialog fails to display nested SessionStart hooks because FolderTrustDiscoveryService only inspects flat hook definitions, whereas the hook execution engine requires nested hook definitions.",
+      "root_cause": "In `FolderTrustDiscoveryService.ts`, the hook discovery logic iterates through hook event arrays and checks for a direct `command` property on each item (`hook['command']`), ignoring canonical `HookDefinition` objects that wrap hook commands inside a nested `hooks` array (`hook['hooks']`).",
+      "context": "Because the trust dialog only reads flat hook definitions (which the execution engine discards) and misses nested hook definitions (which the execution engine runs), users are not warned about shell commands that execute when trusting a folder."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/FolderTrustDiscoveryService.ts"
+      ],
+      "steps": [
+        "Update the hook discovery logic in `packages/core/src/services/FolderTrustDiscoveryService.ts` to handle both flat and nested hook definitions.",
+        "For each hook item in a hook event array, check if it contains a direct string `command` property, or if it contains a `hooks` array and extract command strings from any items inside that array.",
+        "Add all extracted command strings to the discovered `hooks` Set."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/FolderTrustDiscoveryService.test.ts",
+      "expected_behavior": "FolderTrustDiscoveryService correctly discovers command strings from both flat hook configs and nested hook definitions in settings.json.",
+      "verification_steps": [
+        "Add a unit test in `FolderTrustDiscoveryService.test.ts` that includes both flat and nested hook configurations in settings.json.",
+        "Verify that `results.hooks` contains command names from both flat and nested hook definitions."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:39:15Z",
+  "execution_time_seconds": 163.44
+}

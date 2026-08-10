@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22784,
+  "title": "Bug Description: The grep_search tool fails with a spawn EFTYPE error on Windows (win32). It appears the underlying ripgrep binary is either incompatible with the current OS/architecture or corrupted.",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable report of a bug where grep_search fails with a spawn EFTYPE error on Windows (win32). Sufficient system context and environment details are provided.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "This issue involves platform-specific binary execution errors (Windows/win32) with child_process.spawn and EFTYPE errors, which falls under platform-specific complexities and requires cross-platform verification."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#22784",
+    "summary": {
+      "problem": "The grep_search tool fails with a spawn EFTYPE error on Windows (win32) when attempting to execute the bundled ripgrep binary.",
+      "root_cause": "The availability check in Config.canUseRipgrep() only checks for file existence on disk via resolveRipgrepPath() without verifying that the binary can be spawned successfully. If the binary is corrupted, incompatible with the host architecture, or fails with EFTYPE upon spawn, the application still attempts to register and execute RipGrepTool rather than falling back to standard GrepTool.",
+      "context": "Ripgrep binaries are stored per-platform under vendor/ripgrep. If the binary cannot be executed by child_process.spawn on Windows, validating execution capability during availability check or handling spawn error gracefully allows seamless fallback to GrepTool."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/config/config.ts",
+        "packages/core/src/tools/ripGrep.ts"
+      ],
+      "steps": [
+        "Update Config.canUseRipgrep() in packages/core/src/config/config.ts to verify that the ripgrep binary at the resolved path can be executed without spawning errors (e.g. catching EFTYPE/ENOEXEC).",
+        "Update RipGrepTool in packages/core/src/tools/ripGrep.ts to catch spawn execution failures and handle EFTYPE errors gracefully."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/config/config.test.ts",
+      "expected_behavior": "When ripgrep binary execution fails during the availability check with an EFTYPE spawn error, canUseRipgrep() returns false, causing the system to log a fallback event and register GrepTool instead of failing.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/config/config.test.ts mocking a spawn error with code EFTYPE when calling canUseRipgrep().",
+        "Assert that canUseRipgrep() returns false and that GrepTool is registered as the fallback tool."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:03Z",
+  "execution_time_seconds": 91.69
+}

@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21919,
+  "title": "fix(integration-tests): TypeScript strict-null errors in test files",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable report of two TypeScript compilation/type-checking errors in integration test files, complete with specific filenames, line numbers, and TypeScript error codes (TS18048 and TS2339).",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Fixing these type errors requires minor, localized edits in two test files to handle optional fields with null-safe checks (optional chaining) and proper union type narrowing."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21919",
+    "summary": {
+      "problem": "TypeScript strict-null and union type errors occur in integration test files hooks-system.test.ts and concurrency-limit.test.ts during type checking.",
+      "root_cause": "In hooks-system.test.ts, hookCall.stdout and hookCall.stderr are accessed without optional chaining/null checks despite being typed as optional or string | undefined. In concurrency-limit.test.ts, property 'error' is accessed on a toolRequest union type without proper type narrowing.",
+      "context": "Strict null checking in TypeScript flags potential runtime errors when optional properties or union types are accessed without verifying property existence or handling undefined values."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "integration-tests/hooks-system.test.ts",
+        "integration-tests/concurrency-limit.test.ts"
+      ],
+      "steps": [
+        "In integration-tests/hooks-system.test.ts around lines 162-163, add optional chaining or null checks to stdout and stderr accesses (e.g., log.hookCall.stdout?.includes(...) || log.hookCall.stderr?.includes(...)).",
+        "In integration-tests/concurrency-limit.test.ts around line 42, ensure toolRequest is properly narrowed or safe property access is used to check for the error property before calling .includes('Rate limit exceeded')."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "integration-tests/hooks-system.test.ts",
+      "expected_behavior": "TypeScript type check passes without TS18048 or TS2339 compiler errors in integration test files.",
+      "verification_steps": [
+        "Run type checking via npx tsc --noEmit or npm run typecheck to verify all integration test files compile cleanly without strict-null or missing property errors."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:07Z",
+  "execution_time_seconds": 42.1
+}

@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25747,
+  "title": "A2A server shallow-merges user and workspace settings, causing nested config to be lost",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a bug in A2A server configuration merging where top-level object spreading causes nested user settings to be lost when overridden by workspace settings. It includes reproduction examples, expected versus actual behavior, and references to the exact codebase locations.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires updating the object merge logic in a single source file (packages/a2a-server/src/config/settings.ts) to perform deep object merging for nested setting sections, and updating unit tests in packages/a2a-server/src/config/settings.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25747",
+    "summary": {
+      "problem": "A2A server settings loading uses a shallow object spread when combining user and workspace settings, causing nested settings objects to be completely overwritten.",
+      "root_cause": "In packages/a2a-server/src/config/settings.ts, loadSettings combines userSettings and workspaceSettings with { ...userSettings, ...workspaceSettings }. When workspaceSettings contains a nested object, all unmentioned properties in userSettings for that object are replaced rather than merged.",
+      "context": "Nested configuration sections like fileFiltering, tools, telemetry, and experimental in workspace settings should selectively override specific fields while retaining global defaults set in user settings."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/a2a-server/src/config/settings.ts"],
+      "steps": [
+        "Implement or utilize a deep merge utility in packages/a2a-server/src/config/settings.ts to recursively merge nested setting objects (such as fileFiltering, tools, telemetry, and experimental) between userSettings and workspaceSettings.",
+        "Update loadSettings to perform a deep merge of workspaceSettings onto userSettings instead of a shallow object spread.",
+        "Ensure security-sensitive properties policyPaths and adminPolicyPaths continue to strictly use values from userSettings regardless of workspace settings."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/a2a-server/src/config/settings.test.ts",
+      "expected_behavior": "Workspace settings deep merge with user settings so that partial overrides in workspace settings retain unmentioned nested properties from user settings.",
+      "verification_steps": [
+        "Update existing test 'should overwrite top-level settings from workspace (shallow merge)' in packages/a2a-server/src/config/settings.test.ts to expect nested user keys (e.g., enableRecursiveFileSearch) to be preserved when workspace settings specify only a subset of fields (e.g., respectGitIgnore).",
+        "Add additional unit tests verifying deep merge functionality across other nested configuration fields like tools or experimental."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:57Z",
+  "execution_time_seconds": 30.34
+}

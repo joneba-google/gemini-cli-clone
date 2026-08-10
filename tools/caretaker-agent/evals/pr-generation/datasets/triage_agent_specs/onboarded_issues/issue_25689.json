@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25689,
+  "title": "Bug: 'text.response' in custom theme triggers validation error (unrecognized key)",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a bug where custom themes containing 'text.response' trigger a validation error ('Unrecognized key(s) in object: response') due to missing key in the CustomTheme validation schema.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires adding the missing 'response' property to the CustomTheme 'text' schema definition in packages/cli/src/config/settingsSchema.ts, regenerating schemas/settings.schema.json, and verifying existing tests."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25689",
+    "summary": {
+      "problem": "The 'text.response' key in custom theme configurations triggers a validation error: 'Unrecognized key(s) in object: response'.",
+      "root_cause": "The CustomTheme schema in packages/cli/src/config/settingsSchema.ts is missing the 'response' property under the 'text' object, causing validation to fail when additionalProperties is set to false.",
+      "context": "The 'response' property is documented and supported in the CustomTheme type in packages/core/src/config/config.ts and used in terminal theme rendering."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/config/settingsSchema.ts",
+        "schemas/settings.schema.json"
+      ],
+      "steps": [
+        "In packages/cli/src/config/settingsSchema.ts, update the CustomTheme schema definition under text.properties to include response of type string.",
+        "Regenerate or update schemas/settings.schema.json to include the response property under CustomTheme text properties."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/settings-validation.test.ts",
+      "expected_behavior": "Custom themes containing text.response pass validation without unrecognized key errors.",
+      "verification_steps": [
+        "Run unit tests in packages/cli/src/config/settings-validation.test.ts using Vitest.",
+        "Verify that validating a settings object containing a customTheme with text.response returns success."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:13Z",
+  "execution_time_seconds": 42.35
+}

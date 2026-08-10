@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28416,
+  "title": "[Bug] GlobTool returns raw symlink paths in results but uses resolved real paths internally \u2014 causes downstream read_file/edit failures on macOS and symlinked workspaces",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear and actionable bug report regarding path inconsistency in GlobTool output when operating in symlinked workspaces or macOS /tmp directories. It provides detailed reproduction steps, root cause analysis, and explicit line numbers in the codebase.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to resolving paths in a single source file (packages/core/src/tools/glob.ts) and adding/updating unit tests in packages/core/src/tools/glob.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28416",
+    "summary": {
+      "problem": "GlobTool returns raw symlink paths in result strings, leading to path mismatch errors in downstream tools (like read_file and edit) when executing in symlinked workspace directories or macOS /tmp environments.",
+      "root_cause": "In GlobTool.execute(), sortedAbsolutePaths maps sortedEntries using entry.fullpath(), which returns raw string path resolution from the glob library rather than canonical real paths.",
+      "context": "The glob library's entry.fullpath() does not perform realpath resolution on symlinks. Because file access validation and subsequent tools in gemini-cli resolve inputs via resolveToRealPath, returning unresolved symlink paths causes path comparison and file access errors."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/glob.ts"],
+      "steps": [
+        "Import resolveToRealPath from ../utils/paths.js in packages/core/src/tools/glob.ts.",
+        "Update GlobTool.execute() to resolve entry.fullpath() to canonical real paths using resolveToRealPath when building sortedAbsolutePaths.",
+        "Ensure fallback handling is maintained if resolveToRealPath fails or if entry path cannot be resolved."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/glob.test.ts",
+      "expected_behavior": "GlobTool returns canonical symlink-resolved absolute paths in output results when executed within symlinked target directories.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/tools/glob.test.ts that execute GlobTool against a symlinked directory.",
+        "Verify that returned paths in llmContent match canonical real paths rather than unresolved symlink paths."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:33:59Z",
+  "execution_time_seconds": 105.84
+}

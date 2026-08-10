@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28037,
+  "title": "google_web_search loops indefinitely when no relevant results are found",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a valid and actionable bug report detailing how `google_web_search` enters an infinite loop when queries yield no relevant results, complete with reproduction steps, environment context, and expected behavior.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires adding search attempt tracking or a maximum search attempt limit in `packages/core/src/tools/web-search.ts` to prevent unbounded search iterations when no relevant results are found. This is a localized logic fix in a single source file."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28037",
+    "summary": {
+      "problem": "The google_web_search tool repeatedly reformulates and retries search queries when no relevant results are found, entering an unbounded loop.",
+      "root_cause": "WebSearchTool lacks attempt tracking or bounding logic for search requests, and loop detection based on exact argument hashes fails to trigger when search queries are slightly reformulated.",
+      "context": "When requesting obscure or unindexed information, the agent continuously generates altered search queries and calls google_web_search indefinitely until manually interrupted by the user."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/web-search.ts"],
+      "steps": [
+        "Track search execution count or consecutive search attempts within WebSearchTool or its invocation context.",
+        "Enforce a configurable maximum search attempt threshold when queries return no relevant results or citations.",
+        "Return an informative response when the attempt threshold is reached, instructing the model to inform the user that no results were found instead of making further search calls."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/web-search.test.ts",
+      "expected_behavior": "Web search limits consecutive search attempts when queries return no results and returns an explicit stopping message once the limit is reached.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/tools/web-search.test.ts verifying search attempt tracking across invocations.",
+        "Verify that exceeding the maximum attempt limit returns a prompt advising the model to stop searching and report results to the user."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:36:43Z",
+  "execution_time_seconds": 77.57
+}

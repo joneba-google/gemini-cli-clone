@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25369,
+  "title": "Thai SARA AM (U+0E33) width mismatch causing erratic line jumping and output duplication (spamming) in tmux",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed and actionable report of a specific character rendering and string width handling bug involving Thai SARA AM (U+0E33) in tmux terminal environments, including clear reproduction steps, technical context, and observed versus expected behaviors.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The issue involves platform-specific terminal rendering, character width calculation desynchronization, and terminal redraw flickering/duplication when running inside tmux/xterm environments."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25369",
+    "summary": {
+      "problem": "Thai SARA AM (U+0E33) character causes width mismatch between internal layout engine calculations and terminal/tmux rendering, leading to line jumping, cursor desync, and output duplication.",
+      "root_cause": "The internal string-width calculation in textUtils/Ink treats Thai SARA AM (U+0E33) as having a visual width of 0 or merging it into a 1-column cluster, whereas standard terminal wcwidth and tmux/xterm.js render it across 2 columns.",
+      "context": "When streaming responses containing SARA AM in tmux, the terminal cursor position desynchronizes from Ink's internal cursor calculation, resulting in erroneous clear line and move cursor commands that duplicate streamed text lines."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/utils/textUtils.ts"],
+      "steps": [
+        "Update the string width calculation logic in packages/cli/src/ui/utils/textUtils.ts to handle Thai SARA AM (U+0E33) character width.",
+        "Ensure getCachedStringWidth explicitly accounts for the visual width of U+0E33 so that string length measurements align with standard terminal wcwidth behavior.",
+        "Verify that caching mechanisms in stringWidthCache properly retain updated width estimates for Thai text strings containing U+0E33."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/utils/textUtils.test.ts",
+      "expected_behavior": "Thai text containing SARA AM (U+0E33) is calculated with the correct string width matching terminal grid layout expectations, preventing cursor desync.",
+      "verification_steps": [
+        "Add unit tests in packages/cli/src/ui/utils/textUtils.test.ts testing getCachedStringWidth with Thai strings containing SARA AM (U+0E33).",
+        "Assert that getCachedStringWidth returns the expected visual width for SARA AM characters and clusters.",
+        "Ensure all existing text utility unit tests pass with Vitest."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:53Z",
+  "execution_time_seconds": 57.93
+}

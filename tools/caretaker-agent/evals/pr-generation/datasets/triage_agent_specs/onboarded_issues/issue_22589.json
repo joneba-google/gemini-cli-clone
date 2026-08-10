@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22589,
+  "title": "fix(cli): all Executing subagent tool calls dropped from UI state, breaking task-tree\n  hierarchy",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a valid, actionable bug report detailing a defect in useToolScheduler.ts where subagent tool calls in Executing status are dropped before entering state, breaking task-tree hierarchy display.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires a localized logic update to a single filter condition in useToolScheduler.ts to include CoreToolCallStatus.Executing for non-root schedulers, along with updating test cases in useToolScheduler.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#22589",
+    "summary": {
+      "problem": "Subagent (non-root scheduler) tool calls in Executing status are filtered out before entering UI state if they were not previously awaiting approval, causing them to be dropped from state and breaking the task-tree hierarchy.",
+      "root_cause": "In useToolScheduler.ts, the TOOL_CALLS_UPDATE event handler filters non-root scheduler tool calls to only include those with status AwaitingApproval or existing prevCallIds. First-seen subagent tool calls that transition directly to Executing without approval (such as read or search tools) are dropped.",
+      "context": "The task-tree visualization relies on parentCallId and pendingHistoryItems populated from toolCallsMap. When subagent tool calls are dropped from state, the task-tree cannot construct the nested call graph."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/hooks/useToolScheduler.ts"],
+      "steps": [
+        "Update the filter condition in packages/cli/src/ui/hooks/useToolScheduler.ts within the TOOL_CALLS_UPDATE event handler to include tc.status === CoreToolCallStatus.Executing alongside CoreToolCallStatus.AwaitingApproval and prevCallIds.has(tc.request.callId) for non-root schedulers."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useToolScheduler.test.ts",
+      "expected_behavior": "Tool calls from non-root schedulers in Executing status are preserved in the hook state upon receiving a TOOL_CALLS_UPDATE event, allowing the task-tree and UI to track subagent executions.",
+      "verification_steps": [
+        "Update unit tests in packages/cli/src/ui/hooks/useToolScheduler.test.ts to verify that non-root scheduler tool calls in Executing status are retained in state.",
+        "Run unit tests using Vitest: npm test packages/cli/src/ui/hooks/useToolScheduler.test.ts."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:44:25Z",
+  "execution_time_seconds": 37.09
+}

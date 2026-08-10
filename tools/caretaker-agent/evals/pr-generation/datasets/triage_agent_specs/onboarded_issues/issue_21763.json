@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21763,
+  "title": "Bugreport doesn't provide context of the subagent",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear, actionable bug report detailing that the /bug command currently exports only main session chat history without including subagent session context.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Including subagent context/history in bug reports requires updating bugCommand and historyExportUtils to collect and serialize subagent execution history alongside main chat history across CLI and core modules, as well as updating corresponding unit tests."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21763",
+    "summary": {
+      "problem": "The /bug command exports main session chat history when generating a bug report, but does not include execution context or history from subagents invoked during the session.",
+      "root_cause": "In packages/cli/src/ui/commands/bugCommand.ts, exportHistoryToFile is called with only chat.getHistory(), which retrieves messages from the primary chat session without aggregating subagent execution histories or sessions.",
+      "context": "Subagents operate as nested or background sessions or tool invocations. When debugging issues involving subagent behavior, developers need subagent interaction traces included in exported bug reports."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/commands/bugCommand.ts",
+        "packages/cli/src/ui/utils/historyExportUtils.ts"
+      ],
+      "steps": [
+        "Update historyExportUtils.ts to support serializing subagent context and history alongside main session history.",
+        "Update bugCommand.ts to retrieve subagent session histories and context from the agent context or subagent manager.",
+        "Pass subagent history data into exportHistoryToFile so that exported bug reports contain subagent invocation details."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/commands/bugCommand.test.ts",
+      "expected_behavior": "When /bug is executed, the exported history JSON file includes both main session history and active/completed subagent session context.",
+      "verification_steps": [
+        "Update bugCommand.test.ts to mock subagent history in CommandContext / agentContext.",
+        "Verify that exportHistoryToFile is invoked with subagent context included in the exported history payload."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:30Z",
+  "execution_time_seconds": 44.49
+}

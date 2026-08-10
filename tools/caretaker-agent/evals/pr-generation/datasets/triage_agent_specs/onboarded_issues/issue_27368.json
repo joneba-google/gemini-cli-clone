@@ -1,0 +1,48 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27368,
+  "title": "[Bug]: Latest chat session permanently lost from /chat list after using gemini --resume",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides clear reproduction steps, environment details, and expected vs actual behavior regarding session persistence when using gemini --resume.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing this bug requires handling session metadata updates and session retention cleanup logic across both packages/cli and packages/core."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27368",
+    "summary": {
+      "problem": "Using gemini --resume causes the most recent chat session to permanently disappear from the /chat list on subsequent normal launches.",
+      "root_cause": "When a session is resumed, ChatRecordingService appends metadata updates ($set) to the session file. During subsequent normal startup, getAllSessionFiles and cleanupExpiredSessions fail to correctly recognize the updated metadata or evaluate the session as non-resumable/corrupted, causing automatic session cleanup to delete or exclude the session file.",
+      "context": "Automatic session retention cleanup runs at CLI startup. Resuming a session appends metadata records to the session file, which must be correctly handled when parsing session records during cleanup and session listing."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/utils/sessionCleanup.ts",
+        "packages/cli/src/utils/sessionUtils.ts",
+        "packages/core/src/services/chatRecordingService.ts"
+      ],
+      "steps": [
+        "Ensure loadConversationRecord in packages/core/src/services/chatRecordingService.ts correctly preserves hasResumableContent and metadata when processing $set metadata update records appended during session resumption.",
+        "Update getAllSessionFiles in packages/cli/src/utils/sessionUtils.ts to correctly recognize and preserve resumed session records without filtering them out as non-resumable.",
+        "Ensure cleanupExpiredSessions in packages/cli/src/utils/sessionCleanup.ts does not treat valid resumed session files as corrupted or eligible for deletion on normal CLI startup."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/sessionCleanup.test.ts",
+      "expected_behavior": "Resumed chat sessions persist across subsequent normal CLI launches and remain visible in the /chat session list.",
+      "verification_steps": [
+        "Create a chat session and save it.",
+        "Resume the chat session using resolveSessionId with --resume and update metadata via ChatRecordingService.",
+        "Run cleanupExpiredSessions on a subsequent simulated normal launch with a new session ID.",
+        "Verify that the resumed session file is not deleted and remains accessible in getAllSessionFiles."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:51Z",
+  "execution_time_seconds": 80.76
+}

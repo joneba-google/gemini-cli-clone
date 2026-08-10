@@ -1,0 +1,39 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 19239,
+  "title": "/clear docs dont mention that it clears context",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report correctly identifies an omission in the documentation for the /clear command in docs/reference/commands.md, which states that /clear only clears the visual terminal display when in fact it also resets the agent conversation context and starts a new session.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Updating documentation in docs/reference/commands.md is a trivial text change (documentation & strings)."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#19239",
+    "summary": {
+      "problem": "The documentation for /clear in docs/reference/commands.md incorrectly states that it only clears the terminal display, failing to mention that it also clears the agent context and starts a new session.",
+      "root_cause": "The command documentation in docs/reference/commands.md was not updated when /clear was implemented with context resetting functionality (via geminiClient.resetChat()).",
+      "context": "In packages/cli/src/ui/commands/clearCommand.ts, executing /clear triggers geminiClient.resetChat() to clear the agent's active conversation history and context, resets session state, and fires session lifecycle hooks before clearing the UI terminal screen."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["docs/reference/commands.md"],
+      "steps": [
+        "Update the /clear section in docs/reference/commands.md to state that it clears the agent conversation context and starts a new session, in addition to clearing the visible terminal screen."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "The /clear documentation in docs/reference/commands.md clearly describes both the visual terminal clearing and the reset of the agent's conversation context.",
+      "verification_steps": [
+        "Review docs/reference/commands.md to confirm that the description for /clear explicitly notes that agent conversation context is cleared and a new session is started."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:35Z",
+  "execution_time_seconds": 38.52
+}

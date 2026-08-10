@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28605,
+  "title": "Nightly Release Failed for  on 2026-07-31",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue reports an actionable workflow failure in the nightly release pipeline where the release tag in the title was missing due to premature workflow step failure.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires reordering steps in `.github/workflows/release-nightly.yml` to compute the release version before test execution, and adding a fallback for empty RELEASE_TAG in the failure issue creation step."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28605",
+    "summary": {
+      "problem": "The automated Nightly Release failure issue was created with an empty release tag in the title ('Nightly Release Failed for  on 2026-07-31').",
+      "root_cause": "In `.github/workflows/release-nightly.yml`, the 'Get Nightly Version' step was placed after the 'Run Tests' step. When tests (or an earlier step) fail, 'Get Nightly Version' is skipped, leaving `steps.nightly_version.outputs.RELEASE_TAG` empty when the failure issue is created.",
+      "context": "Moving 'Get Nightly Version' before 'Run Tests' ensures the release tag is calculated before test execution, and adding a fallback for `RELEASE_TAG` in the 'Create Issue on Failure' step prevents empty tag placeholders in issue titles."
+    },
+    "implementation_plan": {
+      "files_to_modify": [".github/workflows/release-nightly.yml"],
+      "steps": [
+        "Open `.github/workflows/release-nightly.yml`.",
+        "Move the 'Get Nightly Version' step so that it runs before the 'Run Tests' step.",
+        "Update the 'Create Issue on Failure' step to handle empty RELEASE_TAG variables gracefully (e.g. defaulting RELEASE_TAG to 'unknown' if empty)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "When the nightly release workflow fails, the release tag is computed beforehand and included in the issue title, or falls back gracefully without leaving empty gaps in the title.",
+      "verification_steps": [
+        "Inspect `.github/workflows/release-nightly.yml` to confirm 'Get Nightly Version' precedes 'Run Tests'.",
+        "Verify that the issue creation script handles undefined or empty RELEASE_TAG environment variables correctly."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "processed_at": "2026-08-06T17:33:08Z",
+  "execution_time_seconds": 105.86
+}

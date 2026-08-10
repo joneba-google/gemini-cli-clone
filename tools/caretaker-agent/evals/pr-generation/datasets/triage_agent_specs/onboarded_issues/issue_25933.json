@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25933,
+  "title": "run_shell_command calls fail with \"execvp(3) failed.: Permission denied\"",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report provides a clear problem statement, specific environment details (RHEL8/9, Node 22/25, CLI v0.39.1, Linux, no sandbox), and actionable steps to reproduce ('echo Hello' or any external command fails with 'execvp(3) failed.: Permission denied').",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "This issue involves platform-specific terminal execution behavior using node-pty and child_process on Linux/RHEL environments where pty spawn-helper binary permissions or pty execution failure prevents shell command execution, falling under PTY/spawn process management complexities."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25933",
+    "summary": {
+      "problem": "Executing external commands via run_shell_command fails on RHEL Linux hosts with 'execvp(3) failed.: Permission denied'.",
+      "root_cause": "When @lydell/node-pty or node-pty spawns a shell in Unix environments, the native helper binary (spawn-helper) or shell execution fails due to missing executable permissions or execution restrictions. Additionally, when execvp fails inside node-pty, the error is written to the pty output stream without throwing a synchronous exception, bypassing the catch block that would fall back to child_process execution.",
+      "context": "This occurs on Linux environments (such as RHEL8 and RHEL9) across Node.js versions. Ensuring spawn-helper permissions are set correctly during getPty initialization and ensuring fallback to child_process when pty execution fails resolves the issue."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/getPty.ts",
+        "packages/core/src/services/shellExecutionService.ts"
+      ],
+      "steps": [
+        "Update getPty in packages/core/src/utils/getPty.ts to verify and set executable permissions (0o755) on the node-pty spawn-helper binary on Unix systems if present.",
+        "Update ShellExecutionService in packages/core/src/services/shellExecutionService.ts to detect pty execution failure (such as 'execvp(3) failed') and fall back to childProcessFallback."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/shellExecutionService.test.ts",
+      "expected_behavior": "When node-pty execution encounters permission issues or spawn-helper failure, shell command execution gracefully falls back to child_process and succeeds without failing.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/services/shellExecutionService.test.ts to simulate node-pty execvp failure and verify that execution falls back to child_process."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:39Z",
+  "execution_time_seconds": 95.66
+}

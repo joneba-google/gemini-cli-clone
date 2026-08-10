@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 24246,
+  "title": "Gemini CLI encounters 400 error with > 128 tools",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue reports a clear, actionable defect: Gemini CLI fails with an HTTP 400 error when the number of active tools exceeds the Gemini API limit of 128 function declarations. There is sufficient information to identify the root cause and implement a fix.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires defining a maximum limit constant (128) and capping the returned array of function declarations in ToolRegistry.getFunctionDeclarations in packages/core/src/tools/tool-registry.ts, along with adding a unit test in packages/core/src/tools/tool-registry.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24246",
+    "summary": {
+      "problem": "Gemini CLI encounters an HTTP 400 error when more than 128 tools are available because the Gemini API enforces a limit of 128 function declarations per request.",
+      "root_cause": "ToolRegistry.getFunctionDeclarations() returns all active tools without capping them to the 128 function declaration limit imposed by the Gemini API.",
+      "context": "When many MCP servers or project tools are active, the total function declaration count exceeds 128, causing Gemini API requests to fail with HTTP 400 Bad Request."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/tool-registry.ts"],
+      "steps": [
+        "Define a constant MAX_FUNCTION_DECLARATIONS = 128 in packages/core/src/tools/tool-registry.ts.",
+        "In ToolRegistry.getFunctionDeclarations(), cap the returned declarations array to MAX_FUNCTION_DECLARATIONS using slice(0, MAX_FUNCTION_DECLARATIONS).",
+        "In ToolRegistry.getFunctionDeclarationsFiltered(), also slice the result array to MAX_FUNCTION_DECLARATIONS."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/tool-registry.test.ts",
+      "expected_behavior": "ToolRegistry.getFunctionDeclarations() returns at most 128 function declarations even when more than 128 active tools are registered.",
+      "verification_steps": [
+        "Register 130 mock tools in ToolRegistry in a unit test.",
+        "Call getFunctionDeclarations() and assert that the returned array length is 128."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:41Z",
+  "execution_time_seconds": 73.68
+}

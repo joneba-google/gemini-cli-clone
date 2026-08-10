@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28340,
+  "title": "ui.errorVerbosity = \"full\", does not display retry progress indicators in the UI",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report provides a complete, actionable, and clear bug description detailing how retry progress indicators fail to render under errorVerbosity: 'full'. It includes system/client details, precise expected vs. actual behavior, technical root cause analysis identifying the exact component prop flow and display priority issues, and a unit test reproduction case.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires localized prop passing and precedence ordering adjustments across three React/Ink components in packages/cli/src/ui (StatusRow.tsx, LoadingIndicator.tsx, and useLoadingIndicator.ts). All affected components and test files are identified, and no cross-package architectural changes are required."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28340",
+    "summary": {
+      "problem": "When ui.errorVerbosity = 'full', terminal loading spinners fail to render retry progress indicators (e.g. 'Trying to reach [...] (Attempt N/10)') during connection failure and recovery retries, displaying only 'Thinking...'.",
+      "root_cause": "In StatusRow.tsx and StatusNode, the currentLoadingPhrase computed by useLoadingIndicator (which contains the retry status phrase) is not passed to StatusNode or LoadingIndicator. Additionally, inside LoadingIndicator.tsx, thought?.subject ('Thinking...') unconditionally overrides currentLoadingPhrase unless currentLoadingPhrase equals INTERACTIVE_SHELL_WAITING_PHRASE.",
+      "context": "The useLoadingIndicator hook correctly computes the retry progress status phrase when streamingState is Responding and retryStatus is populated. However, because StatusNode sets currentLoadingPhrase to undefined when no active hooks are running, and LoadingIndicator suppresses currentLoadingPhrase in favor of thought.subject, connection retry progress is omitted from the UI."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/components/StatusRow.tsx",
+        "packages/cli/src/ui/components/LoadingIndicator.tsx",
+        "packages/cli/src/ui/hooks/useLoadingIndicator.ts"
+      ],
+      "steps": [
+        "Update useLoadingIndicator to clearly separate critical connection status phrases (e.g., retry attempts) from cosmetic phrases (tips, witty remarks).",
+        "Update StatusNode in packages/cli/src/ui/components/StatusRow.tsx to receive currentLoadingPhrase or statusPhrase and pass it down to LoadingIndicator.",
+        "Update LoadingIndicator in packages/cli/src/ui/components/LoadingIndicator.tsx to prioritize critical status/retry phrases over thought?.subject ('Thinking...')."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/StatusRow.test.tsx",
+      "expected_behavior": "When ui.errorVerbosity = 'full' and connection retry attempts occur, the UI displays retry progress indicators (e.g., 'Trying to reach gemini-2.5-flash (Attempt 1/5)') instead of being suppressed by 'Thinking...'.",
+      "verification_steps": [
+        "Add unit test in packages/cli/src/ui/components/StatusRow.test.tsx asserting that currentLoadingPhrase / retry phrase renders when thought subject is present.",
+        "Run Vitest test suite for StatusRow.test.tsx and LoadingIndicator.test.tsx to ensure all status rendering tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:06Z",
+  "execution_time_seconds": 62.49
+}

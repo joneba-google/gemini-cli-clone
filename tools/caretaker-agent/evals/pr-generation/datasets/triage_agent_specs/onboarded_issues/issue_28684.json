@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28684,
+  "title": "Load-order race condition prevents .env variables from being resolved in settings",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a load-order race condition between .env loading and settings variable resolution, complete with an example configuration, expected behavior, and client environment details.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue requires adjusting the sequence of operations within packages/cli/src/config/settings.ts so raw settings are read first, loadEnvironment is invoked to populate process.env from .env files, and then environment variable expansion and Zod validation are performed. This is a localized lifecycle/logic fix within the settings module, backed by clear reproduction steps."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28684",
+    "summary": {
+      "problem": "Environment variables defined in workspace .env files are not resolved in settings (such as MCP server headers) because settings are expanded and validated against process.env before local .env files are loaded into process.env.",
+      "root_cause": "In loadSettings within packages/cli/src/config/settings.ts, individual settings files are read, environment-expanded via resolveEnvVarsInObject, and validated with Zod inside the load() helper function before loadEnvironment() is executed to inject variables from workspace .env files into process.env.",
+      "context": "This creates a load-order race condition where placeholders like $GITHUB_MCP_PAT remain unexpanded string literals when settings are evaluated during CLI startup."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/config/settings.ts"],
+      "steps": [
+        "Separate raw settings file parsing from environment variable resolution and schema validation in loadSettings() in packages/cli/src/config/settings.ts.",
+        "Read and parse the raw JSON configuration from system, defaults, user, and workspace settings files without expanding environment variables.",
+        "Invoke loadEnvironment() using the raw merged settings to populate process.env with variables from the workspace .env file prior to variable expansion.",
+        "Expand environment variables in each settings layer using resolveEnvVarsInObject() against the updated process.env and validate the resolved settings against the Zod schema."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/settings.test.ts",
+      "expected_behavior": "Environment variables defined in workspace .env files should be injected into process.env before settings variable expansion occurs, ensuring placeholders in settings (e.g., $GITHUB_MCP_PAT) resolve to their .env values.",
+      "verification_steps": [
+        "Add unit tests in packages/cli/src/config/settings.test.ts where a setting contains an environment variable placeholder defined only in a local .env file.",
+        "Verify that calling loadSettings() correctly resolves the environment variable placeholder in the returned settings.",
+        "Run vitest on packages/cli/src/config/settings.test.ts to confirm test execution passes."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:31:32Z",
+  "execution_time_seconds": 41.71
+}

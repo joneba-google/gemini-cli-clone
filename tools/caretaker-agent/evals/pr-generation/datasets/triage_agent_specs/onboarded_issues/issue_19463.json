@@ -1,0 +1,39 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 19463,
+  "title": "Gemini CLI issues presenting answer from cli_help subagent",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear reproduction transcript, expected behavior, and client environment information detailing a systemic issue where the CLI presents internal model thoughts instead of the answer returned by the cli_help subagent.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix involves modifying the `processOutput` formatter in `packages/core/src/agents/cli-help-agent.ts` to return human-readable text instead of a raw stringified JSON object, and updating `packages/core/src/agents/cli-help-agent.test.ts`."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#19463",
+    "summary": {
+      "problem": "Gemini CLI fails to cleanly present the answer from the cli_help subagent to the user, resulting in leaked internal thoughts and model monologue in the output.",
+      "root_cause": "The `cli_help` subagent's `processOutput` handler returns stringified JSON (`JSON.stringify(output, null, 2)`). When passed back to the primary agent as tool output, the raw JSON structure causes the primary model to misinterpret the tool response as already displayed, leading to thought leakage instead of relaying the answer.",
+      "context": "Formatting the subagent output as human-readable text containing the `answer` and cited `sources` allows both the CLI UI and the primary model to properly consume and display the subagent result."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/agents/cli-help-agent.ts"],
+      "steps": [
+        "Update the `processOutput` function in `packages/core/src/agents/cli-help-agent.ts` to format the report's `answer` and `sources` into readable markdown text rather than a raw JSON string."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/agents/cli-help-agent.test.ts",
+      "expected_behavior": "The `processOutput` function returns a formatted markdown string containing the answer and sources list when provided with a valid report object.",
+      "verification_steps": [
+        "Update the `processOutput` test case in `packages/core/src/agents/cli-help-agent.test.ts` to assert that output is formatted as markdown text containing the report answer and sources."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:54Z",
+  "execution_time_seconds": 62.71
+}

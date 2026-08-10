@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 26318,
+  "title": "PowerShell command substitution blocks /setup-github command",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report describing how the `/setup-github` command is blocked on PowerShell by `detectCommandSubstitution` due to wrapping unquoted subshell parentheses `(...)` and missing shell argument escaping.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to a single command file (`setupGithubCommand.ts`) and its corresponding unit tests (`setupGithubCommand.test.ts`). The root cause is clear and requires straightforward string formatting and argument escaping adjustments."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#26318",
+    "summary": {
+      "problem": "The `/setup-github` slash command generates shell commands wrapped in subshell parentheses `(...)` without proper shell argument escaping, causing `detectCommandSubstitution` to block execution on PowerShell.",
+      "root_cause": "In `setupGithubCommand.ts`, commands are joined and wrapped in unquoted subshell parentheses `(${commands.join(' && ')})`, which triggers `detectPowerShellSubstitution` in `shell-utils.ts`. Additionally, URL arguments and echo output lack proper shell argument escaping.",
+      "context": "PowerShell interprets unquoted parentheses as subexpressions, causing security checks in `detectCommandSubstitution` to block the execution of `/setup-github` on Windows."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/commands/setupGithubCommand.ts"],
+      "steps": [
+        "In `packages/cli/src/ui/commands/setupGithubCommand.ts`, remove the outer subshell parentheses `(...)` wrapping when combining `commands`.",
+        "Use `escapeShellArg` to escape URLs and dynamic arguments when building the open URL shell commands in `getOpenUrlsCommands`.",
+        "Ensure the resulting command string executes cleanly across platforms without triggering `detectCommandSubstitution` checks."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/commands/setupGithubCommand.test.ts",
+      "expected_behavior": "The command string returned by `/setup-github` does not contain wrapping subshell parentheses and uses properly escaped shell arguments, passing `detectCommandSubstitution` without being blocked on PowerShell.",
+      "verification_steps": [
+        "Update `packages/cli/src/ui/commands/setupGithubCommand.test.ts` assertions to check that `command` does not contain wrapping parentheses `(...)`.",
+        "Add assertions in tests to confirm URL arguments are safely escaped.",
+        "Run Vitest tests for `setupGithubCommand.test.ts` to confirm all test cases pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:10Z",
+  "execution_time_seconds": 132.26
+}

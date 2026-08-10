@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21924,
+  "title": "High performance and flicker free behavior on terminal resize",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue reports a clear performance bug regarding terminal redraw flickering on window resize, providing actionable details for migrating history rendering from Static to RenderStatic and batching history updates.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Resolving terminal redraw flickering by migrating React/Ink rendering from Static to RenderStatic and implementing batched state updates on resize falls under Medium effort for Ink state and lifecycle management."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21924",
+    "summary": {
+      "problem": "Terminal resizing causes noticeable flickering and performance degradation when attempting to update the complete history on the first frame after a resize event.",
+      "root_cause": "MainContent uses Ink's Static component to render history items, forcing a full synchronous re-render of all static history items immediately upon terminal resize.",
+      "context": "Migrating history items to RenderStatic and processing history item updates in small batches across frames on terminal resize eliminates render spikes and screen flicker outside alternate buffer mode."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/components/MainContent.tsx",
+        "packages/cli/src/ui/AppContainer.tsx"
+      ],
+      "steps": [
+        "Migrate static history item rendering in MainContent.tsx from Static to RenderStatic.",
+        "Implement a batching mechanism for history item updates on terminal resize in AppContainer.tsx and MainContent.tsx so history items are updated incrementally across multiple frames rather than all at once on the first frame.",
+        "Refactor refreshStatic and terminal resize listeners to support progressive batch updates."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/MainContent.test.tsx",
+      "expected_behavior": "History items render using RenderStatic and update incrementally in small batches during terminal resize without re-rendering all items synchronously in a single frame.",
+      "verification_steps": [
+        "Update unit tests in MainContent.test.tsx to assert that RenderStatic is used for history item rendering.",
+        "Add test cases verifying that terminal resize triggers progressive batched updates to history items."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:45Z",
+  "execution_time_seconds": 141.51
+}

@@ -1,0 +1,50 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 24707,
+  "title": "Bug: run_shell_command hangs for 5 mins on interactive/slow commands (! Shell awaiting input)",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed and actionable report regarding run_shell_command hanging on interactive PTY inputs or slow execution due to a hardcoded 5-minute timeout, along with concrete expected behaviors.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing this issue requires updating configuration schema across packages/cli and packages/core, modifying shell timeout behavior, and adjusting PTY vs fallback execution handling in shell execution services."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24707",
+    "summary": {
+      "problem": "When run_shell_command executes an interactive or slow process, the CLI spawns a PTY waiting for input and blocks the AI agent until a 5-minute timeout occurs.",
+      "root_cause": "The default inactivity timeout is set to 5 minutes (300 seconds) and PTY execution runs by default without a setting to disable PTY for agent execution or easily adjust the shell command timeout.",
+      "context": "AI agents cannot interactively respond to PTY prompts. Allowing users to configure shell command timeouts and disable PTY execution for agent sessions prevents agents from hanging."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/config/settingsSchema.ts",
+        "packages/cli/src/config/config.ts",
+        "packages/core/src/config/config.ts",
+        "packages/core/src/tools/shell.ts",
+        "packages/core/src/services/shellExecutionService.ts"
+      ],
+      "steps": [
+        "Add settings configuration options in settingsSchema.ts for shell tool inactivity timeout and PTY execution preferences for agent workflows.",
+        "Update CLI config loader in packages/cli/src/config/config.ts to read the shell settings and pass them to core Config.",
+        "Update Config class in packages/core/src/config/config.ts to store and expose the shell PTY and inactivity timeout configurations.",
+        "Update Shell execution logic in packages/core/src/tools/shell.ts to respect configured inactivity timeouts and non-interactive PTY execution mode.",
+        "Update ShellExecutionService in packages/core/src/services/shellExecutionService.ts to skip node-pty execution when non-interactive or PTY disabled for agents."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/shell.test.ts",
+      "expected_behavior": "Shell commands enforce configured inactivity timeouts and non-interactive execution without hanging on interactive PTY input.",
+      "verification_steps": [
+        "Add unit tests in shell.test.ts verifying custom shell inactivity timeout triggers abort.",
+        "Add unit tests verifying non-interactive mode bypasses PTY execution."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:00Z",
+  "execution_time_seconds": 160.98
+}

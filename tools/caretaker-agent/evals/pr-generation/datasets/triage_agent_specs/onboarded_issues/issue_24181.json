@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 24181,
+  "title": "\ud0c0\uc774\ud551 \ud55c \uae00\uc790\ub9c8\ub2e4 \ub79c\ub354\uac00 \ub418\uc5b4\uc11c \uacc4\uc18d \uc0c8 \uc904\uc774\ub72c\ub2e4.",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The reporter provides a clear and actionable bug report describing terminal UI redraw issues where typing each character in the interactive prompt appends a new line instead of redrawing in-place. Client environment metadata (CLI 0.35.3, macOS Darwin 24.11.1) is included.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Resolving terminal redraw flickering and new line spamming during input handling requires debugging React/Ink state updates, cursor position calculations in InputPrompt, and stdio stream/line wrapping configurations in interactiveCli.tsx."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24181",
+    "summary": {
+      "problem": "Every typed character in the interactive CLI prompt triggers a terminal re-render that appends a new line instead of updating in-place.",
+      "root_cause": "When handling input events in the interactive prompt, React state updates in InputPrompt trigger Ink re-renders. If terminal dimensions, line wrapping, or stdio streams fail to handle ANSI cursor move/clear sequences properly, Ink falls back to appending new lines on every state change.",
+      "context": "The issue occurs on macOS Darwin v24.11.1 with CLI version 0.35.3 in terminals where Kitty Keyboard Protocol is unsupported or terminal dimensions/line-wrapping settings interfere with Ink's diffing/redrawing mechanism."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/interactiveCli.tsx",
+        "packages/cli/src/ui/components/InputPrompt.tsx"
+      ],
+      "steps": [
+        "Investigate stdio stream proxying and terminal line wrapping options in interactiveCli.tsx during Ink initialization.",
+        "Ensure disableLineWrapping and enableLineWrapping correctly synchronize with Ink's terminal buffer and stdout stream state during input events.",
+        "Optimize InputPrompt input state updates and visual buffer calculations to avoid unnecessary re-renders or erroneous height recalculations on every keystroke."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/InputPrompt.test.tsx",
+      "expected_behavior": "Typing characters into the prompt buffer updates the input text in-place on the same line without spawning new lines or triggering full terminal redraws.",
+      "verification_steps": [
+        "Run unit tests in packages/cli/src/ui/components/InputPrompt.test.tsx using Vitest.",
+        "Simulate sequential keypress events in InputPrompt and verify that character additions update the active line without appending extra newline characters to the terminal buffer output."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:42Z",
+  "execution_time_seconds": 69.7
+}

@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25527,
+  "title": "VS Code + WSL: Gemini writes files to the wrong project/workspace",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable bug report regarding relative path resolution in VS Code + WSL multi-workspace setups, including exact steps to reproduce, expected vs actual behavior, and environment details.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing path resolution across VS Code IDE companion and CLI workspace configurations in WSL involves debugging IDE companion extension integration and workspace directory context mapping across environment boundaries."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#25527",
+    "summary": {
+      "problem": "When using Gemini CLI via the VS Code extension in WSL with multi-folder or parent workspace configurations, relative file paths provided to file-writing tools resolve to an incorrect directory/repository instead of the active workspace folder.",
+      "root_cause": "When multi-root or nested workspace folders are open in VS Code, GEMINI_CLI_IDE_WORKSPACE_PATH contains multiple delimited folder paths. In certain workspace context initializations or terminal creation flows, the target working directory (targetDir) may fall back to the primary or first workspace folder rather than the user's active workspace directory.",
+      "context": "In WSL environments with multi-root workspaces, VS Code workspace URIs and environment variables need consistent normalization and mapping to ensure targetDir in CLI configuration aligns with the user's active sub-project."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/vscode-ide-companion/src/extension.ts",
+        "packages/vscode-ide-companion/src/ide-server.ts",
+        "packages/cli/src/config/config.ts"
+      ],
+      "steps": [
+        "Ensure packages/vscode-ide-companion/src/extension.ts passes the active workspace folder path as cwd when launching Gemini CLI terminals.",
+        "Update packages/vscode-ide-companion/src/ide-server.ts to correctly order and format GEMINI_CLI_IDE_WORKSPACE_PATH based on the active workspace folder.",
+        "Update packages/cli/src/config/config.ts to ensure targetDir is properly set to the current working directory while adding other workspace folders to includeDirectories without overriding cwd."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/vscode-ide-companion/src/ide-server.test.ts",
+      "expected_behavior": "Relative file paths written by Gemini tools consistently resolve against the active workspace folder root, regardless of whether additional workspace folders are configured in GEMINI_CLI_IDE_WORKSPACE_PATH.",
+      "verification_steps": [
+        "Add unit tests in packages/vscode-ide-companion/src/ide-server.test.ts verifying writePortAndWorkspace handles multi-folder workspace paths correctly.",
+        "Verify that packages/cli/src/config/config.test.ts maintains targetDir as the active cwd when GEMINI_CLI_IDE_WORKSPACE_PATH contains multiple workspace folders."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:21Z",
+  "execution_time_seconds": 88.73
+}

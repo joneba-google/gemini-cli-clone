@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28261,
+  "title": "refactor(a2a-server): implement V1 to V2 settings migration logic",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is clear, specific, and actionable. It points directly to existing TODO comments in packages/a2a-server/src/config/settings.ts and requests updating the Settings interface and implementing migration logic to support V2 nested settings matching packages/cli/src/config/settings.ts.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The refactor is localized to packages/a2a-server/src/config/settings.ts and its corresponding test file, involving interface updates and straightforward mapping logic for flat V1 to nested V2 settings."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28261",
+    "summary": {
+      "problem": "The a2a-server settings interface and loader do not fully support the V2 nested settings structure (e.g., ui.showMemoryUsage, security.folderTrust, context.fileFiltering) and lack migration logic for legacy V1 flat settings.",
+      "root_cause": "packages/a2a-server/src/config/settings.ts currently uses a flat Settings interface and directly merges settings without converting legacy V1 flat settings into the V2 nested schema structure.",
+      "context": "Updating packages/a2a-server/src/config/settings.ts aligns a2a-server with the V2 settings schema defined in schemas/settings.schema.json and packages/cli/src/config/settings.ts."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/a2a-server/src/config/settings.ts"],
+      "steps": [
+        "Update the Settings interface in packages/a2a-server/src/config/settings.ts to support the V2 nested settings structure (e.g. ui.showMemoryUsage, security.folderTrust, context.fileFiltering, and other nested categories).",
+        "Implement a V1-to-V2 settings migration function in packages/a2a-server/src/config/settings.ts that converts flat legacy V1 settings (such as top-level showMemoryUsage, boolean folderTrust, and top-level fileFiltering) into their nested V2 positions.",
+        "Invoke the migration function within loadSettings in packages/a2a-server/src/config/settings.ts when processing loaded configuration objects."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/a2a-server/src/config/settings.test.ts",
+      "expected_behavior": "loadSettings seamlessly migrates legacy V1 flat settings to the V2 nested format while maintaining full compatibility with V2 settings.",
+      "verification_steps": [
+        "Add unit tests in packages/a2a-server/src/config/settings.test.ts providing legacy V1 flat settings (e.g. showMemoryUsage, folderTrust) and asserting that loadSettings transforms them into V2 nested properties (ui.showMemoryUsage, security.folderTrust.enabled).",
+        "Run vitest run packages/a2a-server/src/config/settings.test.ts to verify all unit tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:49Z",
+  "execution_time_seconds": 55.26
+}

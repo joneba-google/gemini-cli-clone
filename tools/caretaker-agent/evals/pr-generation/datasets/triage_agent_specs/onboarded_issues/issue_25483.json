@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25483,
+  "title": "Error renderNodeToOutput makes CLI unusable after a single Edit file approval",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed description, reproduction steps, CLI version, environment details, and a clear stack trace showing a RangeError in String.repeat during renderBorder in renderNodeToOutput.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The bug causes fast console flickering and unhandled Promise rejections during Ink rendering after file edit approvals due to negative/NaN width calculations or string repeat values in Ink border/diff rendering (`renderBorder` / `DiffRenderer`). Resolving terminal redraw flickering and ensuring robust dimension calculations in Ink component state rendering requires medium effort."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25483",
+    "summary": {
+      "problem": "Gemini CLI crashes with RangeError: Invalid count value: -1 and enters a rapid console re-rendering blink loop after approving a file edit.",
+      "root_cause": "When rendering file diffs or gap dividers in DiffRenderer or component borders during tool execution, negative or zero terminal/container dimensions are passed into layout elements (such as Box border width or String.repeat calls). This causes Ink border calculation and rendering (renderBorder / String.repeat) to fail with a RangeError: Invalid count value: -1, triggering an unhandled promise rejection in Ink's render cycle.",
+      "context": "During tool execution and confirmation after approving edits, DiffRenderer renders diff gaps using <Box borderStyle='double' width={terminalWidth} ...> and calculates string repeat counts for padding/tabs. If terminalWidth or container dimensions are zero, negative, or invalid, String.repeat and Ink border calculations fail."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/components/messages/DiffRenderer.tsx",
+        "packages/cli/src/ui/components/shared/HalfLinePaddedBox.tsx",
+        "packages/cli/src/ui/components/ProgressBar.tsx"
+      ],
+      "steps": [
+        "In packages/cli/src/ui/components/messages/DiffRenderer.tsx, ensure terminalWidth passed to gap Box and tabWidth passed to String.repeat() are sanitized using Math.max(0, ...) to prevent non-positive width values.",
+        "In packages/cli/src/ui/components/shared/HalfLinePaddedBox.tsx, wrap terminalWidth in Math.max(0, ...) when calling '\u2584'.repeat(...) and '\u2580'.repeat(...).",
+        "In packages/cli/src/ui/components/ProgressBar.tsx, guard activeChars and inactiveChars calculations with Math.max(0, ...) prior to calling String.repeat()."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/messages/DiffRenderer.test.tsx",
+      "expected_behavior": "DiffRenderer and related UI components render cleanly without throwing RangeError: Invalid count value even when terminal width or container dimensions are zero or negative.",
+      "verification_steps": [
+        "Add unit tests in DiffRenderer.test.tsx that render DiffRenderer with terminalWidth=0 and terminalWidth=-1.",
+        "Verify that no RangeError exception or unhandled promise rejection is thrown during rendering."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:55Z",
+  "execution_time_seconds": 122.02
+}

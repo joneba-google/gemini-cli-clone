@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27981,
+  "title": "bug(MCP): parseMcpToolName fails when server name contains underscores",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed and actionable report of a bug in parseMcpToolName where MCP server names containing underscores fail to parse correctly. It includes affected code, reproduction steps, expected vs actual behavior, and context.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to a single function (parseMcpToolName) in packages/core/src/tools/mcp-tool.ts and requires adding unit tests in packages/core/src/tools/mcp-tool.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27981",
+    "summary": {
+      "problem": "parseMcpToolName fails when MCP server names contain underscores, causing incorrect tool name resolution.",
+      "root_cause": "The regex /^([^_]+)_(.+)$/ in parseMcpToolName stops matching serverName at the first underscore after the mcp_ prefix, splitting names like mcp_my_server_my_tool into serverName 'my' and toolName 'server_my_tool'.",
+      "context": "MCP tool fully qualified names follow the format mcp_{serverName}_{toolName}. Server names frequently contain underscores (e.g. google_workspace, my_server), so parseMcpToolName must support underscores in server names."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/mcp-tool.ts"],
+      "steps": [
+        "Update parseMcpToolName in packages/core/src/tools/mcp-tool.ts to parse tool names by splitting on the last underscore (/^(.+)_(.+)$/) or another strategy that permits underscores in server names.",
+        "Ensure parseMcpToolName correctly handles server names with underscores for both specific tool names and wildcard patterns (e.g. mcp_my_server_*)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/mcp-tool.test.ts",
+      "expected_behavior": "parseMcpToolName accurately extracts serverName and toolName even when the server name contains underscores.",
+      "verification_steps": [
+        "Add unit tests for parseMcpToolName in packages/core/src/tools/mcp-tool.test.ts.",
+        "Verify parsing for simple names like mcp_server_tool.",
+        "Verify parsing for server names with underscores like mcp_my_server_my_tool.",
+        "Verify parsing for wildcard tool names like mcp_my_server_*.",
+        "Verify invalid or non-MCP inputs return empty objects.",
+        "Run vitest on packages/core/src/tools/mcp-tool.test.ts to confirm all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:36:47Z",
+  "execution_time_seconds": 57.56
+}

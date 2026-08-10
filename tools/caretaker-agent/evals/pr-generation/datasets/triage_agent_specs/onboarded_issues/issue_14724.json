@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 14724,
+  "title": "Hooks - SessionStart \"compress\" vs \"compact\" Incompatibility",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a SessionStart hook source compatibility issue between Gemini CLI ('compress') and Claude Code ('compact'), identifies exact source file locations, and proposes clear follow-up options.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The fix spans across package boundaries (packages/core and packages/cli), requiring enum updates in packages/core and matcher translation updates in packages/cli, as well as unit test additions."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#14724",
+    "summary": {
+      "problem": "SessionStart hook in Gemini CLI uses 'compress' as the source value for compression-triggered session starts, whereas migrated hooks from Claude Code use 'compact', causing matcher incompatibilities.",
+      "root_cause": "The SessionStartSource enum in packages/core/src/hooks/types.ts does not include 'compress' or 'compact', and the hook migration helper in packages/cli/src/commands/hooks/migrate.ts does not translate 'compact' matchers to 'compress'.",
+      "context": "Migrated hook configurations from Claude Code check for 'compact' source matchers, which fail to match when Gemini CLI fires SessionStart with 'compress'."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/hooks/types.ts",
+        "packages/cli/src/commands/hooks/migrate.ts"
+      ],
+      "steps": [
+        "Add `Compress = 'compress'` and `Compact = 'compact'` to the `SessionStartSource` enum in `packages/core/src/hooks/types.ts`.",
+        "Update the matcher transformation logic in `packages/cli/src/commands/hooks/migrate.ts` to translate 'compact' matchers to 'compress' when migrating Claude Code hooks."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/commands/hooks/migrate.test.ts",
+      "expected_behavior": "Hooks migrated from Claude Code with 'compact' matchers are automatically translated to 'compress', and SessionStartSource enum supports compression source values.",
+      "verification_steps": [
+        "Add a unit test in `packages/cli/src/commands/hooks/migrate.test.ts` verifying that 'compact' matchers in Claude Code hooks are transformed to 'compress'.",
+        "Run `npx vitest run packages/cli/src/commands/hooks/migrate.test.ts` to confirm tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:48:46Z",
+  "execution_time_seconds": 63.02
+}

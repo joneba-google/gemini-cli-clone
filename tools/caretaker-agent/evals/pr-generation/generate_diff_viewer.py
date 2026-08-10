@@ -263,11 +263,54 @@ def generate_html_report(run_name: str, test_cases: List[Dict[str, Any]]) -> str
             font-size: 13px;
             line-height: 1.5;
         }}
+        #sidebar.collapsed {{
+            display: none !important;
+        }}
+        .content-header.collapsed {{
+            display: none !important;
+        }}
         .tab-bar {{
             display: flex;
+            justify-content: space-between;
+            align-items: center;
             background-color: var(--bg-secondary);
             border-bottom: 1px solid var(--border-color);
-            padding: 0 24px;
+            padding: 0 16px;
+            flex-shrink: 0;
+        }}
+        .tab-group {{
+            display: flex;
+            align-items: center;
+        }}
+        .control-group {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        .toggle-btn {{
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }}
+        .toggle-btn:hover {{
+            background-color: var(--border-color);
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+        }}
+        .toggle-btn.active {{
+            background-color: rgba(88, 166, 255, 0.15);
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
         }}
         .tab {{
             padding: 10px 16px;
@@ -386,9 +429,19 @@ def generate_html_report(run_name: str, test_cases: List[Dict[str, Any]]) -> str
         </div>
 
         <div class="tab-bar">
-            <div class="tab active" onclick="switchTab('proposed-diff')">🔵 Agent Proposed Diff</div>
-            <div class="tab" onclick="switchTab('ground-truth')">🟢 Ground Truth PR Diff</div>
-            <div class="tab" onclick="switchTab('original-file')">📁 Original Source File</div>
+            <div class="tab-group">
+                <div class="tab active" onclick="switchTab('proposed-diff')">🔵 Agent Proposed Diff</div>
+                <div class="tab" onclick="switchTab('ground-truth')">🟢 Ground Truth PR Diff</div>
+                <div class="tab" onclick="switchTab('original-file')">📁 Original Source File</div>
+            </div>
+            <div class="control-group">
+                <button class="toggle-btn" id="btn-toggle-sidebar" onclick="toggleSidebar()" title="Toggle Left Sidebar (Hotkey: S)">
+                    ◀ Hide Sidebar
+                </button>
+                <button class="toggle-btn" id="btn-toggle-header" onclick="toggleHeader()" title="Toggle Top Header (Hotkey: H)">
+                    ▲ Hide Header
+                </button>
+            </div>
         </div>
 
         <div id="tab-proposed-diff" class="tab-content active">
@@ -529,6 +582,28 @@ def generate_html_report(run_name: str, test_cases: List[Dict[str, Any]]) -> str
             diff2htmlUi.highlightCode();
         }}
 
+        function toggleSidebar() {{
+            const sidebar = document.getElementById('sidebar');
+            const btn = document.getElementById('btn-toggle-sidebar');
+            const isCollapsed = sidebar.classList.toggle('collapsed');
+            btn.innerHTML = isCollapsed ? '▶ Show Sidebar' : '◀ Hide Sidebar';
+            btn.classList.toggle('active', isCollapsed);
+        }}
+
+        function toggleHeader() {{
+            const header = document.getElementById('content-header');
+            const btn = document.getElementById('btn-toggle-header');
+            const isCollapsed = header.classList.toggle('collapsed');
+            btn.innerHTML = isCollapsed ? '▼ Show Header' : '▲ Hide Header';
+            btn.classList.toggle('active', isCollapsed);
+        }}
+
+        document.addEventListener('keydown', (e) => {{
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.key === 's' || e.key === 'S') toggleSidebar();
+            if (e.key === 'h' || e.key === 'H') toggleHeader();
+        }});
+
         function switchTab(tabId) {{
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -581,10 +656,10 @@ def main() -> None:
     # Load test metrics from test_results.json / Results.txt
     try:
         from eval_diff_judge import load_test_metrics_for_run
-        turn_map, runtime_map, _, _, _ = load_test_metrics_for_run(str(run_dir))
+        turn_map, runtime_map, _, status_map, _ = load_test_metrics_for_run(str(run_dir))
     except Exception as e:
         logger.warning(f"Could not load test metrics: {e}")
-        turn_map, runtime_map = {}, {}
+        turn_map, runtime_map, status_map = {}, {}, {}
 
     # Load score map / verdicts from eval_score.md if available
     verdict_map = {}
@@ -625,13 +700,38 @@ def main() -> None:
     logger.info(f" Test Specs:      {len(spec_files)}")
     logger.info("==========================================================")
 
+    VALID_QUALITIES = {"OK", "FEATURE", "NEEDS_INFO", "SPAM_EMPTY", "SPAM", "EMPTY"}
     test_cases = []
+    skipped_count = 0
+
     for spec_file in spec_files:
         test_id = spec_file.stem
         try:
             doc_dict = json.loads(spec_file.read_text(encoding="utf-8"))
         except Exception:
             doc_dict = {}
+
+        raw_quality = doc_dict.get("expected_quality") or doc_dict.get("status")
+        if not raw_quality and isinstance(doc_dict.get("triage_metadata"), dict):
+            raw_quality = doc_dict.get("triage_metadata", {}).get("quality")
+
+        workable_spec = doc_dict.get("workable_spec")
+
+        if raw_quality in VALID_QUALITIES:
+            quality_label = raw_quality
+        elif raw_quality:
+            quality_label = str(raw_quality)
+        elif not workable_spec:
+            quality_label = "NO_SPEC"
+        else:
+            quality_label = "OK"
+
+        test_status = status_map.get(test_id, "")
+
+        if quality_label != "OK" or not workable_spec or test_status == "SKIPPED_NON_OK":
+            logger.info("Skipping non-OK / no-spec issue from diff viewer: %s (%s)", test_id, quality_label)
+            skipped_count += 1
+            continue
 
         github_meta = doc_dict.get("github_metadata", {})
         workable_spec = doc_dict.get("workable_spec", {})
@@ -713,7 +813,9 @@ def main() -> None:
 
     output_html_path.write_text(html_content, encoding="utf-8")
 
-    logger.info(f"✨ Interactive Diff Viewer Report generated successfully:")
+    logger.info(f"✨ Interactive Diff Viewer Report generated successfully ({len(test_cases)} evaluated cases):")
+    if skipped_count:
+        logger.info(f"   (Omitted {skipped_count} non-OK / no-spec issue(s) from visualization)")
     logger.info(f"   {output_html_path}")
 
 

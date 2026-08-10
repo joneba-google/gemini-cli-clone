@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25548,
+  "title": "Exit options don't terminate the session and close de cli",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a bug on Windows 11 where executing the `/exit` slash command or pressing `Ctrl+C`/`Ctrl+D` twice fails to terminate the CLI session and close the application.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "This is a platform-specific issue on Windows 11 involving terminal input handlers, TTY stdin draining, and process cleanup during CLI exit, requiring increased testing and reproduction overhead."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25548",
+    "summary": {
+      "problem": "On Windows 11, the `/exit` slash command as well as repeated `Ctrl+C` or `Ctrl+D` key combinations do not terminate the CLI session or exit the process.",
+      "root_cause": "Asynchronous cleanup during shutdown (such as `drainStdin` or cleanup hooks in `cleanup.ts`) may hang or block on Windows TTYs, preventing `process.exit(0)` from being reached in `AppContainer.tsx`.",
+      "context": "Executing `/exit` invokes `actions.quit()`, which runs `runExitCleanup()` before exiting. Stalled promises during cleanup or platform-specific key handling issues on Windows prevent the CLI from closing."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/AppContainer.tsx",
+        "packages/cli/src/utils/cleanup.ts"
+      ],
+      "steps": [
+        "Update `drainStdin` and asynchronous cleanup routines in `packages/cli/src/utils/cleanup.ts` to ensure stdin flushing and cleanup hooks resolve or time out cleanly on Windows.",
+        "Ensure `actions.quit` in `packages/cli/src/ui/AppContainer.tsx` reliably terminates the process via `process.exit(0)` even if a cleanup step is delayed."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/cleanup.test.ts",
+      "expected_behavior": "Running exit commands or pressing exit shortcuts twice cleanly executes cleanup and exits the Node process on Windows.",
+      "verification_steps": [
+        "Add unit tests in `packages/cli/src/utils/cleanup.test.ts` to verify `runExitCleanup` completes safely when simulating Windows (`process.platform = 'win32'`).",
+        "Verify in `packages/cli/src/ui/AppContainer.test.tsx` that calling `quit` triggers cleanup and process exit."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:05Z",
+  "execution_time_seconds": 83.82
+}

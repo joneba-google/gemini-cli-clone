@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28176,
+  "title": "why my gemini cli search on google. even if dont even work",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The user reported a clear defect where the GoogleSearch tool (web-search) hangs indefinitely and does not stop upon request cancellation when using gemini-api-key authentication.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Debugging and resolving asynchronous request abortion and cancellation signal propagation during web search tool execution across core tool execution and CLI state management requires handling promise cancellation and model client response lifecycle."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28176",
+    "summary": {
+      "problem": "When performing a web search using GoogleSearch (web-search tool) with gemini-api-key authentication, the search operation can hang indefinitely or fail to stop when a request cancellation signal is triggered.",
+      "root_cause": "WebSearchTool invocation delegates execution to geminiClient.generateContent with model 'web-search'. If the API call hangs or if the AbortSignal is not properly handled during the request lifecycle, the execution loop stays in the thinking state indefinitely.",
+      "context": "The user reported that while using gemini-api-key authentication with gemini-3.1-flash-lite, GoogleSearch remained in 'Searching the web...' and 'Thinking...' status even after 'Request cancelled' was displayed."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/web-search.ts"],
+      "steps": [
+        "Ensure the AbortSignal passed to WebSearchTool.execute properly aborts the underlying geminiClient.generateContent request.",
+        "Handle abort signal events in WebSearchTool to immediately return a cancelled ToolResult when aborted.",
+        "Ensure proper error logging and state cleanup when web search is cancelled or fails under gemini-api-key authentication."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/web-search.test.ts",
+      "expected_behavior": "When AbortSignal is aborted during WebSearchTool execution, the tool should gracefully terminate immediately and return a cancelled search result.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/tools/web-search.test.ts that simulates an aborted AbortSignal during WebSearchTool execution.",
+        "Verify that WebSearchTool.execute returns 'Search cancelled.' without hanging."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:25Z",
+  "execution_time_seconds": 51.2
+}

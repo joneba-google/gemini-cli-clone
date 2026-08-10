@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27989,
+  "title": "Persistent 429 RESOURCE_EXHAUSTED (MODEL_CAPACITY_EXHAUSTED) in Agent Mode using gemini-3.1-pro-preview",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides detailed logs, stack trace, environment details, and reproduction steps for a 429 RESOURCE_EXHAUSTED (MODEL_CAPACITY_EXHAUSTED) error in Agent Mode on cloudcode-pa.googleapis.com.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "While the fix in googleQuotaErrors.ts is localized, the issue involves the VS Code IDE companion / GCA plugin environment and agentic execution loops under rate/capacity limits, requiring cross-environment awareness and testing."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27989",
+    "summary": {
+      "problem": "Agent Mode in Gemini Code Assist crashes on 429 RESOURCE_EXHAUSTED errors caused by MODEL_CAPACITY_EXHAUSTED when using preview models.",
+      "root_cause": "In `packages/core/src/utils/googleQuotaErrors.ts`, `classifyGoogleError` checks `cloudcode-pa.googleapis.com` domain error reasons for `RATE_LIMIT_EXCEEDED` and `QUOTA_EXHAUSTED`, but omits `MODEL_CAPACITY_EXHAUSTED`. Consequently, 429 responses with `MODEL_CAPACITY_EXHAUSTED` are not classified with an effective retry delay.",
+      "context": "Rapid tool dispatches in Agent Mode can trigger transient server model capacity limits (`MODEL_CAPACITY_EXHAUSTED`) on preview models via `cloudcode-pa.googleapis.com`. Classifying this as a `RetryableQuotaError` with a backoff delay ensures the agent loop retries gracefully instead of crashing."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/utils/googleQuotaErrors.ts"],
+      "steps": [
+        "Update `classifyGoogleError` in `packages/core/src/utils/googleQuotaErrors.ts` to include `MODEL_CAPACITY_EXHAUSTED` alongside `RATE_LIMIT_EXCEEDED` when checking Cloud Code API error reasons.",
+        "Ensure `MODEL_CAPACITY_EXHAUSTED` returns a `RetryableQuotaError` with `effectiveDelay` (defaulting to 10 seconds if no retry delay is specified)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/googleQuotaErrors.test.ts",
+      "expected_behavior": "`classifyGoogleError` returns a `RetryableQuotaError` with the calculated retry delay when receiving a 429 error with `MODEL_CAPACITY_EXHAUSTED` from a Cloud Code domain.",
+      "verification_steps": [
+        "Add a unit test in `packages/core/src/utils/googleQuotaErrors.test.ts` passing a 429 error with ErrorInfo reason `MODEL_CAPACITY_EXHAUSTED` and domain `cloudcode-pa.googleapis.com`.",
+        "Assert that `classifyGoogleError` returns an instance of `RetryableQuotaError` with an effective retry delay."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:36:36Z",
+  "execution_time_seconds": 53.13
+}

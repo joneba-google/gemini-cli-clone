@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28621,
+  "title": "[Bug] Model generates a synthetic next user turn instead of answering after a denied tool call",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report detailing a specific regression/bug where the model generates a synthetic user message instead of an assistant response following a denied tool call with an accompanying clarification question. Complete environment details and reproduction context are included.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing the handling of denied tool calls accompanied by user queries requires refining system prompt guidelines in core and adjusting tool response/history composition in the CLI streaming hook, as well as writing unit test coverage."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#28621",
+    "summary": {
+      "problem": "When a tool call (such as write_file) is denied by the user and accompanied by a clarification question, the model generates synthetic user text predicting the next turn instead of answering as the assistant.",
+      "root_cause": "Packaging a denied function response together with user prompt text into a single user turn without explicit turn-boundary guidance causes the model to misinterpret the state and output text from the user perspective.",
+      "context": "The synthetic user message gets persisted into conversation history as model output, contaminating the session state."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/prompts/snippets.ts",
+        "packages/cli/src/ui/hooks/useGeminiStream.ts"
+      ],
+      "steps": [
+        "Update the tool confirmation protocol instructions in packages/core/src/prompts/snippets.ts to explicitly instruct the model to answer user questions accompanying denied tool calls rather than simulating next user turns.",
+        "Refactor history turn construction in packages/cli/src/ui/hooks/useGeminiStream.ts to ensure user prompt text submitted with a tool call denial is properly structured alongside functionResponse parts."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useGeminiStream.test.tsx",
+      "expected_behavior": "When a tool call is denied with an accompanying user question, the model responds as an assistant addressing the question.",
+      "verification_steps": [
+        "Add a unit test simulating tool call denial accompanied by user text input.",
+        "Assert that the generated response is processed as model assistant output answering the user query."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:31:57Z",
+  "execution_time_seconds": 65.66
+}

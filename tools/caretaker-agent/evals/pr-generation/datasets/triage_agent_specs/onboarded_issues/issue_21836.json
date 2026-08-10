@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21836,
+  "title": "[Bug]: ripgrep ENOENT on Termux due to incompatible binary",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report clearly describes a bug where grep_search fails on Termux (Android aarch64) with 'spawn .../rg ENOENT' due to attempting to execute a bundled ripgrep binary compiled for standard GNU/Linux (expecting /lib/ld-linux-aarch64.so.1). The issue contains actionable reproduction details, platform specifics, root cause analysis, and expected behavior.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The fix requires adding environment detection for Termux, adjusting ripgrep binary resolution order to bypass glibc binaries on Termux, and updating system path validation to trust Termux binary locations. As a platform-specific issue involving child_process spawn behavior and non-FHS environment setups, this carries testing overhead across platform environments."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21836",
+    "summary": {
+      "problem": "Gemini CLI fails to execute grep_search on Termux (Android aarch64) with 'spawn .../rg ENOENT' because the bundled ripgrep binary is compiled for standard GNU/Linux (glibc) and requires /lib/ld-linux-aarch64.so.1.",
+      "root_cause": "resolveRipgrepPath() selects bundled rg-linux-arm64 on Termux because fileExists() returns true, even though the binary cannot execute in Termux's non-FHS environment. Furthermore, system PATH fallback fails because Termux binary paths like /data/data/com.termux/files/usr/bin are not included in isTrustedSystemPath().",
+      "context": "Termux is an Android terminal environment with a non-FHS filesystem hierarchy where binaries reside in /data/data/com.termux/files/usr/bin ($PREFIX/bin) and standard glibc dynamic linkers are absent."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/ripGrep.ts",
+        "packages/core/src/utils/paths.ts"
+      ],
+      "steps": [
+        "Add environment detection for Termux (e.g. checking process.env.TERMUX_VERSION or process.env.PREFIX) in packages/core/src/tools/ripGrep.ts.",
+        "Update resolveRipgrepPath() in packages/core/src/tools/ripGrep.ts to skip bundled binaries when running under Termux, falling back to system PATH.",
+        "Update isTrustedSystemPath() in packages/core/src/utils/paths.ts to recognize Termux binary paths (such as process.env.PREFIX/bin or /data/data/com.termux/files/usr/bin) as trusted system paths."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/ripGrep.test.ts",
+      "expected_behavior": "When running in a Termux environment, resolveRipgrepPath() skips bundled glibc binaries and successfully resolves to the system-installed ripgrep executable in the Termux trusted path.",
+      "verification_steps": [
+        "Mock Termux environment variables in resolveRipgrepPath() tests.",
+        "Verify that resolveRipgrepPath() skips bundled rg-linux-arm64 when Termux is detected.",
+        "Verify that isTrustedSystemPath() returns true for Termux system paths like /data/data/com.termux/files/usr/bin/rg."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:25Z",
+  "execution_time_seconds": 51.81
+}

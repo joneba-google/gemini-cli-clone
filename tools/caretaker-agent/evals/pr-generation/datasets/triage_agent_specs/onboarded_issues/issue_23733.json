@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 23733,
+  "title": "Investigate and re-enable flaky 'should exit gracefully on second Ctrl+C' test",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable report about a flaky integration test ('should exit gracefully on second Ctrl+C' in integration-tests/ctrl-c-exit.test.ts) that was disabled in macOS CI environments, referencing the PR that disabled it and requesting investigation to re-enable it.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "Investigating and resolving flaky tests involving pseudo-terminal (node-pty) interactions and signal handling (SIGINT/Ctrl+C) across different operating systems and CI environments involves complex platform-specific terminal signal mechanics."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#23733",
+    "summary": {
+      "problem": "The integration test 'should exit gracefully on second Ctrl+C' in integration-tests/ctrl-c-exit.test.ts was disabled due to flakiness in macOS CI environments.",
+      "root_cause": "Simulating rapid sequential Ctrl+C keypresses via node-pty in integration tests creates race conditions between signal propagation, input stream processing, and React UI state updates in AppContainer.tsx.",
+      "context": "PR #23731 skipped the test using skipFlaky. Re-enabling the test requires ensuring reliable signal handling and adequate test synchronization when sending consecutive Ctrl+C characters."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/AppContainer.tsx"],
+      "steps": [
+        "Inspect the repeated keypress handler for Ctrl+C in packages/cli/src/ui/AppContainer.tsx to ensure consecutive Ctrl+C key events transition UI state predictably.",
+        "Ensure raw input stream signal processing in AppContainer.tsx handles rapid consecutive SIGINT/Ctrl+C inputs cleanly without dropping events."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "integration-tests/ctrl-c-exit.test.ts",
+      "expected_behavior": "The integration test runs deterministically across all CI platforms, asserting that the first Ctrl+C shows the warning prompt and the second Ctrl+C gracefully terminates the process with code 0.",
+      "verification_steps": [
+        "Re-enable the test in integration-tests/ctrl-c-exit.test.ts by removing the skipFlaky filter.",
+        "Verify that sending the second Ctrl+C character occurs after waiting for the warning prompt text to be asserted.",
+        "Execute Vitest integration test suite to verify stability across OS environments."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:30Z",
+  "execution_time_seconds": 50.72
+}

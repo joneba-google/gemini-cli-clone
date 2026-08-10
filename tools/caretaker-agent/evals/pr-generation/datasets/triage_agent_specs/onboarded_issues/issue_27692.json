@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27692,
+  "title": "Duplicate agent name warning when running Gemini CLI from the user's home directory",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a bug where running Gemini CLI from the user's home directory causes a duplicate agent warning because the project agents directory and user agents directory resolve to the same path (~/.gemini/agents). Clear reproduction steps, root cause analysis, and expected behavior are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to `packages/core/src/agents/registry.ts`, requiring path comparison/deduplication (e.g., comparing `path.resolve(projectAgentsDir)` and `path.resolve(userAgentsDir)`) before scanning agent directories. Test updates in `packages/core/src/agents/registry.test.ts` are straightforward."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27692",
+    "summary": {
+      "problem": "When running Gemini CLI from the user's home directory (~), the CLI outputs a false-positive warning about duplicate agent names.",
+      "root_cause": "AgentRegistry.loadAgents() loads agents from projectAgentsDir (.gemini/agents relative to workspace root) and userAgentsDir (~/.gemini/agents). When the workspace root is the home directory, both paths resolve to the exact same directory (~/.gemini/agents), causing agent files to be loaded twice and producing duplicate agent warnings.",
+      "context": "Path normalization and deduplication are required when scanning agent configuration directories in AgentRegistry to prevent loading from identical absolute paths."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/agents/registry.ts"],
+      "steps": [
+        "In packages/core/src/agents/registry.ts, resolve userAgentsDir and projectAgentsDir to their absolute paths using path.resolve().",
+        "Compare the resolved projectAgentsDir and userAgentsDir paths before loading user-level agents.",
+        "Skip loading agents from userAgentsDir if it resolves to the exact same directory as projectAgentsDir and project-level agents were already loaded."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/agents/registry.test.ts",
+      "expected_behavior": "When projectAgentsDir and userAgentsDir resolve to the exact same path, AgentRegistry loads agents from the directory only once and does not emit duplicate agent warnings.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/agents/registry.test.ts where config.storage.getProjectAgentsDir() and Storage.getUserAgentsDir() return the same directory path.",
+        "Initialize AgentRegistry and verify loadAgentsFromDirectory is called only once for that path and no duplicate agent warning is emitted."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:48Z",
+  "execution_time_seconds": 47.85
+}

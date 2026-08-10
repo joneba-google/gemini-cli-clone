@@ -1,0 +1,50 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 26525,
+  "title": "Add deterministic redaction and reduce Auto Memory logging",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear, actionable bug report addressing privacy and security gaps in Auto Memory where sensitive local details or secrets could be sent to background extraction models or emitted in debug logs.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Implementing deterministic pre-model redaction, updating log verbosity, updating configuration settings in packages/cli, updating documentation, and adding unit tests across packages/core and packages/cli requires changes spanning multiple files and packages, matching a MEDIUM effort estimate."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26525",
+    "summary": {
+      "problem": "Auto Memory sends local session transcript excerpts, summaries, workflow hints, and pending memory patch contents to background LLM extraction models without deterministic secret scrubbing, and emits full sensitive content in debug logs.",
+      "root_cause": "The skill extraction prompt assembly and memory service log output rely on LLM system instructions for secret redaction after content enters model context, and debug log statements directly output raw pending inbox summaries and existing skill contents.",
+      "context": "Pre-model deterministic secret scrubbing is needed to sanitize session summaries, workflow hints, and pending inbox patches prior to model submission, debug logging needs to be truncated/summarized, and settings/docs must clearly state that model calls are made over local transcript content."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/agents/skill-extraction-agent.ts",
+        "packages/core/src/services/memoryService.ts",
+        "packages/cli/src/config/settingsSchema.ts",
+        "docs/cli/auto-memory.md",
+        "docs/cli/settings.md"
+      ],
+      "steps": [
+        "Apply deterministic secret scrubbing (using sanitization utilities from agent-sanitization-utils.ts) to session summaries, workflow hints, transcript excerpts, and pending inbox summaries in memoryService.ts and skill-extraction-agent.ts before model prompt assembly.",
+        "Update debug logging in memoryService.ts to emit high-level count diagnostics rather than dumping full pending patch contents or memory summaries.",
+        "Update the setting description for autoMemory in packages/cli/src/config/settingsSchema.ts to clearly explain that Auto Memory executes model calls over local transcript content.",
+        "Update documentation in docs/cli/auto-memory.md and docs/cli/settings.md to reflect the pre-model secret scrubbing behavior and clear description of model calls over local transcripts."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/memoryService.test.ts",
+      "expected_behavior": "Sensitive keys, tokens, credentials, and PEM certificates present in session summaries, workflow hints, or pending memory patches are deterministically redacted prior to model prompt construction, and debug logs do not emit unredacted sensitive memory content.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/services/memoryService.test.ts verifying that buildSessionIndex redacts secrets in session summaries and workflow hints.",
+        "Add unit tests verifying that buildPendingInboxSummary sanitizes secret patterns in pending patch files before prompt inclusion.",
+        "Assert that debug logger statements for pending inbox and existing skills summaries do not output raw secret values."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:19Z",
+  "execution_time_seconds": 97.22
+}

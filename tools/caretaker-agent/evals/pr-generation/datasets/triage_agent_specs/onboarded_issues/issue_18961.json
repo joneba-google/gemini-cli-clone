@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 18961,
+  "title": "Gemini CLI not able to detect that the companion extension is installed in VS-code",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed description, error messages, environment information (CLI version 0.28.2, OS win32, VS Code 1.109.2), and clear reproduction steps regarding the CLI failing to detect or connect to the VS Code companion extension when accepting the connection prompt.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The issue involves debugging IDE companion extension integration (VS Code companion) across packages ('packages/cli' and 'packages/core') and handling pre-installed extension states vs '/ide install' and '/ide enable' triggers. As per the effort guidelines, issues involving the VS Code IDE companion extension require testing and cross-environment setups, warranting a MEDIUM effort estimate."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#18961",
+    "summary": {
+      "problem": "When a user accepts the IDE connection prompt in Gemini CLI, the CLI unconditionally attempts to run '/ide install' regardless of whether the companion extension is already installed or connected.",
+      "root_cause": "In 'packages/cli/src/ui/AppContainer.tsx', 'handleIdePromptComplete' invokes '/ide install' unconditionally when 'result.userSelection === \"yes\"'. It does not check 'result.isExtensionPreInstalled', forcing an unnecessary extension installation process that fails if the IDE CLI executable ('code') is unavailable in system PATH.",
+      "context": "When Gemini CLI is launched from VS Code or when the companion extension server is running, environment variables indicate the extension is pre-installed. In this scenario, accepting the prompt should run '/ide enable' to connect to the existing extension rather than attempting a fresh extension installation via 'code --install-extension'."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/AppContainer.tsx"],
+      "steps": [
+        "In 'packages/cli/src/ui/AppContainer.tsx', update 'handleIdePromptComplete' to check 'result.isExtensionPreInstalled'.",
+        "If 'result.isExtensionPreInstalled' is true when 'result.userSelection === \"yes\"', invoke '/ide enable' instead of '/ide install'.",
+        "If 'result.isExtensionPreInstalled' is false, continue invoking '/ide install' to install the extension."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/IdeIntegrationNudge.test.tsx",
+      "expected_behavior": "Accepting the IDE connection nudge when the extension is pre-installed should trigger '/ide enable' rather than '/ide install', avoiding redundant install attempts and succeeding even when 'code' CLI is not in PATH.",
+      "verification_steps": [
+        "Add or update unit test cases in 'packages/cli/src/ui/IdeIntegrationNudge.test.tsx' (or AppContainer tests) to verify that accepting the prompt with 'isExtensionPreInstalled: true' executes '/ide enable'.",
+        "Verify that accepting the prompt with 'isExtensionPreInstalled: false' executes '/ide install'."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:47:43Z",
+  "execution_time_seconds": 100.51
+}

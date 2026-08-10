@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25693,
+  "title": "[Bug] Skills discovery fails when 'description' in SKILL.md frontmatter is a single line",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report is clear, complete, and provides specific reproduction steps, expected vs actual behavior, and environment details for a bug in skill frontmatter discovery.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is a localized parsing fix in packages/core/src/skills/skillLoader.ts to correctly handle single-line description frontmatter values in SKILL.md files, along with unit tests in packages/core/src/skills/skillLoader.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25693",
+    "summary": {
+      "problem": "Skill discovery fails when the description field in SKILL.md frontmatter is written as a single line.",
+      "root_cause": "The frontmatter parser in skillLoader.ts relies on js-yaml load() and falls back to parseSimpleFrontmatter() when YAML parsing fails. When a single-line description contains unquoted YAML special characters (like colons or punctuation) or quotes, js-yaml fails. Additionally, parseSimpleFrontmatter does not strip quotes or correctly parse single-line vs multi-line frontmatter values with special characters.",
+      "context": "In SKILL.md files, skills specify frontmatter enclosed by '---' delimiters. Multi-line scalar block descriptions (using '>') pass YAML parsing easily, but single-line descriptions frequently fail js-yaml parsing if special characters or colons are present without surrounding quotes, triggering fallback logic that fails to extract valid name/description fields or leaves formatting artifacts."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/skills/skillLoader.ts"],
+      "steps": [
+        "Update parseFrontmatter and parseSimpleFrontmatter in packages/core/src/skills/skillLoader.ts to robustly handle both single-line and multi-line frontmatter descriptions in SKILL.md files.",
+        "Ensure parseSimpleFrontmatter properly strips quotes around scalar values and correctly extracts single-line description fields even when YAML load fails.",
+        "Ensure parseFrontmatter handles edge cases where description strings contain special YAML characters, colons, or line breaks without throwing uncaught errors or failing fallback parsing."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/skills/skillLoader.test.ts",
+      "expected_behavior": "Skills with single-line descriptions in SKILL.md frontmatter (with or without colons/punctuation) are successfully parsed and discovered.",
+      "verification_steps": [
+        "Add unit test cases in packages/core/src/skills/skillLoader.test.ts testing SKILL.md files with single-line descriptions containing various punctuation, colons, and single/double quotes.",
+        "Run 'npm test' or 'npx vitest run packages/core/src/skills/skillLoader.test.ts' to verify that all frontmatter parsing tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:35Z",
+  "execution_time_seconds": 66.92
+}

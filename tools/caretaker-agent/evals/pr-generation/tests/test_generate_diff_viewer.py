@@ -140,3 +140,35 @@ def test_main_html_report_generation(mock_get_orig, mock_fetch_diff, tmp_path):
     content = output_html.read_text(encoding="utf-8")
     assert "SSR Code Generator Diff Viewer - run_test" in content
     assert "Perfect fix" in content
+
+
+@patch("generate_diff_viewer.fetch_true_diff")
+def test_main_skips_non_ok_issues(mock_fetch_diff, tmp_path):
+    """Tests that non-OK issues (FEATURE, NEEDS_INFO) skip diff fetching and are excluded from visualization."""
+    run_dir = tmp_path / "eval" / "run_outputs" / "run_non_ok"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    specs_dir = tmp_path / "issues"
+    specs_dir.mkdir(parents=True, exist_ok=True)
+
+    (specs_dir / "feature_issue.json").write_text(json.dumps({
+        "expected_quality": "FEATURE",
+        "github_metadata": {"owner": "google", "repo": "test", "issue_number": 200}
+    }), encoding="utf-8")
+
+    (specs_dir / "needs_info_issue.json").write_text(json.dumps({
+        "expected_quality": "NEEDS_INFO",
+        "github_metadata": {"owner": "google", "repo": "test", "issue_number": 201}
+    }), encoding="utf-8")
+
+    output_html = tmp_path / "non_ok_out.html"
+
+    with patch("generate_diff_viewer.RUNS_BASE_DIR", tmp_path / "eval" / "run_outputs"), \
+         patch("sys.argv", ["generate_diff_viewer.py", "--run-name", "run_non_ok", "--input-path", str(specs_dir), "--output-html", str(output_html)]):
+        main()
+
+    assert output_html.exists()
+    mock_fetch_diff.assert_not_called()
+    content = output_html.read_text(encoding="utf-8")
+    assert "feature_issue" not in content
+    assert "needs_info_issue" not in content

@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27731,
+  "title": "BUG FIGMA MCP HTTP 400: Image MIME type mismatch, WebP images incorrectly labeled as image/png in tool_result payloads",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report detailing an HTTP 400 error caused by a MIME type mismatch when Figma MCP returns WebP images incorrectly labeled as image/png.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "While the fix itself is localized to image MIME type detection/normalization in mcp-tool.ts, the issue involves external MCP server integration (Figma MCP) and is reported as occurring occasionally on Windows. Per guidelines, issues involving cross-environment setups or described as intermittent/platform-specific are rated as MEDIUM effort."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27731",
+    "summary": {
+      "problem": "MCP tool results containing image data fail with HTTP 400 errors when the declared MIME type (e.g., image/png) does not match the actual image byte format (e.g., WebP).",
+      "root_cause": "In packages/core/src/tools/mcp-tool.ts, transformMcpContentToParts blindly uses block.mimeType provided by MCP servers without verifying or correcting it against the actual image data format (magic bytes). When Figma MCP returns WebP image data labeled as image/png, the model API rejects the request.",
+      "context": "The model API enforces strict MIME type validation for inlineData image parts, failing requests with HTTP 400 if a WebP image payload is labeled as image/png."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/mcp-tool.ts"],
+      "steps": [
+        "Add a helper function to detect the actual image MIME type from base64 data by inspecting magic bytes (e.g., WebP 'RIFF...WEBP', PNG '\\x89PNG', JPEG '\\xFF\\xD8\\xFF', GIF 'GIF8').",
+        "In transformImageAudioBlock (and transformResourceBlock if applicable) within packages/core/src/tools/mcp-tool.ts, validate the declared MIME type against the base64 payload.",
+        "If the base64 payload indicates a different image format (such as image/webp when image/png was declared), override the inlineData mimeType with the detected MIME type."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/mcp-tool.test.ts",
+      "expected_behavior": "When an MCP tool returns image data with a mismatched mimeType (e.g., WebP base64 labeled as image/png), the transformer detects the correct mimeType (image/webp) and updates the inlineData mimeType accordingly.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/tools/mcp-tool.test.ts simulating an MCP image response with a WebP base64 image payload declared as image/png.",
+        "Verify that transformMcpContentToParts / execute returns inlineData with mimeType 'image/webp'.",
+        "Run Vitest on packages/core/src/tools/mcp-tool.test.ts to confirm all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:08Z",
+  "execution_time_seconds": 55.03
+}

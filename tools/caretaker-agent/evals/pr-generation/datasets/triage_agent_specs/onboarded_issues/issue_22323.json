@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22323,
+  "title": "Subagent recovery after MAX_TURNS is reported as GOAL success, hiding interruption",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report is high quality, clear, and actionable. It includes a specific bug description, detailed reproduction context from session logs, exact version numbers, expected vs actual behavior, and an accurate diagnosis of internal termination reason inconsistency.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "This is a localized logic issue in `packages/core/src/agents/local-executor.ts` where recovery turn success unconditionally overrides `terminateReason` to `GOAL`. Fixing it requires updating termination reason tracking during recovery and updating existing unit tests in `packages/core/src/agents/local-executor.test.ts`."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#22323",
+    "summary": {
+      "problem": "When a subagent reaches MAX_TURNS and calls complete_task during the final grace recovery turn, LocalAgentExecutor overrides terminateReason to GOAL, causing the tool result and session logs to report 'Termination Reason: GOAL' and status 'success' despite the interruption.",
+      "root_cause": "In LocalAgentExecutor.runInternal(), successful grace-period recovery unconditionally sets terminateReason = AgentTerminateMode.GOAL, masking the original limit condition (MAX_TURNS or TIMEOUT) that triggered the recovery turn.",
+      "context": "The final warning recovery mechanism gives subagents a grace period to wrap up and call complete_task, but overwriting the termination mode to GOAL hides the turn limit interruption from parent agent invocations and session logs."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/agents/local-executor.ts"],
+      "steps": [
+        "In packages/core/src/agents/local-executor.ts, update runInternal() (and timeout catch blocks) so that successful recovery after hitting execution limits (MAX_TURNS or TIMEOUT) preserves the original limit termination reason rather than setting terminateReason to AgentTerminateMode.GOAL.",
+        "Ensure LocalAgentExecutor returns the original limit-based terminate_reason in the OutputObject so downstream consumers like LocalSubagentInvocation properly report MAX_TURNS or TIMEOUT."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/agents/local-executor.test.ts",
+      "expected_behavior": "When a subagent exceeds MAX_TURNS and calls complete_task in the recovery turn, the returned terminate_reason is MAX_TURNS rather than GOAL.",
+      "verification_steps": [
+        "Update unit tests in packages/core/src/agents/local-executor.test.ts that test grace turn recovery after MAX_TURNS to assert output.terminate_reason is MAX_TURNS.",
+        "Run vitest on packages/core/src/agents/local-executor.test.ts to verify all test cases pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:44:49Z",
+  "execution_time_seconds": 55.82
+}

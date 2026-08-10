@@ -1,0 +1,18 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27043,
+  "title": "Pro limits not honored -Same issue with antigravity",
+  "status": "NEEDS_INFO",
+  "effort": "UNKNOWN",
+  "triage_metadata": {
+    "quality": "NEEDS_INFO",
+    "reasoning": "The issue describes a quota limit discrepancy where an active Google One AI Pro subscription receives a 200 request/day quota instead of 1,500. Request quotas and tier entitlements are assigned and returned server-side via backend APIs (e.g. retrieveUserQuota) rather than enforced locally by the CLI codebase (as noted by the user experiencing the same issue in Antigravity). To determine if there is any client-side authentication or header parsing bug in gemini-cli versus a backend account provisioning issue, additional context and diagnostic logs are required.",
+    "comment": "Hi! Thanks for commenting on this issue, we need more information to triage the bug. Quota limits and entitlements are allocated server-side by Google services rather than calculated locally within the CLI client. To help us determine if the CLI is misinterpreting auth or quota server responses, please provide:\n1. Verbose CLI debug logs from running `gemini --debug` when executing `/stats model` or initiating a session.\n2. Any backend request IDs or status details returned during authentication or quota retrieval.\n3. Confirmation of whether re-authenticating via `/auth` in a clean environment produces any different quota response.",
+    "effort_estimate": "",
+    "effort_reasoning": ""
+  },
+  "workable_spec": {},
+  "processed_at": "2026-08-06T17:41:07Z",
+  "execution_time_seconds": 48.27
+}

@@ -1,0 +1,39 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 23313,
+  "title": "Change the steering eval test to always pass",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides actionable context requesting that the model steering eval test be updated to always pass.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Changing the eval policy in evals/model_steering.eval.ts from USUALLY_PASSES to ALWAYS_PASSES is a simple localized edit."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#23313",
+    "summary": {
+      "problem": "The model steering eval test is configured with the USUALLY_PASSES policy instead of ALWAYS_PASSES.",
+      "root_cause": "The appEvalTest calls in evals/model_steering.eval.ts use 'USUALLY_PASSES' as their policy argument.",
+      "context": "Tests marked as ALWAYS_PASSES run in CI as mandatory regression checks."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["evals/model_steering.eval.ts"],
+      "steps": [
+        "Update the policy argument in appEvalTest calls within evals/model_steering.eval.ts from 'USUALLY_PASSES' to 'ALWAYS_PASSES'."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "evals/model_steering.eval.ts",
+      "expected_behavior": "The model steering eval tests execute with the ALWAYS_PASSES policy and pass.",
+      "verification_steps": [
+        "Run Vitest on evals/model_steering.eval.ts to verify tests pass with the ALWAYS_PASSES policy."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:42Z",
+  "execution_time_seconds": 34.45
+}

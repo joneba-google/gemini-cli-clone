@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28259,
+  "title": "refactor(cli): clean up profile selector logic and remove legacy config",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue identifies existing technical debt in packages/cli/src/config/config.ts regarding legacy profileSelector logic and TODO comment. It provides clear context and actionable request to clean up legacy config initialization.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The change involves localized logic cleanup in packages/cli/src/config/config.ts to remove the legacy profileSelector branching logic and unused experimental properties, along with updating corresponding configuration tests."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28259",
+    "summary": {
+      "problem": "Lingering technical debt in CLI configuration initialization related to legacy profileSelector logic.",
+      "root_cause": "Legacy profile selection logic (profileSelector) and TODO comments remain in packages/cli/src/config/config.ts, creating redundant conditional checks during config initialization.",
+      "context": "The profileSelector variable in packages/cli/src/config/config.ts sets context management flags based on experimental settings (stressTestProfile, powerUserProfile, generalistProfile, contextManagement) and passes experimentalContextManagementConfig to Config."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/config/config.ts"],
+      "steps": [
+        "Locate the profileSelector logic and legacy TODO comment in packages/cli/src/config/config.ts.",
+        "Remove the profileSelector conditional branching and legacy mapping logic.",
+        "Update the contextManagement property initialization and Config constructor parameters to directly determine enablement without relying on legacy profileSelector."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/config.test.ts",
+      "expected_behavior": "CLI configuration initializes cleanly without legacy profileSelector logic, maintaining correct context management settings.",
+      "verification_steps": [
+        "Run unit tests in packages/cli/src/config/config.test.ts to ensure config initialization works properly.",
+        "Add or update test cases verifying that Config options and experimental context settings load as expected."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:34Z",
+  "execution_time_seconds": 39.94
+}

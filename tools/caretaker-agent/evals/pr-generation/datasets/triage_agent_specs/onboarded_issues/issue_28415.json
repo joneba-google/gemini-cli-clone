@@ -1,0 +1,48 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28415,
+  "title": "[Bug] GlobTool returns raw symlink paths in results but uses resolved real paths internally \u2014 causes downstream read_file/edit failures on macOS and symlinked workspaces",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a well-documented, actionable bug report detailing a mismatch between directory validation scope and execution scope in GlobTool, complete with root cause analysis, reproduction steps, and exact source file locations.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires updating the parameter validation logic in packages/core/src/tools/glob.ts to iterate over and validate all workspace directories when dir_path is omitted, matching the execution scope. Corresponding unit tests will be added in packages/core/src/tools/glob.test.ts. This is a localized, single-file logic fix."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28415",
+    "summary": {
+      "problem": "GlobTool's validateToolParamValues only validates a single target directory when dir_path is omitted, whereas GlobToolInvocation.execute searches across all workspace directories returned by workspaceContext.getDirectories(). This allows invalid or non-existent workspace directories to bypass parameter validation, resulting in silent glob failures or partial search results.",
+      "root_cause": "In packages/core/src/tools/glob.ts, validateToolParamValues resolves params.dir_path || '.' against getTargetDir(), validating access and existence for only that single directory. When dir_path is omitted, execute() searches all workspace directories (workspaceContext.getDirectories()), causing a discrepancy between validation scope and execution scope.",
+      "context": "In multi-root workspaces (configured via includeDirectories), extra workspace directories were never validated during tool parameter check. Additionally, line 320 contains unreachable fallback code (`const targetDir = searchDirAbsolute || this.config.getTargetDir();`) since searchDirAbsolute is always a resolved path string."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/glob.ts"],
+      "steps": [
+        "In packages/core/src/tools/glob.ts, update validateToolParamValues to determine the set of search directories to validate based on params.dir_path.",
+        "If params.dir_path is specified, resolve and validate that single path against config.getTargetDir().",
+        "If params.dir_path is omitted or empty, retrieve all workspace directories via this.config.getWorkspaceContext().getDirectories() and iterate over each directory.",
+        "For each directory in the list to validate, perform path access validation via config.validatePathAccess(), check that fs.existsSync() is true, and verify that fs.statSync().isDirectory() is true.",
+        "Return the appropriate validation error string if any directory fails access checks, does not exist, or is not a directory.",
+        "Ensure params.pattern validation remains intact, checking that pattern is present and non-empty."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/glob.test.ts",
+      "expected_behavior": "When dir_path is omitted in a multi-root workspace with invalid or non-existent directories, globTool.validateToolParams returns an error message indicating path non-existence or access restriction instead of passing validation.",
+      "verification_steps": [
+        "In packages/core/src/tools/glob.test.ts, add a test under validateToolParams for multi-root workspace validation.",
+        "Configure mockWorkspaceContext with multiple workspace directory paths, where one path is non-existent on disk or inaccessible.",
+        "Call globTool.validateToolParams({ pattern: '*.ts' }) without specifying dir_path.",
+        "Assert that validateToolParams returns an error string indicating that the search path does not exist or is invalid.",
+        "Verify that when all workspace directories exist and are valid, validateToolParams returns null."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:32:51Z",
+  "execution_time_seconds": 35.44
+}

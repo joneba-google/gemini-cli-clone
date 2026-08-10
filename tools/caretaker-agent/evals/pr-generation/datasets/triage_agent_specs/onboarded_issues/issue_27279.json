@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27279,
+  "title": "File recreation drops the metadata line",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report clearly describes a specific bug in ChatRecordingService where session file deletion during execution causes appendRecord() to recreate the file without metadata. The location in packages/core/src/services/chatRecordingService.ts is specified alongside expected vs actual behavior.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is isolated to a single method (appendRecord) in packages/core/src/services/chatRecordingService.ts. It requires checking file existence before append and writing the cached initial metadata if missing, along with an accompanying unit test in chatRecordingService.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27279",
+    "summary": {
+      "problem": "When a conversation session file is deleted while the process is alive, subsequent calls to appendRecord() recreate the file with only the new log record and missing the initial session metadata record. This leaves a file that loadConversationRecord() cannot parse.",
+      "root_cause": "appendRecord() only checks whether this.conversationFile is non-null before writing to the file using fs.appendFileSync(). It does not check if the file currently exists on disk. If the file was deleted, fs.appendFileSync() creates a new file containing only the record being appended, without writing the session's initial metadata record first.",
+      "context": "ChatRecordingService maintains in-memory session state in this.cachedConversation. When initializing a session or loading an existing one, metadata (sessionId, projectHash, startTime, lastUpdated, kind, directories, summary) is stored in this.cachedConversation. If the log file is deleted on disk during an active session, recreating the file with this metadata allows session recovery and parsing by loadConversationRecord()."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/services/chatRecordingService.ts"],
+      "steps": [
+        "In ChatRecordingService.prototype.appendRecord(), before calling fs.mkdirSync and fs.appendFileSync, check if the target conversationFile exists on disk using fs.existsSync().",
+        "If the file does not exist on disk and this.cachedConversation is non-null, reconstruct the initial session metadata object from this.cachedConversation (including sessionId, projectHash, startTime, lastUpdated, kind, directories, summary).",
+        "Write the initial metadata object as the first JSON record line into the newly recreated conversationFile before appending the new record line."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/chatRecordingService.test.ts",
+      "expected_behavior": "If the conversation session file is deleted while ChatRecordingService is running, the next record append recreates the session file with the initial metadata record followed by the new record line.",
+      "verification_steps": [
+        "Add a test in packages/core/src/services/chatRecordingService.test.ts where a session is created and records are logged.",
+        "Delete the session file using fs.unlinkSync().",
+        "Call a recording method that triggers appendRecord() (e.g. logMessage or record updates).",
+        "Verify that the conversation file is recreated, and the first line contains the expected session metadata JSON record."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:18Z",
+  "execution_time_seconds": 38.43
+}

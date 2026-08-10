@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 20355,
+  "title": "Gemini policy engine not blocking matching command",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report demonstrating that policy deny rules with a trailing space in commandPrefix fail to match and block commands in Gemini CLI. It includes configuration, /policies list output, reproduction steps, and client environment details.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The bug fix is localized to a single utility function `buildArgsPatterns` in `packages/core/src/policy/utils.ts`. Adding a check for trailing whitespace on `commandPrefix` before appending boundary matchers resolves the issue, and test coverage can be added directly to `packages/core/src/policy/utils.test.ts`."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#20355",
+    "summary": {
+      "problem": "Policy rules for run_shell_command using a commandPrefix that ends with whitespace (e.g., 'git branch -d ') fail to match shell commands like 'git branch -d test'.",
+      "root_cause": "In packages/core/src/policy/utils.ts, buildArgsPatterns constructs a regex pattern for commandPrefix. When commandPrefix ends with whitespace, matchSegment includes that whitespace. However, buildArgsPatterns unconditionally appends (?:[\\s\"]|\\\\\") to matchSegment, requiring a second whitespace or quote character immediately after matchSegment, which causes regex matching against stringified JSON arguments to fail.",
+      "context": "Policy configurations often include a trailing space in commandPrefix (such as 'git branch -d ') to explicitly require a space delimiter after subcommands. Since the space delimiter is already part of matchSegment, appending (?:[\\s\"]|\\\\\") causes a double-whitespace requirement."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/policy/utils.ts"],
+      "steps": [
+        "In packages/core/src/policy/utils.ts, update buildArgsPatterns to check if prefix ends with whitespace using /\\s$/.test(prefix).",
+        "When prefix ends with whitespace, return matchSegment directly without appending (?:[\\s\"]|\\\\\")."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/policy/utils.test.ts",
+      "expected_behavior": "Policy rules with commandPrefix ending in whitespace correctly match commands like 'git branch -d test' in JSON stringified tool arguments.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/policy/utils.test.ts testing buildArgsPatterns with a commandPrefix ending in a space (e.g. 'git branch -d ').",
+        "Assert that the resulting regex matches '{\"command\":\"git branch -d test\"}' and '{\"command\":\"git branch -d \\\"test\\\"\"}'.",
+        "Run Vitest tests to confirm all policy utils tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:47:26Z",
+  "execution_time_seconds": 115.16
+}

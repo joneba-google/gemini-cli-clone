@@ -1,0 +1,48 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27466,
+  "title": "AGY 1.0.2: -p/--print mode outputs nothing to stdout on Windows",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable bug report describing how -p/--print mode outputs nothing to stdout on Windows 11. It includes environment details, reproduction steps, expected vs actual behavior, log evidence, and potential root cause context.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "This is a platform-specific issue involving stdout stream buffering and flushing during non-interactive execution on Windows. Per effort guidelines, platform-specific bugs and non-interactive stdio/stream issues require cross-environment testing and validation, qualifying as MEDIUM effort."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27466",
+    "summary": {
+      "problem": "Running the CLI in non-interactive print mode (-p/--print) on Windows outputs nothing to stdout, even though the API call succeeds and generates content.",
+      "root_cause": "In non-interactive mode on Windows, output written through TextOutput and createWorkingStdio proxies is buffered or delayed without explicit stream flushing or proper stdio proxy handling when stdout is not a TTY.",
+      "context": "Log files confirm the model output is received and processed, but non-TTY stdout stream operations on Windows fail to emit or flush the buffered text prior to CLI process termination."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/nonInteractiveCli.ts",
+        "packages/cli/src/nonInteractiveCliAgentSession.ts",
+        "packages/cli/src/ui/utils/textOutput.ts",
+        "packages/core/src/utils/stdio.ts"
+      ],
+      "steps": [
+        "Inspect stdio creation in packages/core/src/utils/stdio.ts to ensure writeToStdout and working stdout proxies correctly flush output on Windows non-TTY streams.",
+        "Update TextOutput in packages/cli/src/ui/utils/textOutput.ts to handle non-TTY stdout streams and enforce immediate flushing where applicable.",
+        "Ensure non-interactive execution flows in packages/cli/src/nonInteractiveCli.ts and packages/cli/src/nonInteractiveCliAgentSession.ts complete all pending stdout writes before exiting."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/nonInteractiveCli.test.ts",
+      "expected_behavior": "CLI non-interactive print mode (-p/--print) writes model output to stdout and flushes the stream completely before process exit on Windows and non-TTY environments.",
+      "verification_steps": [
+        "Add unit test cases in nonInteractiveCli.test.ts that mock non-TTY stdout streams.",
+        "Assert that response content sent to textOutput is written to stdout during non-interactive execution.",
+        "Verify stdout contains expected model response text upon completion."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:39:34Z",
+  "execution_time_seconds": 43.78
+}

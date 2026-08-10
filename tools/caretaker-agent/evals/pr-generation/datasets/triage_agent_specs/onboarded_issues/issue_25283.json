@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25283,
+  "title": "OAuth/Policy Error: \"Tool execution denied by policy\" prevents basic read/write tool usage",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, detailed bug report with reproduction environment (Windows PowerShell, CLI v0.37.1, OAuth auth), expected vs actual behavior, and error details ('Tool execution denied by policy').",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Investigating and fixing policy engine denial error reporting and interactive/TTY detection behavior on Windows PowerShell requires cross-package modifications in packages/core and packages/cli, as well as testing across non-interactive policy edge cases."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25283",
+    "summary": {
+      "problem": "Tool execution fails with generic 'Tool execution denied by policy' error on Windows PowerShell / non-interactive CLI environments, blocking basic file read/write and shell operations without actionable policy guidance or approval prompts.",
+      "root_cause": "When TTY detection flags the environment as non-interactive (e.g. in Windows PowerShell streams or wrapped invocation), `isHeadlessMode()` in `packages/core/src/utils/headless.ts` forces non-interactive mode. The policy engine matches the Headless Denial Rule in `write.toml` or default denial rules, and `getPolicyDenialError()` in `packages/core/src/scheduler/policy.ts` returns a generic 'Tool execution denied by policy' error without explaining why the policy denied execution or how to resolve it.",
+      "context": "Users executing CLI commands in PowerShell or headless setups encounter policy denials instead of user confirmation prompts or clear error diagnostics explaining approval mode or TTY restrictions."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/scheduler/policy.ts",
+        "packages/core/src/policy/policy-engine.ts",
+        "packages/cli/src/config/config.ts"
+      ],
+      "steps": [
+        "Enhance `getPolicyDenialError` in `packages/core/src/scheduler/policy.ts` to output detailed, actionable error messages indicating the matching rule, deny reason, and approval mode settings when tool execution is denied by policy.",
+        "Update `checkPolicy` in `packages/core/src/scheduler/policy.ts` and `policy-engine.ts` to provide clearer diagnostic context when non-interactive/headless mode blocks interactive tool confirmation.",
+        "Refine headless TTY detection in `packages/core/src/utils/headless.ts` and `packages/cli/src/config/config.ts` to prevent false-positive non-interactive flags on Windows terminals or PowerShell environments."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/scheduler/policy.test.ts",
+      "expected_behavior": "When tool execution is denied by policy, the CLI outputs an informative error message specifying the policy rule or non-interactive restriction causing the denial, and interactive sessions accurately allow user confirmation requests.",
+      "verification_steps": [
+        "Add unit tests in `packages/core/src/scheduler/policy.test.ts` verifying that `getPolicyDenialError` includes rule deny messages and approval mode context when tool calls are denied.",
+        "Add policy engine tests verifying correct error behavior under non-interactive/headless configurations."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:43Z",
+  "execution_time_seconds": 105.41
+}

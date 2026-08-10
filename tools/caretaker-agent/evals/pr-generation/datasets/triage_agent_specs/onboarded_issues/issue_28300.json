@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28300,
+  "title": "Agentic loop breaks after `/rewind`",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable bug report describing how the agentic loop breaks after using the /rewind command, complete with expected vs actual behavior, client details, and environment information.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing this issue requires state synchronization and resetting internal agentic loop and prompt tracking state across both packages/cli (rewind command / UI hooks) and packages/core (GeminiClient / loop detection / execution state)."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28300",
+    "summary": {
+      "problem": "After executing /rewind to a previous point in a conversation and submitting a new prompt, the agentic loop stops after receiving one response and executing a single tool call instead of continuing automatically until task completion.",
+      "root_cause": "When /rewind is triggered, rewindConversation restores history via client.setHistory() and context.ui.loadHistory(), but fails to reset internal execution state, prompt IDs, and loop detection state in GeminiClient and useGeminiStream. Consequently, subsequent tool responses or next speaker continuation calls receive mismatched or stale prompt state, preventing the loop from continuing multi-turn execution.",
+      "context": "The agentic loop relies on prompt ID tracking and loop detector state in GeminiClient to coordinate tool execution responses and follow-up turns across turns. Stale state after rewinding breaks this coordination."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/commands/rewindCommand.tsx",
+        "packages/core/src/core/client.ts"
+      ],
+      "steps": [
+        "In packages/core/src/core/client.ts, ensure setHistory or a dedicated reset method clears stale prompt state, resets the loop detector, and clears current sequence model state.",
+        "In packages/cli/src/ui/commands/rewindCommand.tsx, ensure rewindConversation resets execution state on GeminiClient alongside history loading.",
+        "Ensure UI streaming state in useGeminiStream is properly cleared so subsequent tool call response submissions trigger continuation turns without being blocked by stale prompt context."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/commands/rewindCommand.test.tsx",
+      "expected_behavior": "After performing a /rewind operation, sending a new prompt allows the agentic loop to continue multi-turn tool execution automatically until completion.",
+      "verification_steps": [
+        "Add unit tests in packages/cli/src/ui/commands/rewindCommand.test.tsx to verify that client history, loop detector state, and execution state are reset properly upon rewinding.",
+        "Verify that subsequent prompt submissions after rewind properly trigger continuation calls for tool execution."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:36Z",
+  "execution_time_seconds": 110.02
+}

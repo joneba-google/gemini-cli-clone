@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27728,
+  "title": "bug: OpenTelemetry metrics export fails when `routing_reasoning` label exceeds 1024 characters",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue describes a clear bug where OpenTelemetry metrics export fails due to label values exceeding Google Cloud Monitoring's 1024-character limit. Reproduction steps, stack trace, and version information are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to packages/core/src/telemetry/metrics.ts, where metric label string lengths for routing.reasoning and routing.error_message need to be unconditionally truncated to under 1024 characters to comply with Google Cloud Monitoring API limits, along with updating unit tests in packages/core/src/telemetry/metrics.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27728",
+    "summary": {
+      "problem": "OpenTelemetry metrics export fails with Google Cloud Monitoring API errors when the routing_reasoning label exceeds 1024 characters.",
+      "root_cause": "In recordModelRoutingMetrics in packages/core/src/telemetry/metrics.ts, truncation of event.reasoning and event.error_message is guarded by process.env['GEMINI_STRICT_TELEMETRY_LIMITS'] === 'true'. When this environment variable is unset, long strings are sent as metric attributes, violating Google Cloud Monitoring API's 1024-character metric label limit.",
+      "context": "Google Cloud Monitoring rejects TimeSeries export calls containing metric label values longer than 1024 characters. Unconditional truncation of routing reasoning and error messages prevents periodic telemetry export failures."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/telemetry/metrics.ts"],
+      "steps": [
+        "In packages/core/src/telemetry/metrics.ts, update recordModelRoutingMetrics to unconditionally truncate event.reasoning to 1000 characters plus '...' when its length exceeds 1000 characters.",
+        "Update recordModelRoutingMetrics to unconditionally truncate event.error_message to 1000 characters plus '...' when its length exceeds 1000 characters."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/telemetry/metrics.test.ts",
+      "expected_behavior": "Long routing reasoning and error messages exceeding 1000 characters are always truncated to 1000 characters plus '...' before being emitted as metric attributes, regardless of environment variables.",
+      "verification_steps": [
+        "Update unit tests in packages/core/src/telemetry/metrics.test.ts to verify that long reasoning and error_message strings are unconditionally truncated without requiring GEMINI_STRICT_TELEMETRY_LIMITS.",
+        "Run Vitest on packages/core/src/telemetry/metrics.test.ts to confirm all telemetry metric tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:27Z",
+  "execution_time_seconds": 71.74
+}

@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 18551,
+  "title": "False positive loop detection right after submit",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue describes a valid, actionable bug where false positive loop detection triggers right after submitting a prompt. Reproduction context is provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The bug is a localized algorithmic issue in LoopDetectionService chunk overlapping analysis during streaming content check. Fix involves adjusting sliding window / non-overlapping chunk distance validation in packages/core/src/services/loopDetectionService.ts and adding tests in packages/core/src/services/loopDetectionService.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#18551",
+    "summary": {
+      "problem": "False positive loop detection triggers immediately after user submits a prompt when streamed content contains uniform text or spaces.",
+      "root_cause": "LoopDetectionService analyzes content using a 1-character sliding window over 50-character chunks. Uniform content like consecutive spaces or repeated characters generates 10 overlapping identical chunks within 10 characters of movement, incorrectly satisfying the loop detection criteria.",
+      "context": "The sliding window step size of 1 causes overlapping chunks to be treated as distinct repeating periods when calculating index distances and period uniqueness."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/services/loopDetectionService.ts"],
+      "steps": [
+        "Modify chunk tracking or distance checks in LoopDetectionService.ts so that chunk index comparisons require non-overlapping offsets (e.g. distance >= CONTENT_CHUNK_SIZE between chunk start positions).",
+        "Ensure reset() in LoopDetectionService resets all state properties including inCodeBlock."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/loopDetectionService.test.ts",
+      "expected_behavior": "Streamed content with repeated spaces or uniform padded characters does not trigger false positive content loop detection, while genuine content loops remain correctly detected.",
+      "verification_steps": [
+        "Add a unit test in loopDetectionService.test.ts passing streaming content with 60+ consecutive spaces or identical characters.",
+        "Verify addAndCheck returns count 0 for uniform content.",
+        "Run Vitest tests for loopDetectionService.test.ts to ensure all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:47:58Z",
+  "execution_time_seconds": 94.63
+}

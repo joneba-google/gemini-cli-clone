@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27419,
+  "title": "Ensure `shellExecutionService.ts` respects `enableInteractiveShell: false` and implements high-fidelity native bridge stability by handling non-UTF-8 bytes in the string serialization layer or when the buffer exceeds heap limits for string conversion",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a detailed, actionable bug report identifying three specific defects in shellExecutionService.ts (hangs in non-interactive loops, native bridge crashes/OOM on large outputs, and GIT_CONFIG_* sanitization bypass) with clear expected behaviors and client environment info.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "The fix involves core process execution mechanics in shellExecutionService.ts using node-pty and child_process.spawn, high-throughput output stream buffer chunking/UTF-8 boundary decoding, and strict non-interactive environment configuration."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27419",
+    "summary": {
+      "problem": "ShellExecutionService causes hangs in non-interactive mode due to unconstrained environment variables (TERM/PAGER), experiences native bridge crashes/OOM when handling large output buffers or split UTF-8 bytes, and contains a security leak where GIT_CONFIG_* environment variables bypass sanitization.",
+      "root_cause": "In prepareExecution(), non-interactive execution fails to set TERM=dumb and strictly enforce PAGER/GIT_PAGER=cat, allowing blocking pagers like less to hang execution. Additionally, prepareExecution() explicitly bypasses sanitization by copying raw process.env GIT_CONFIG_* variables even if they were redacted. In stream processing, high-volume outputs decoded all at once without chunking can trigger heap overflows or buffer serialization crashes on split UTF-8 byte boundaries.",
+      "context": "ShellExecutionService executes commands via node-pty or child_process. Correct non-interactive configuration, incremental 1MB chunk processing, and strict environment variable sanitization are required for stability in automated agent environments."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/shellExecutionService.ts"
+      ],
+      "steps": [
+        "Update prepareExecution() in shellExecutionService.ts to set TERM=dumb and strictly set PAGER and GIT_PAGER to 'cat' when isInteractive is false.",
+        "Remove the bypass loop in prepareExecution() that copies raw process.env[key] for GIT_CONFIG_* keys, ensuring environment variable sanitization is respected.",
+        "Implement incremental 1MB chunk processing and safe UTF-8 decoding in the output stream handlers in ShellExecutionService to prevent OOMs and handle split UTF-8 boundaries."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/shellExecutionService.test.ts",
+      "expected_behavior": "In non-interactive mode, commands execute with TERM=dumb and PAGER/GIT_PAGER=cat, sanitized GIT_CONFIG_* variables are respected without raw process.env bypass, and large outputs or non-UTF-8/split-boundary bytes are safely decoded and chunked without process crashes or OOMs.",
+      "verification_steps": [
+        "Add unit tests verifying that prepareExecution sets TERM=dumb, PAGER=cat, and GIT_PAGER=cat when non-interactive.",
+        "Add unit tests verifying that sanitized GIT_CONFIG_* environment variables are not overwritten with un-sanitized values from process.env.",
+        "Add unit tests for output stream chunking and split UTF-8 boundary decoding on large output buffers."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:11Z",
+  "execution_time_seconds": 64.05
+}

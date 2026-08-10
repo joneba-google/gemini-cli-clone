@@ -1,0 +1,39 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28048,
+  "title": "docs(hooks): LLMResponse `usageMetadata` in the reference omits `promptTokenCount` and `candidatesTokenCount` (the hook receives all three)",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue reports a clear, actionable documentation discrepancy where 'docs/hooks/reference.md' omits 'promptTokenCount' and 'candidatesTokenCount' from 'LLMResponse.usageMetadata', whereas the actual implementation and interface in 'packages/core/src/hooks/hookTranslator.ts' provide all three token count fields.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue requires a minor documentation fix in 'docs/hooks/reference.md' to align the documented 'LLMResponse.usageMetadata' schema with the actual fields delivered by the hook translator."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28048",
+    "summary": {
+      "problem": "In docs/hooks/reference.md under the Stable Model API section, the LLMResponse schema for usageMetadata lists only totalTokenCount, omitting promptTokenCount and candidatesTokenCount.",
+      "root_cause": "The reference documentation in docs/hooks/reference.md was not updated when promptTokenCount and candidatesTokenCount were included in the LLMResponse interface and translator in packages/core/src/hooks/hookTranslator.ts.",
+      "context": "Developers building hooks rely on docs/hooks/reference.md for the stable model schema. The hook translator already forwards promptTokenCount, candidatesTokenCount, and totalTokenCount."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["docs/hooks/reference.md"],
+      "steps": [
+        "Update the usageMetadata schema under LLMResponse in docs/hooks/reference.md to include promptTokenCount, candidatesTokenCount, and totalTokenCount."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "docs/hooks/reference.md documents promptTokenCount, candidatesTokenCount, and totalTokenCount under LLMResponse.usageMetadata.",
+      "verification_steps": [
+        "Verify docs/hooks/reference.md matches the LLMResponse usageMetadata type definition in packages/core/src/hooks/hookTranslator.ts."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:52Z",
+  "execution_time_seconds": 30.22
+}

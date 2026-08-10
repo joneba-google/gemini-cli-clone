@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27319,
+  "title": "Cannot read properties of undefined (reading 'type') on write_file/replace tools",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report describing a specific TypeError ('Cannot read properties of undefined (reading 'type')') on the write_file and replace tools, complete with CLI version and environment details.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to schema parameter definitions or parameter validation logic in packages/core/src/tools for file modification tools."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27319",
+    "summary": {
+      "problem": "The write_file and replace tools fail with a TypeError ('Cannot read properties of undefined (reading 'type')') during tool execution or parameter validation.",
+      "root_cause": "Tool schema definitions or parameter validation routines access the 'type' attribute on an undefined parameter property definition.",
+      "context": "Occurs when executing write_file or replace tools with auto-gemini-3 model configuration."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/write-file.ts",
+        "packages/core/src/tools/edit.ts",
+        "packages/core/src/tools/definitions/model-family-sets/gemini-3.ts"
+      ],
+      "steps": [
+        "Verify property definitions in parametersJsonSchema for write_file and replace tools in gemini-3.ts to ensure all parameters declare valid types.",
+        "Add null/undefined safe checks when accessing parameter property definitions and their 'type' attribute during parameter validation in write-file.ts and edit.ts.",
+        "Ensure tool schema resolution and parameter validation handle optional parameter definitions without throwing TypeError."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/write-file.test.ts",
+      "expected_behavior": "write_file and replace tools validate parameters and execute successfully without throwing TypeError on type property access.",
+      "verification_steps": [
+        "Add unit test cases in write-file.test.ts and edit.test.ts validating parameter schema processing.",
+        "Execute vitest suite on packages/core/src/tools to confirm all tool tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:36Z",
+  "execution_time_seconds": 62.0
+}

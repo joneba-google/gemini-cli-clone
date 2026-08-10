@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28645,
+  "title": "bug: extension release downloads do not handle stream failures",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report clearly identifies a defect in packages/cli/src/config/extensions/github.ts where downloadFile lacks error handling for response and file streams and leaves partial downloads on failure. It includes clear reproduction steps, root cause analysis, expected behavior, and actionable fix suggestions.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to a single helper function downloadFile in packages/cli/src/config/extensions/github.ts and its corresponding tests in packages/cli/src/config/extensions/github.test.ts. It involves utilizing node:stream/promises pipeline and unlinking incomplete download files upon error."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28645",
+    "summary": {
+      "problem": "downloadFile in packages/cli/src/config/extensions/github.ts pipes HTTP response streams directly to file write streams without handling stream errors or cleaning up partially downloaded files upon failure.",
+      "root_cause": "downloadFile only attaches an error listener to the initial https.get request object and listens for finish on the write stream. Stream failures during body transfer or write errors (e.g. ENOSPC) emit unhandled error events and leave partial files on disk.",
+      "context": "Network drops mid-transfer or filesystem write permissions/space issues during extension installation cause unhandled errors or corrupted leftover archive files."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/config/extensions/github.ts"],
+      "steps": [
+        "Import pipeline from 'node:stream/promises' in packages/cli/src/config/extensions/github.ts.",
+        "Update downloadFile to pipe response to destination file stream using pipeline(res, file).",
+        "Add error handling in downloadFile to catch stream/network failures and remove the incomplete destination file using fs.promises.unlink(dest) before rethrowing the error."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/extensions/github.test.ts",
+      "expected_behavior": "downloadFile properly rejects on response stream or file write stream errors and removes incomplete files from the filesystem.",
+      "verification_steps": [
+        "Add a unit test in github.test.ts where the file write stream emits an error, verifying downloadFile rejects and unlinks the partial destination file.",
+        "Add a unit test in github.test.ts where the response stream emits an error mid-transfer, verifying downloadFile rejects and unlinks the partial destination file."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:31:30Z",
+  "execution_time_seconds": 39.26
+}

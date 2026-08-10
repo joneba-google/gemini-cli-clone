@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28036,
+  "title": "Resumed sessions repeatedly stop after partial execution and require manual continue prompts",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear, actionable bug report detailing a defect in session resumption (`--resume`) where multi-step execution halts prematurely and requires manual continuation, complete with reproduction steps, environment details, and expected vs actual behavior.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The issue involves asynchronous execution flow and turn loop state management across package boundaries (`packages/core` and `packages/cli`), specifically interaction between session history restoration, `checkNextSpeaker` evaluation, and multi-turn stream generation. Additionally, as noted in the effort guidelines, bugs described as intermittent or occurring selectively during long multi-step sessions require increased reproduction and testing overhead, placing this in the MEDIUM effort tier."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28036",
+    "summary": {
+      "problem": "Resumed sessions using `--resume` stop execution prematurely during long-running multi-step tasks without an error message, requiring users to repeatedly type 'continue' to resume progress.",
+      "root_cause": "When resuming a session, restored history state and turn handling can cause `checkNextSpeaker` or turn loop completion checks to evaluate the last model turn as completed or fail silently due to large context size in `nextSpeakerChecker`, causing `sendMessageStream` in `GeminiClient` to stop yielding further turns and hand control back to the user prompt loop.",
+      "context": "In `packages/core/src/core/client.ts`, after executing a turn without pending tool calls, `checkNextSpeaker` is invoked to determine if the model should automatically continue with 'Please continue.'. In resumed sessions with large conversation histories, if `checkNextSpeaker` returns 'user' or fails (e.g. context limits or evaluation on restored turns), execution terminates cleanly without an error, forcing manual user intervention."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/client.ts",
+        "packages/core/src/utils/nextSpeakerChecker.ts",
+        "packages/cli/src/ui/hooks/useSessionResume.ts"
+      ],
+      "steps": [
+        "Investigate `checkNextSpeaker` in `packages/core/src/utils/nextSpeakerChecker.ts` to ensure prompt context length limits and restored turn roles/metadata do not cause false 'user' predictions or silent failures.",
+        "Update `sendMessageStream` in `packages/core/src/core/client.ts` to handle errors or unexpected 'user' returns from `checkNextSpeaker` gracefully, ensuring actionable feedback or proper turn continuation when an incomplete multi-step task was requested.",
+        "Ensure `useSessionResume.ts` in `packages/cli/src/ui/hooks/useSessionResume.ts` correctly restores session state, message roles, and pending tool/continuation flags so that the turn loop resumes under identical conditions to an active session.",
+        "Verify that all existing session resume and next-speaker unit tests pass and add edge case handling for long-history session resumption."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/client.test.ts",
+      "expected_behavior": "Resumed sessions complete multi-step tasks continuously without silently stopping after partial execution or requiring repetitive 'continue' prompts.",
+      "verification_steps": [
+        "Run `npm test packages/core/src/core/client.test.ts` to verify session resume and turn execution loops.",
+        "Add a test case in `client.test.ts` simulating a resumed session with multi-turn tool executions to ensure `sendMessageStream` continues automatically until task completion or explicit error."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:37:17Z",
+  "execution_time_seconds": 111.49
+}

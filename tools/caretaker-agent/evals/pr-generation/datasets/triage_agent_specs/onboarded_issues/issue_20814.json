@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 20814,
+  "title": "Fix expansion (ctrl+o) making Terminator terminal go blank and scroll to top of the buffer",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report detailing reproduction steps in plan mode, actual vs expected behavior, and client environment details (Linux, Terminator terminal, CLI version 0.31.0).",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The bug involves React/Ink state management, static history re-rendering, and terminal screen clearing sequences (refreshStatic) in non-alternate buffer mode, which affects scroll position and viewport stability in terminals such as Terminator."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#20814",
+    "summary": {
+      "problem": "Expanding content (Ctrl+O) in plan mode or standard mode causes the terminal to go blank and scroll to the top of the buffer continuously on terminals like Terminator.",
+      "root_cause": "Pressing Ctrl+O triggers refreshStatic() in AppContainer.tsx, which executes stdout.write(ansiEscapes.clearTerminal). Sending full terminal clear escape sequences clears the scrollback buffer and resets terminal scroll position, causing the terminal window to blank out and scroll to the top.",
+      "context": "In non-alternate buffer mode, static history components are re-rendered by clearing the terminal screen. Terminal emulators handle full clear ansi codes differently, and clearing scrollback forces viewports to jump to top."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/AppContainer.tsx"],
+      "steps": [
+        "Modify refreshStatic in AppContainer.tsx to avoid issuing full clearTerminal ANSI escape sequences that clear scrollback.",
+        "Refactor static history re-rendering during content expansion (Ctrl+O) to update inline content without wiping the terminal viewport and scroll position."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/AppContainer.test.tsx",
+      "expected_behavior": "Pressing Ctrl+O toggles content expansion without invoking ansiEscapes.clearTerminal on stdout or resetting terminal scroll position.",
+      "verification_steps": [
+        "Add or update test in AppContainer.test.tsx simulating Ctrl+O press in standard mode.",
+        "Assert that stdout does not write full screen/scrollback clearing escape sequences during expansion toggles."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:16Z",
+  "execution_time_seconds": 50.73
+}

@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 18834,
+  "title": "Fix for \"Sandbox image ... is missing or could not be pulled\"",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a valid and detailed bug report containing full error logs, stack trace, system details, analysis, and reproduction info regarding sandbox image resolution failures.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The changes are localized to packages/cli/src/utils/sandbox.ts in two places: defaulting image name when a custom project sandbox Dockerfile is detected and updating imageExists to check exit codes via inspect --type=image. Unit test updates are straightforward."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#18834",
+    "summary": {
+      "problem": "The CLI fails with 'Sandbox image ... is missing or could not be pulled' when using a custom project sandbox Dockerfile or when imageExists checks fail under certain container environments.",
+      "root_cause": "When a custom project sandbox Dockerfile (.gemini/sandbox.Dockerfile) exists, start_sandbox does not switch config.image to LOCAL_DEV_SANDBOX_IMAGE_NAME unless explicitly overridden by GEMINI_SANDBOX_IMAGE. Additionally, imageExists relies on stdout from 'images -q <image>', which can fail or produce empty stdout depending on container runtime behavior.",
+      "context": "Using 'inspect --type=image <image>' with stdio set to 'ignore' relies on the process exit status (0 for found, non-zero for missing) which is more reliable across Docker and Podman."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/utils/sandbox.ts"],
+      "steps": [
+        "In packages/cli/src/utils/sandbox.ts, update start_sandbox so that if isCustomProjectSandbox is true and process.env['GEMINI_SANDBOX_IMAGE'] is unset, image is assigned LOCAL_DEV_SANDBOX_IMAGE_NAME.",
+        "In packages/cli/src/utils/sandbox.ts, modify imageExists to run 'inspect' with '--type=image' and { stdio: 'ignore' }, resolving to true if the close exit code is 0 and false otherwise."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/sandbox.test.ts",
+      "expected_behavior": "start_sandbox correctly selects the local dev sandbox image when a custom project sandbox Dockerfile is present, and imageExists accurately detects image presence via inspect exit codes.",
+      "verification_steps": [
+        "Add unit tests in packages/cli/src/utils/sandbox.test.ts verifying image assignment when a custom project sandbox Dockerfile exists in the project directory.",
+        "Add unit tests in packages/cli/src/utils/sandbox.test.ts verifying imageExists behavior for exit code 0 vs non-zero on inspect."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:55Z",
+  "execution_time_seconds": 45.22
+}

@@ -1,0 +1,49 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28313,
+  "title": "MaxListenersExceededWarning and Infinite Loop with gemma-4-31b-it (Gemini API)",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides clear reproduction steps, environment details (CLI version, model, OS, auth type), and specific error messages (MaxListenersExceededWarning, infinite retry/thinking loop on large context payloads with gemma-4-31b-it), making it an actionable bug report.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The issue requires addressing an infinite retry loop and event listener memory leak (MaxListenersExceededWarning on AbortSignal) during model stream error handling on large context payloads. Resolving this requires cross-package changes across packages/core (stream retry logic, AbortSignal listener cleanup in geminiChat.ts and fetch.ts / retry.ts) and packages/cli (stream state lifecycle in useGeminiStream.ts)."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28313",
+    "summary": {
+      "problem": "When using gemma-4-31b-it with Gemini API authentication on large context payloads, the CLI encounters stream failures or hangs, entering an infinite thinking/retry loop that rapidly accumulates AbortSignal listeners and triggers MaxListenersExceededWarning.",
+      "root_cause": "Mid-stream API errors or timeouts on large context payloads trigger unhandled stream retries where AbortSignal event listeners are added repeatedly without proper cleanup, while the stream error handler repeatedly restarts stream generation without breaking or hitting a terminal failure condition.",
+      "context": "The CLI sets up AbortSignal event listeners in fetchWithTimeout and retryWithBackoff when executing streaming requests. When gemma-4-31b-it requests fail or time out repeatedly during response generation, streamWithRetries re-executes the API call in a loop without properly removing old AbortSignal listeners or bounding mid-stream retries."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/geminiChat.ts",
+        "packages/core/src/utils/fetch.ts",
+        "packages/core/src/utils/retry.ts",
+        "packages/cli/src/ui/hooks/useGeminiStream.ts"
+      ],
+      "steps": [
+        "In packages/core/src/utils/fetch.ts, ensure AbortSignal listeners attached during fetchWithTimeout are removed in all exit paths (success, error, and timeout) to prevent listener leaks.",
+        "In packages/core/src/utils/retry.ts, update retryWithBackoff to ensure signal listeners added across retry attempts are properly cleaned up and max attempts are strictly respected.",
+        "In packages/core/src/core/geminiChat.ts, handle stream errors in makeApiCallAndProcessStream by enforcing termination when max mid-stream retries are exceeded or when the signal is aborted.",
+        "In packages/cli/src/ui/hooks/useGeminiStream.ts, ensure stream state transition out of 'thinking' mode when a terminal stream error occurs so the CLI does not fall into an infinite UI thinking loop."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/geminiChat.test.ts",
+      "expected_behavior": "When a stream fails repeatedly on a model call with an active AbortSignal, the retry logic terminates after the configured maxAttempts, cleans up all AbortSignal listeners without emitting MaxListenersExceededWarning, and throws a terminal stream error.",
+      "verification_steps": [
+        "Add a unit test simulating consecutive mid-stream failures on generateContentStream using a custom AbortSignal.",
+        "Assert that AbortSignal listener count does not increase beyond 1 across multiple retry attempts.",
+        "Assert that retryWithBackoff stops retrying once maxAttempts is reached and throws the expected error instead of looping endlessly."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:32Z",
+  "execution_time_seconds": 59.28
+}

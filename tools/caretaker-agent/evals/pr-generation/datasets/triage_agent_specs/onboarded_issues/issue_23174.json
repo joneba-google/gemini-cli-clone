@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 23174,
+  "title": "Fix Context Initialization Mismatch in Core Tools",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a specific bug where getter properties on the Config prototype are lost during object spread operations ({...context}), resulting in undefined property errors during execution. It identifies the root cause and details the required refactoring.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is a localized bug fix within packages/core/src/config/config.ts. The changes involve converting getters (config, promptId, toolRegistry, promptRegistry, resourceRegistry, messageBus, geminiClient, sandboxManager) to public instance properties and initializing them properly in the Config constructor or initialize() method. Existing unit tests in packages/core/src/config/config.test.ts can be updated or expanded to verify that spreading a Config instance retains all AgentLoopContext properties."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#23174",
+    "summary": {
+      "problem": "The Gemini CLI intermittently crashes with 'Cannot read properties of undefined' errors (e.g. reading 'isTrustedFolder', 'publish', 'config') during tool execution and confirmation flows.",
+      "root_cause": "The Config class implements AgentLoopContext using getters for key properties (config, promptId, toolRegistry, promptRegistry, resourceRegistry, messageBus, geminiClient, sandboxManager). Spreading the context object ({...context}) drops prototype getters, leaving these fields undefined on the spread copy.",
+      "context": "In LocalAgentExecutor, Scheduler, telemetry loggers, and other parts of the codebase, context or config objects are cloned using object spread. Converting getters to instance properties on Config ensures they are enumerable instance properties preserved when spread."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/config/config.ts"],
+      "steps": [
+        "In packages/core/src/config/config.ts, convert the getters config, promptId, toolRegistry, promptRegistry, resourceRegistry, messageBus, geminiClient, and sandboxManager to public instance properties or fields.",
+        "Initialize or assign these properties in the Config constructor or during the initialize() method as appropriate so they exist directly on the instance.",
+        "Ensure internal property references inside Config align with the new property declarations."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/config/config.test.ts",
+      "expected_behavior": "Spreading a Config instance (e.g. {...config} or {...context}) preserves all AgentLoopContext fields (config, promptId, toolRegistry, promptRegistry, resourceRegistry, messageBus, geminiClient, sandboxManager) as defined properties instead of undefined.",
+      "verification_steps": [
+        "Add a test case in packages/core/src/config/config.test.ts that instantiates or initializes Config.",
+        "Spread the Config / AgentLoopContext instance into a new object using {...config}.",
+        "Assert that config, promptId, toolRegistry, promptRegistry, resourceRegistry, messageBus, geminiClient, and sandboxManager are defined and equal to their respective instances on the cloned object."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:57Z",
+  "execution_time_seconds": 43.52
+}

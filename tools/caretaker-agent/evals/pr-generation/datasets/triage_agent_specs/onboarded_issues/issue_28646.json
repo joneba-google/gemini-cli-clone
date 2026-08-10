@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28646,
+  "title": "bug: malformed GitHub API JSON can crash extension operations",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report identifying an uncaught exception in `fetchJson()` when handling malformed JSON response chunks in `packages/cli/src/config/extensions/github_fetch.ts`. Reproduction steps and expected behaviors are well described.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The bug is isolated to `packages/cli/src/config/extensions/github_fetch.ts` where `JSON.parse` inside the response `end` event callback is not wrapped in a `try/catch` block, and response stream errors are unhandled. Resolving this requires wrapping `JSON.parse` in a `try/catch` to reject the promise, handling stream error events on `res`, and adding unit test coverage in `packages/cli/src/config/extensions/github_fetch.test.ts`."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28646",
+    "summary": {
+      "problem": "Uncaught SyntaxError when parsing malformed JSON responses in `fetchJson` and missing error handling on the response stream.",
+      "root_cause": "In `packages/cli/src/config/extensions/github_fetch.ts`, `JSON.parse` is executed within the response stream's `end` event callback without `try/catch` protection, causing thrown parsing errors to escape the Promise executor. Additionally, the response stream `res` lacks an `error` listener to handle stream failures.",
+      "context": "`fetchJson` is used by the GitHub extension helper to communicate with GitHub API endpoints. Malformed API responses or proxy stream errors currently cause uncaught exceptions and crash operations."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/config/extensions/github_fetch.ts"],
+      "steps": [
+        "In `packages/cli/src/config/extensions/github_fetch.ts`, attach an 'error' event listener to the response stream `res` inside `https.get` to reject the Promise if a response stream error occurs.",
+        "Wrap `JSON.parse(data)` inside the `res.on('end')` callback in a `try/catch` block.",
+        "In the `catch` block of `JSON.parse`, reject the Promise with a descriptive Error indicating JSON parsing failure."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/extensions/github_fetch.test.ts",
+      "expected_behavior": "`fetchJson` should reject with an Error when receiving malformed JSON or encountering a response stream error, allowing callers to handle the failure gracefully.",
+      "verification_steps": [
+        "Add a unit test in `packages/cli/src/config/extensions/github_fetch.test.ts` where `https.get` response emits malformed JSON data chunks (e.g. `{invalid`) and ends, confirming that `fetchJson` rejects with an error.",
+        "Add a unit test where the `https.get` response stream emits an 'error' event, confirming that `fetchJson` rejects with the stream error."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:31:27Z",
+  "execution_time_seconds": 35.87
+}

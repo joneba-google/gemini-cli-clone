@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21729,
+  "title": "Bug: A2A server GET /tasks/metadata missing return after 501 response \u2014 causes ERR_HTTP_HEADERS_SENT crash with GCS task store",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report clearly describes a systemic code defect in packages/a2a-server/src/http/app.ts where the GET /tasks/metadata endpoint is missing a return statement after sending a 501 HTTP response when taskStoreForExecutor is not an instance of InMemoryTaskStore. This missing return causes execution to fall through and attempt to send a second response, leading to an ERR_HTTP_HEADERS_SENT crash. The issue includes reproduction steps, clear root cause analysis, code snippets, and exact file locations.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "This is a localized bug fix requiring a single-file logic adjustment (adding a missing return statement after sending a 501 response) in packages/a2a-server/src/http/app.ts, along with adding or updating a test in packages/a2a-server/src/http/endpoints.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21729",
+    "summary": {
+      "problem": "The GET /tasks/metadata endpoint in A2A server causes an ERR_HTTP_HEADERS_SENT server crash when using non-InMemory task stores (e.g. GCSTaskStore).",
+      "root_cause": "In packages/a2a-server/src/http/app.ts, when taskStoreForExecutor is not an instance of InMemoryTaskStore, the handler sends a 501 response but lacks a return statement. Execution falls through to the try block and attempts to send a second HTTP response (200, 204, or 500).",
+      "context": "Other early-exit guards in packages/a2a-server/src/http/app.ts, such as in /tasks/:taskId/metadata and handleExecuteCommand, correctly include a return statement after sending error responses."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/a2a-server/src/http/app.ts"],
+      "steps": [
+        "Locate the GET /tasks/metadata route handler in packages/a2a-server/src/http/app.ts.",
+        "Inside the if (!(taskStoreForExecutor instanceof InMemoryTaskStore)) block, add a return; statement immediately after res.status(501).send(...)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/a2a-server/src/http/endpoints.test.ts",
+      "expected_behavior": "When taskStoreForExecutor is not an instance of InMemoryTaskStore, GET /tasks/metadata returns a 501 response and exits cleanly without throwing ERR_HTTP_HEADERS_SENT or attempting to send a second response.",
+      "verification_steps": [
+        "Add a test case in packages/a2a-server/src/http/endpoints.test.ts to verify GET /tasks/metadata behavior when taskStoreForExecutor is configured with a non-InMemory task store.",
+        "Assert that the response status code is 501 and that no secondary response or ERR_HTTP_HEADERS_SENT error is thrown."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:23Z",
+  "execution_time_seconds": 31.34
+}

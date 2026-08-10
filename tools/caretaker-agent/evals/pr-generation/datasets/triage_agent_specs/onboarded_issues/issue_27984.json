@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27984,
+  "title": "Vertex AI with API key ignores GOOGLE_CLOUD_LOCATION and uses the global endpoint (data residency)",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed and actionable bug report explaining that Vertex AI with an API key ignores GOOGLE_CLOUD_LOCATION and routes to the global endpoint. It includes version info, reproduction details, and reference to the underlying code in contentGenerator.ts.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires a localized logic update in packages/core/src/core/contentGenerator.ts to construct regional Vertex AI endpoints from GOOGLE_CLOUD_LOCATION, alongside unit tests in packages/core/src/core/contentGenerator.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27984",
+    "summary": {
+      "problem": "When using Vertex AI authentication with an API key, setting GOOGLE_CLOUD_LOCATION to a specific region (e.g., europe-west3) is ignored and requests default to the global endpoint https://aiplatform.googleapis.com/.",
+      "root_cause": "In packages/core/src/core/contentGenerator.ts, createContentGenerator only sets baseUrl for 'us' or 'eu' multi-region locations. For regional locations, baseUrl remains undefined, causing @google/genai to default to the global endpoint.",
+      "context": "Data residency guarantees in Vertex AI require routing requests to regional endpoints matching GOOGLE_CLOUD_LOCATION (https://${location}-aiplatform.googleapis.com)."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/core/contentGenerator.ts"],
+      "steps": [
+        "In packages/core/src/core/contentGenerator.ts, locate the AuthType.USE_VERTEX_AI section in createContentGenerator where baseUrl is set based on GOOGLE_CLOUD_LOCATION.",
+        "Add a fallback clause for non-empty location strings to set baseUrl to 'https://${location}-aiplatform.googleapis.com'."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/contentGenerator.test.ts",
+      "expected_behavior": "When GOOGLE_CLOUD_LOCATION is set to a region like 'europe-west3', createContentGenerator passes httpOptions.baseUrl = 'https://europe-west3-aiplatform.googleapis.com' to GoogleGenAI.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/core/contentGenerator.test.ts for AuthType.USE_VERTEX_AI when GOOGLE_CLOUD_LOCATION is 'europe-west3'.",
+        "Verify that GoogleGenAI is called with httpOptions.baseUrl set to 'https://europe-west3-aiplatform.googleapis.com'."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:37:17Z",
+  "execution_time_seconds": 91.78
+}

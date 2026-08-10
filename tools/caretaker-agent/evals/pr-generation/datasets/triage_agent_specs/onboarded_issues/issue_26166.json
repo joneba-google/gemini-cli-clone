@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 26166,
+  "title": "[Bug][MCP] {{HOME}} template variable silently ignored in mcpServers config \u2014 causes ALL MCPs to show Disconnected with zero error output",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report complete with environment details, step-by-step reproduction, root cause identification, and impact assessment.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue requires a localized logic change in packages/core/src/tools/mcp-client.ts to expand template variables (like {{HOME}}) in MCP server commands, arguments, and working directory before instantiating StdioClientTransport, along with adding a unit test in packages/core/src/tools/mcp-client.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26166",
+    "summary": {
+      "problem": "MCP server configurations containing template variables like {{HOME}} fail silently without expanding the path, causing MCP servers using stdio transport to show as Disconnected with no diagnostic error output.",
+      "root_cause": "In packages/core/src/tools/mcp-client.ts, createTransport passes mcpServerConfig.command, mcpServerConfig.args, and mcpServerConfig.cwd directly to StdioClientTransport without expanding {{HOME}} or other template/environment variables.",
+      "context": "Node.js child_process.spawn requires literal file paths and does not automatically expand shell template variables such as {{HOME}}. Passing unexpanded {{HOME}} strings results in process spawning failure."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/mcp-client.ts"],
+      "steps": [
+        "Add a template expansion helper in packages/core/src/tools/mcp-client.ts that resolves template placeholders like {{HOME}} using os.homedir() (or process.env.HOME), {{USER}} using os.userInfo().username, and {{PWD}} using process.cwd().",
+        "In createTransport in packages/core/src/tools/mcp-client.ts, expand template variables and environment variables in mcpServerConfig.command, mcpServerConfig.args elements, and mcpServerConfig.cwd before instantiating StdioClientTransport."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/mcp-client.test.ts",
+      "expected_behavior": "createTransport expands {{HOME}} and environment variables in MCP server command, args, and cwd when instantiating StdioClientTransport.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/tools/mcp-client.test.ts under createTransport that configures an MCP server with {{HOME}} in command and args.",
+        "Verify that StdioClientTransport is constructed with {{HOME}} replaced by the actual user home directory (os.homedir())."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:05Z",
+  "execution_time_seconds": 66.33
+}

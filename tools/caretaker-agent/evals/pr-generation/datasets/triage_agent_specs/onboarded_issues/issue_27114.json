@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27114,
+  "title": "~/.gemini/.env VS untrusted folder",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a bug where `~/.gemini/.env` (user-level environment configuration in the home directory) is not loaded when starting gemini-cli in an untrusted workspace folder, causing authentication issues for GCP/Vertex AI users who rely on setting `GOOGLE_CLOUD_PROJECT` in `~/.gemini/.env`.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to `packages/cli/src/config/settings.ts` inside `findEnvFile`, removing the `isTrusted` guard when falling back to `homeGeminiEnvPath` (`~/.gemini/.env`) in `homedir()`, alongside a unit test in `packages/cli/src/config/settings.test.ts`."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27114",
+    "summary": {
+      "problem": "When running gemini-cli inside an untrusted workspace folder, the global user-level environment file `~/.gemini/.env` is not loaded, causing authentication failures for workspace users setting `GOOGLE_CLOUD_PROJECT` there.",
+      "root_cause": "In `packages/cli/src/config/settings.ts`, `findEnvFile` guards checking `homeGeminiEnvPath` (`path.join(homedir(), GEMINI_DIR, '.env')`) with `if (isTrusted)`. When `isTrusted` is `false`, `~/.gemini/.env` is skipped.",
+      "context": "Unlike untrusted workspace-local files, `~/.gemini/.env` resides in the user's home directory and represents global user configuration. Environment variables loaded from untrusted workspace contexts are already sanitized and filtered against `AUTH_ENV_VAR_WHITELIST` by `loadEnvironment`."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/config/settings.ts"],
+      "steps": [
+        "In `packages/cli/src/config/settings.ts`, update `findEnvFile` so that `homeGeminiEnvPath` (`path.join(homedir(), GEMINI_DIR, '.env')`) is checked regardless of `isTrusted` when falling back to the home directory.",
+        "Ensure local workspace `.gemini/.env` inside untrusted directories remains guarded by `isTrusted`, while allowing `~/.gemini/.env` in `homedir()` to be discovered and loaded."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/settings.test.ts",
+      "expected_behavior": "When `loadEnvironment` is called in an untrusted workspace, environment variables present in `~/.gemini/.env` (such as `GOOGLE_CLOUD_PROJECT`) are loaded into `process.env`.",
+      "verification_steps": [
+        "Add a unit test in `packages/cli/src/config/settings.test.ts` testing `loadEnvironment` when `isTrusted` is `false` and `~/.gemini/.env` exists in `homedir()`. Assert that whitelisted environment variables like `GOOGLE_CLOUD_PROJECT` are populated in `process.env`."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:58Z",
+  "execution_time_seconds": 46.64
+}

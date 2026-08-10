@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28693,
+  "title": "ACP: a session killed mid-turn is never persisted \u2014 session/load returns \"No previous sessions found\" despite loadSession: true",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a bug where ACP sessions are not persisted durably during prompt execution, causing session loading (`session/load`) to fail if the process terminates abruptly mid-turn. It includes detailed reproduction steps, version info, expected vs actual behavior, and context on process tree handling.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing mid-turn session persistence in ACP mode requires ensuring that user prompts and stream turns are durably checkpointed to disk during prompt execution across packages/cli (acpSession/acpSessionManager) and packages/core (ChatRecordingService/GeminiChat), and ensuring mid-turn recovery works cleanly when loading sessions."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28693",
+    "summary": {
+      "problem": "When running as an ACP agent, session state is not durably persisted per turn or mid-turn, causing session recovery (`session/load`) after an ungraceful process crash to fail with 'No previous sessions found for this project'.",
+      "root_cause": "In ACP mode, `Session` and `AcpSessionManager` do not ensure user prompts and intermediate turn progress are durably checkpointed to disk via `ChatRecordingService` during the prompt lifecycle, leaving sessions unpersisted or unresumable on abnormal termination.",
+      "context": "ACP clients rely on `agentCapabilities.loadSession: true` for crash recovery. Persistent state currently relies on clean exit or complete turn updates, making `loadSession` fail when attempting recovery after a process dies mid-turn."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/acp/acpSession.ts",
+        "packages/cli/src/acp/acpSessionManager.ts"
+      ],
+      "steps": [
+        "In `packages/cli/src/acp/acpSession.ts`, ensure user prompt messages and streaming response turns/tool calls are durably recorded via `ChatRecordingService` as soon as they are received or executed during `Session.prompt()`.",
+        "In `packages/cli/src/acp/acpSessionManager.ts`, ensure that session metadata and initial conversation state are immediately persisted to disk upon session creation (`newSession`), making the session discoverable by `SessionSelector`.",
+        "Ensure `session/load` in `packages/cli/src/acp/acpSessionManager.ts` correctly restores history and session state even if the previous process was terminated mid-turn."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/acp/acpResume.test.ts",
+      "expected_behavior": "Sessions created and prompted in ACP mode are incrementally persisted to disk so that `session/load` successfully locates and restores session history after process termination.",
+      "verification_steps": [
+        "Add a test in `packages/cli/src/acp/acpResume.test.ts` simulating session creation and mid-turn execution followed by an abrupt process termination.",
+        "Verify that calling `session/load` with the same `sessionId` in a fresh process successfully loads the session data without throwing 'No previous sessions found'."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:03Z",
+  "execution_time_seconds": 551.96
+}

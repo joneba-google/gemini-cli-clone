@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 23195,
+  "title": "bug: isFunctionCall and isFunctionResponse return true for empty parts arrays",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable bug report. It accurately identifies the issue in `isFunctionCall` and `isFunctionResponse` within `messageInspectors.ts`, explaining that `Array.every([])` returns `true` for empty `parts` arrays due to vacuous truth in JavaScript.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to a single file (`packages/core/src/utils/messageInspectors.ts`) and requires a simple check (`content.parts.length > 0`) in two functions, along with adding unit test coverage in `packages/core/src/utils/messageInspectors.test.ts`."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#23195",
+    "summary": {
+      "problem": "isFunctionCall() and isFunctionResponse() return true for messages with empty parts arrays ([]).",
+      "root_cause": "Both functions use content.parts.every(...) without checking content.parts.length > 0. In JavaScript, Array.prototype.every() on an empty array returns true (vacuous truth).",
+      "context": "messageInspectors.ts contains functions used to inspect Gemini API Content objects to determine if they contain function calls or function responses."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/utils/messageInspectors.ts"],
+      "steps": [
+        "In packages/core/src/utils/messageInspectors.ts, update isFunctionResponse to verify content.parts.length > 0 before calling content.parts.every().",
+        "In packages/core/src/utils/messageInspectors.ts, update isFunctionCall to verify content.parts.length > 0 before calling content.parts.every()."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/messageInspectors.test.ts",
+      "expected_behavior": "isFunctionCall() and isFunctionResponse() return false when parts is an empty array [], undefined, or contains non-function parts, and return true only when parts is non-empty and all parts are function calls or responses.",
+      "verification_steps": [
+        "Create packages/core/src/utils/messageInspectors.test.ts using Vitest.",
+        "Add unit tests for isFunctionCall ensuring it returns false for { role: 'model', parts: [] }, undefined parts, and non-function call parts, and true for valid function calls.",
+        "Add unit tests for isFunctionResponse ensuring it returns false for { role: 'user', parts: [] }, undefined parts, and non-function response parts, and true for valid function responses."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:44Z",
+  "execution_time_seconds": 31.73
+}

@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28650,
+  "title": "bug: resolved model config tools and systemInstruction are overwritten",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report identifying a specific code section where resolved model configuration properties (systemInstruction and tools) are unconditionally overwritten by GeminiChat fields. It includes reproduction steps, code location context, and expected vs actual behavior.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue requires a localized logic fix in packages/core/src/core/geminiChat.ts to ensure systemInstruction and tools from resolved model configurations are preserved or merged correctly with chat-level fields, along with unit tests in packages/core/src/core/geminiChat.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28650",
+    "summary": {
+      "problem": "GeminiChat resolves a GenerateContentConfig from modelConfigService but unconditionally overwrites any resolved systemInstruction and tools properties with the chat instance's local fields.",
+      "root_cause": "In packages/core/src/core/geminiChat.ts, the config object construction spreads currentGenerateContentConfig and then explicitly assigns systemInstruction: this.systemInstruction and tools: this.tools, discarding model-level config values even when present.",
+      "context": "Model aliases and configurations resolved via modelConfigService can supply specific systemInstruction and tools settings that should take precedence or be preserved when chat-level fields are default or unconfigured."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/core/geminiChat.ts"],
+      "steps": [
+        "In packages/core/src/core/geminiChat.ts, update the GenerateContentConfig construction within sendMessageStreamInternal to preserve systemInstruction from currentGenerateContentConfig when available or when this.systemInstruction is empty.",
+        "In packages/core/src/core/geminiChat.ts, update the tools property in GenerateContentConfig construction to preserve or merge tools resolved from currentGenerateContentConfig alongside this.tools."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/geminiChat.test.ts",
+      "expected_behavior": "When modelConfigService resolves a configuration with a systemInstruction or tools, those values should be present in the GenerateContentConfig passed to the content generator rather than being overwritten.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/core/geminiChat.test.ts verifying that systemInstruction from modelConfigService is preserved in GenerateContentConfig when sending messages.",
+        "Add unit tests in packages/core/src/core/geminiChat.test.ts verifying that tools from modelConfigService are retained or merged when present in resolved config.",
+        "Verify that chat-level systemInstruction and tools are still applied correctly when model config does not define them."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:31:36Z",
+  "execution_time_seconds": 45.51
+}

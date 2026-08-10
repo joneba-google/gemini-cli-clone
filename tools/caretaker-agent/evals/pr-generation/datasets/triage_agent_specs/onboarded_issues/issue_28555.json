@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28555,
+  "title": "\ud83d\udd12 Security: SSRF via DNS Resolution Bypass in web-fetch Tool (CVSS 8.6)",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable security bug report regarding SSRF via DNS resolution bypass in the web-fetch tool, with detailed explanation of the root cause, affected code locations, and impact.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to `packages/core/src/tools/web-fetch.ts`, updating `isBlockedHost` to call the existing async `isPrivateIpAsync` utility function and updating its internal callers to await the result."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#28555",
+    "summary": {
+      "problem": "The web-fetch tool uses synchronous IP address validation without DNS resolution, enabling SSRF attacks via domains resolving to private IP addresses.",
+      "root_cause": "isBlockedHost in packages/core/src/tools/web-fetch.ts calls isPrivateIp(), which only checks literal IP address strings and returns false for domain names.",
+      "context": "packages/core/src/utils/fetch.ts already contains isPrivateIpAsync() which resolves hostnames via DNS lookup before checking for private IP addresses."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/web-fetch.ts"],
+      "steps": [
+        "Import isPrivateIpAsync instead of isPrivateIp from ../utils/fetch.js in packages/core/src/tools/web-fetch.ts.",
+        "Refactor isBlockedHost in WebFetchToolInvocation to be an async method that calls and awaits isPrivateIpAsync(urlStr).",
+        "Update callers of isBlockedHost in packages/core/src/tools/web-fetch.ts (executeFallbackForUrl, filterAndValidateUrls, executeExperimental, and getConfirmationDetails) to await isBlockedHost."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/web-fetch.test.ts",
+      "expected_behavior": "Web fetch requests targeting domain names that resolve to private IP addresses are blocked appropriately.",
+      "verification_steps": [
+        "Update existing unit tests and add tests in packages/core/src/tools/web-fetch.test.ts to verify that domain names resolving to private IP addresses are blocked by isBlockedHost."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:03:01Z",
+  "execution_time_seconds": 159.66
+}

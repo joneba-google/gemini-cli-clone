@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28620,
+  "title": "formatTruncatedToolOutput: negative maxChars silently inflates output ~2x",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, detailed, and actionable bug report describing a defect in formatTruncatedToolOutput where non-positive maxChars values cause output inflation instead of returning the content unchanged. It includes code snippets, root cause analysis, and reproducible unit test cases.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "This is a localized single-file logic bug in packages/core/src/utils/fileUtils.ts requiring a guard condition for maxChars <= 0 and unit tests in packages/core/src/utils/fileUtils.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28620",
+    "summary": {
+      "problem": "formatTruncatedToolOutput inflates output size or incorrectly wraps content in a truncation message when maxChars is non-positive.",
+      "root_cause": "formatTruncatedToolOutput lacks a check for maxChars <= 0. When maxChars is non-positive, the contentStr.length <= maxChars check fails for non-empty content, causing negative or zero slice indices that return and duplicate full content in the output.",
+      "context": "The function formatTruncatedToolOutput is part of the public exports of @google/gemini-cli-core. Non-positive maxChars values are conventionally used to disable truncation."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/utils/fileUtils.ts"],
+      "steps": [
+        "In packages/core/src/utils/fileUtils.ts, modify formatTruncatedToolOutput to return contentStr early when maxChars <= 0."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/fileUtils.test.ts",
+      "expected_behavior": "formatTruncatedToolOutput returns contentStr unchanged when maxChars is 0 or negative.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/utils/fileUtils.test.ts verifying that formatTruncatedToolOutput returns contentStr unchanged when maxChars is 0.",
+        "Add a unit test in packages/core/src/utils/fileUtils.test.ts verifying that formatTruncatedToolOutput returns contentStr unchanged when maxChars is negative (e.g., -1000)."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:31:29Z",
+  "execution_time_seconds": 38.57
+}

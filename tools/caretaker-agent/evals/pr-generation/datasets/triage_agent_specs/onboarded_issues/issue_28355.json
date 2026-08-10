@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28355,
+  "title": "MCP tool discovery silently blocks for 10 minutes when server returns a mismatched response id",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a valid, actionable bug report providing wire captures, version details, expected vs actual behavior, and an identified issue where tool discovery hangs for 10 minutes when an MCP server returns a mismatched JSON-RPC response ID.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing the silent 10-minute timeout during MCP tool discovery requires updating asynchronous request/discovery timeout handling and error reporting within packages/core/src/tools/mcp-client.ts. This falls under Asynchronous Flow & Integration and MCP protocol timeout management across the MCP client lifecycle."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28355",
+    "summary": {
+      "problem": "MCP tool discovery blocks silently for 10 minutes when an MCP server returns a response with a mismatched request ID or fails to respond to tools/list.",
+      "root_cause": "When querying tools/list during MCP discovery, mcp-client.ts uses the general MCP default server timeout (MCP_DEFAULT_TIMEOUT_MSEC = 10 minutes) instead of a shorter discovery-specific timeout, causing startup to freeze silently when responses are ignored or missing.",
+      "context": "JSON-RPC 2.0 requires ignoring responses with non-matching request IDs. However, waiting for the full 10-minute execution timeout during initial tool discovery results in a poor user experience without feedback or error messages."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/mcp-client.ts"],
+      "steps": [
+        "Define a dedicated shorter timeout for tool discovery/probing (e.g. 5-10 seconds) rather than relying on the general 10-minute tool execution timeout.",
+        "Update discoverTools and refreshTools in packages/core/src/tools/mcp-client.ts to enforce the discovery timeout when requesting tools/list.",
+        "Emit a diagnostic warning or log message when an MCP server fails to respond to tools/list within the discovery timeout window."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/mcp-client.test.ts",
+      "expected_behavior": "MCP tool discovery times out quickly (within the discovery timeout window) when an MCP server returns a mismatched response ID or fails to respond, emitting a warning instead of blocking for 10 minutes.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/tools/mcp-client.test.ts that simulates an MCP server returning a mismatched response ID for tools/list.",
+        "Verify that discoverTools times out using the shorter discovery timeout instead of waiting 10 minutes.",
+        "Assert that an appropriate warning/diagnostic event is logged when the tools/list request times out."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:33:25Z",
+  "execution_time_seconds": 36.77
+}

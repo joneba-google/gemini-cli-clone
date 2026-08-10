@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21752,
+  "title": "AbortError: The operation was aborted. at abort (file:///Users/macbookpro/.nvm/versions/node/v23.9.0/lib/node_modules/@google/gemini-cli/node_modules/google-auth-library/node_modules/node-fetch/src/index.js:70:18) at AbortSignal.abortAndFinalize (file:///U",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides sufficient technical detail, including CLI version, operating system, authentication type, and a complete stack trace pointing directly to AbortError in GeminiClient.processTurn / GeminiClient.sendMessageStream.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The bug is a localized error handling issue in packages/core/src/core/client.ts. sendMessageStream incorrectly treats any AbortError as user cancellation even when the caller AbortSignal was not aborted. Fixing this requires updating the conditional check to ensure signal.aborted is true before emitting UserCancelled."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#21752",
+    "summary": {
+      "problem": "When an internal request (such as an auth or fetch call in google-auth-library) times out or aborts, it throws an AbortError. GeminiClient.sendMessageStream catches this and incorrectly treats all AbortErrors as user cancellation even when the user signal was not aborted, causing unexpected CLI termination or incorrect status reporting.",
+      "root_cause": "In GeminiClient.sendMessageStream (packages/core/src/core/client.ts), the catch block checks `if (signal?.aborted || isAbortError(error))`. Because isAbortError returns true for any Error named 'AbortError', internal library timeouts/aborts (where signal.aborted is false) are misidentified as user cancellations rather than internal errors.",
+      "context": "Node fetch / google-auth-library uses AbortController timeouts internally. When these time out, they raise an AbortError. Turn.run checks signal.aborted before yielding UserCancelled, whereas GeminiClient.sendMessageStream treats any AbortError as UserCancelled regardless of signal.aborted."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/core/client.ts"],
+      "steps": [
+        "In packages/core/src/core/client.ts, update the catch block in sendMessageStream so that UserCancelled event is only yielded when signal?.aborted is true.",
+        "If signal?.aborted is false and an error (including an internal AbortError) occurs, handle or yield GeminiEventType.Error with proper error details rather than treating it as user cancellation."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/client.test.ts",
+      "expected_behavior": "When an internal AbortError occurs while signal.aborted is false, sendMessageStream should not yield GeminiEventType.UserCancelled and should instead handle/yield an Error event or rethrow.",
+      "verification_steps": [
+        "Add a test in packages/core/src/core/client.test.ts where processTurn throws an AbortError while signal.aborted is false.",
+        "Assert that sendMessageStream yields an Error event or rethrows instead of yielding GeminiEventType.UserCancelled."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:21Z",
+  "execution_time_seconds": 93.7
+}

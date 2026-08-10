@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27712,
+  "title": "bug: hooks.AfterAgent is never executed in settings.json configuration",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear, actionable bug report detailing that AfterAgent lifecycle hooks registered in settings.json are not being triggered upon turn completion. It provides complete environment specifications, step-by-step reproduction instructions, expected vs actual behavior, and context.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing AfterAgent hook execution requires adjusting turn lifecycle event handling and hook state tracking within GeminiClient in packages/core to ensure outermost turn completion reliably triggers AfterAgent events across streaming and multi-turn execution."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27712",
+    "summary": {
+      "problem": "The AfterAgent hook configured in settings.json is not executed when the agent finishes its response turn.",
+      "root_cause": "In packages/core/src/core/client.ts, fireAfterAgentHookSafe checks hook state activeCalls and pending tool calls, but lifecycle state tracking or prompt ID handling prevents the AfterAgent hook from firing on turn completion when configured via settings.json.",
+      "context": "BeforeAgent and AfterTool hooks execute properly, but AfterAgent relies on correct outer-turn boundary detection in GeminiClient.sendMessageStream."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/client.ts",
+        "packages/core/src/hooks/hookEventHandler.ts"
+      ],
+      "steps": [
+        "Inspect fireAfterAgentHookSafe and hookStateMap tracking in packages/core/src/core/client.ts during sendMessageStream execution.",
+        "Ensure activeCalls and cumulative response text are correctly maintained across streaming iterations and properly unwound when the model finishes its final turn without pending tool calls.",
+        "Verify that HookSystem and HookEventHandler properly register and match AfterAgent hook definitions loaded from settings.json configuration.",
+        "Ensure AfterAgent hook output processing correctly handles execution completion and optional context clearing."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "integration-tests/hooks-agent-flow.test.ts",
+      "expected_behavior": "When an AfterAgent hook is registered in settings.json, the CLI executes the hook script upon agent turn completion and passes prompt and response details via stdin.",
+      "verification_steps": [
+        "Add an integration test in integration-tests/hooks-agent-flow.test.ts that registers an AfterAgent hook with a matcher in settings.json.",
+        "Run a prompt turn in the test rig and assert that the AfterAgent hook script executes upon turn completion.",
+        "Verify via telemetry/logs that the AfterAgent hook receives the user prompt and complete model response payload."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:42Z",
+  "execution_time_seconds": 56.95
+}

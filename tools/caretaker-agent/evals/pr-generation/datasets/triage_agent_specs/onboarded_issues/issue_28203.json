@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28203,
+  "title": "bug: isAuthenticationError falsely matches port numbers or non-auth messages containing '401'",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, reproducible, and actionable bug report describing how isAuthenticationError in packages/core/src/utils/errors.ts falsely matches substrings like '401' inside port numbers or exit status codes. The report includes exact source code references, reproduction examples, and expected behavior.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "This is a localized bug fix in a single source file (packages/core/src/utils/errors.ts) involving a simple regex check update to avoid false positive string matching for '401'. Corresponding unit tests in packages/core/src/utils/errors.test.ts can easily be added."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28203",
+    "summary": {
+      "problem": "The isAuthenticationError helper function uses message.includes('401'), which falsely returns true for error messages containing '401' as part of other numbers such as port numbers (e.g., port 4012) or exit codes (e.g., 4010).",
+      "root_cause": "isAuthenticationError in packages/core/src/utils/errors.ts uses String.prototype.includes('401') to check if an error message contains a 401 HTTP status code, matching any occurrence of '401' regardless of word or number boundaries.",
+      "context": "Falsely flagging connection or system errors as authentication errors triggers unnecessary OAuth re-authentication flows and displays misleading diagnostics to users."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/utils/errors.ts"],
+      "steps": [
+        "In packages/core/src/utils/errors.ts, locate the isAuthenticationError function.",
+        "Replace message.includes('401') with a word boundary regular expression test /\\b401\\b/.test(message) to ensure '401' is matched only as an isolated number or word."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/errors.test.ts",
+      "expected_behavior": "isAuthenticationError returns true for messages containing standalone 401 status codes (e.g., 'HTTP 401', '401 Unauthorized'), but returns false for error messages with numbers containing 401 as a substring (e.g., 'http://localhost:4012', 'exit status 4010').",
+      "verification_steps": [
+        "Add test assertions to packages/core/src/utils/errors.test.ts under describe('isAuthenticationError') verifying that error messages containing port numbers or exit codes like 'http://localhost:4012' and 'exit status 4010' return false.",
+        "Run the test suite using Vitest to confirm all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:22Z",
+  "execution_time_seconds": 56.54
+}

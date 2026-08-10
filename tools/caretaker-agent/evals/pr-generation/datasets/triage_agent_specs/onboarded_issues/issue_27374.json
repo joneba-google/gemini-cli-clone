@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27374,
+  "title": "[Bug] Interactive TUI elements (Permissions, Slash commands) leave ghost visual artifacts and break scroll/rendering in iTerm2",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report contains clear, detailed environment information, a step-by-step description of three distinct scenarios causing visual artifacts and screen buffer desynchronization in iTerm2, and expected behavior details.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The issue involves React/Ink component state management and terminal redraw behavior during TUI interactions. Specifically, fixing the Ctrl+L history wiping requires decoupling screen clearing from history clearing in AppContainer, and fixing ghost visual artifacts requires coordinating terminal buffer redraws (refreshStatic) when overlay dialogs and tool confirmation prompts close/unmount."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#27374",
+    "summary": {
+      "problem": "Interactive TUI elements (tool permission buttons, slash command overlays) leave ghost visual artifacts in the terminal buffer upon exit, and pressing Ctrl+L wipes conversation history from memory instead of redrawing the terminal display.",
+      "root_cause": "1) In `packages/cli/src/ui/AppContainer.tsx`, `handleClearScreen` erroneously invokes `historyManager.clearItems()`, wiping the conversation history state from memory when Ctrl+L (CLEAR_SCREEN) is triggered instead of preserving history and redrawing the terminal. 2) Closing interactive overlays or submitting tool confirmation decisions in standard terminal buffer mode does not trigger a terminal screen refresh (`refreshStatic()`), leaving stale rendered lines in the terminal scrollback buffer.",
+      "context": "The CLI uses Ink to render terminal UI components. In default terminal buffer mode, active dialog overlays and tool confirmation prompts write ANSI lines directly to stdout. When they close or resolve, failing to trigger a static screen refresh leaves residual lines in the terminal emulator buffer, causing overlapping text and broken rendering."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/AppContainer.tsx",
+        "packages/cli/src/ui/components/ToolConfirmationQueue.tsx",
+        "packages/cli/src/ui/components/DialogManager.tsx"
+      ],
+      "steps": [
+        "Remove the call to `historyManager.clearItems()` inside `handleClearScreen` in `packages/cli/src/ui/AppContainer.tsx` so that pressing Ctrl+L triggers `refreshStatic()` to clear and re-render the active screen without wiping stored conversation items.",
+        "Update `DialogManager` and overlay dismissal handlers in `AppContainer.tsx` to invoke `refreshStatic()` when an overlay dialog (e.g. `/usage`, `/help`) is closed via Esc or action completion.",
+        "Ensure tool confirmation submission in `ToolConfirmationQueue.tsx` / `AppContainer.tsx` invokes `refreshStatic()` upon decision completion to erase prompt selection buttons from the active terminal buffer."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/AppContainer.test.tsx",
+      "expected_behavior": "Pressing Ctrl+L (CLEAR_SCREEN) should clear the screen buffer and re-render existing history items without wiping history from state. Closing interactive overlay dialogs and tool confirmation prompts should cleanly clear visual prompt elements from the terminal screen.",
+      "verification_steps": [
+        "Add a unit test in `packages/cli/src/ui/AppContainer.test.tsx` verifying that `handleClearScreen` calls `refreshStatic()` without calling `historyManager.clearItems()`.",
+        "Add a test in `packages/cli/src/ui/AppContainer.test.tsx` verifying that closing an interactive overlay dialog calls `refreshStatic()` to refresh the screen buffer."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:58Z",
+  "execution_time_seconds": 93.15
+}

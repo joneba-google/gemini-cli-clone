@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28260,
+  "title": "refactor(cli): decouple ToolGroupMessage from internal type guards and payload structures",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly identifies a specific code design flaw in ToolGroupMessage.tsx (lines 79-81) where UI code is tightly coupled to core payload structures via type guards like isFileDiff. It provides actionable details for refactoring.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Decoupling tool payload type checking from UI components requires refactoring result metadata and adapter/formatting layer across packages/core and packages/cli."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28260",
+    "summary": {
+      "problem": "ToolGroupMessage component directly uses internal type guards (such as isFileDiff) and checks raw object shapes to determine if a compact tool has a dense payload.",
+      "root_cause": "The hasDensePayload helper in ToolGroupMessage.tsx inspects internal core result structures directly rather than relying on a result metadata property or dedicated adapter.",
+      "context": "UI components should remain decoupled from internal tool payload structures to keep the UI layer clean and maintainable."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/components/messages/ToolGroupMessage.tsx",
+        "packages/cli/src/ui/types.ts",
+        "packages/core/src/tools/tools.ts"
+      ],
+      "steps": [
+        "Add explicit metadata (e.g. hasDensePayload property) or an abstraction on ToolResultDisplay / IndividualToolCallDisplay for identifying dense payloads.",
+        "Update tool result adapters or creation logic to populate this metadata flag when constructing display objects.",
+        "Refactor hasDensePayload in ToolGroupMessage.tsx to rely on the metadata/adapter property instead of invoking isFileDiff or inspecting raw payload object keys directly.",
+        "Remove unused core type guard imports (like isFileDiff) from ToolGroupMessage.tsx."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/messages/ToolGroupMessage.compact.test.tsx",
+      "expected_behavior": "ToolGroupMessage correctly identifies compact tools with dense payloads using the decoupled result metadata without importing or calling internal core type guards.",
+      "verification_steps": [
+        "Run vitest on packages/cli/src/ui/components/messages/ToolGroupMessage.compact.test.tsx to ensure compact rendering remains identical.",
+        "Verify that tool calls with file diffs and summary/payload structures continue to be rendered as dense payloads."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:41Z",
+  "execution_time_seconds": 47.11
+}

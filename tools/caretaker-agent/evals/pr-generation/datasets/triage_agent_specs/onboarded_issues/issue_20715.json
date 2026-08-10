@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 20715,
+  "title": "subagent fails and feedback to gemini is really low quality",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides specific reproduction details, client/environment information, and an exact error trace showing that when a subagent fails due to an API or tool error (400 INVALID_ARGUMENT), raw unformatted API JSON error objects are returned directly to the main Gemini model as low-quality error feedback.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Addressing this issue requires updating subagent error handling and error prompt formatting across multiple subagent invocation modules (local-invocation.ts, local-session-invocation.ts, local-executor.ts, agent-tool.ts) in packages/core to sanitize raw API error payloads and construct structured, actionable feedback for the main model, along with adding unit tests in local-invocation.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#20715",
+    "summary": {
+      "problem": "Subagent failures caused by API or tool execution errors return raw, stringified JSON error payloads directly to the parent model in llmContent, resulting in low-quality error feedback that lacks actionable guidance.",
+      "root_cause": "In LocalSubagentInvocation and LocalSessionInvocation, uncaught subagent execution errors are formatted simply as 'Subagent <name> failed. Error: <errorMessage>', which forwards raw API response payloads without sanitization or structured recovery guidance for the main agent.",
+      "context": "When a subagent encounters an API validation error (e.g. 400 INVALID_ARGUMENT during model calls or tool calls), the subagent execution loop fails and returns raw error details back to the parent Gemini session."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/agents/local-invocation.ts",
+        "packages/core/src/agents/local-session-invocation.ts",
+        "packages/core/src/agents/local-executor.ts",
+        "packages/core/src/agents/agent-tool.ts"
+      ],
+      "steps": [
+        "Sanitize and format subagent execution error messages in local-invocation.ts and local-session-invocation.ts to extract human-readable error descriptions instead of raw stringified API JSON objects.",
+        "Enhance the llmContent error message returned to the main agent upon subagent failure to include structured context, clear action items, and actionable recovery guidance rather than raw error text.",
+        "Improve error catching and handling inside local-executor.ts during subagent tool call execution and model turn handling to prevent unhandled API errors from causing sudden subagent crashes where graceful recovery is possible."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/agents/local-invocation.test.ts",
+      "expected_behavior": "When a subagent encounters an API or tool call error, the error feedback returned in llmContent to the parent model is clean, human-readable, and provides actionable guidance without dumping raw JSON API error objects.",
+      "verification_steps": [
+        "Add a test case in local-invocation.test.ts simulating a subagent failure with a 400 INVALID_ARGUMENT API error.",
+        "Verify that llmContent returned by the invocation contains a formatted, actionable error message rather than raw stringified JSON error objects."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:37Z",
+  "execution_time_seconds": 70.01
+}

@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21835,
+  "title": "ioctl error while running gemeni cli",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear, actionable bug report detailing a runtime error ('ioctl(2) failed, EBADF') when gemini-cli resizes a pseudo-terminal (node-pty) while executing shell commands on Linux (Raspberry Pi 5). It includes full stack traces, terminal details, environment info, and expected behavior.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "The issue involves node-pty native pseudo-terminal handling and ioctl system call failures on Linux. According to the effort estimation guidelines, any bug involving node-pty, pseudo-terminal signal handling, or low-level platform-specific IPC is categorized as LARGE effort due to the testing complexity across native environments."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21835",
+    "summary": {
+      "problem": "Terminal resize operations during shell command execution cause an uncaught 'ioctl(2) failed, EBADF' exception in node-pty, resulting in CLI crashes.",
+      "root_cause": "In UnixTerminal.resize in node-pty, calling pty.resize when the file descriptor is already bad or closed throws an Error with message 'ioctl(2) failed, EBADF'. While ShellExecutionService.resizePty attempts to catch EBADF/ESRCH errors, it needs to reliably match the 'ioctl(2) failed, EBADF' error message string to ignore race conditions when the process exits during resize.",
+      "context": "UI layout updates trigger ShellExecutionService.resizePty. On Unix systems, if a shell command exits concurrently with a terminal resize event, the underlying PTY file descriptor becomes invalid (EBADF), throwing an exception."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/shellExecutionService.ts"
+      ],
+      "steps": [
+        "In packages/core/src/services/shellExecutionService.ts, locate the resizePty method catch block.",
+        "Update the error check in the catch block to inspect if err.message or String(e) includes 'ioctl(2) failed' or 'EBADF' or 'ioctl'.",
+        "Ensure that any ioctl EBADF errors thrown by node-pty during terminal resizes are caught and ignored safely without rethrowing."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/shellExecutionService.test.ts",
+      "expected_behavior": "ShellExecutionService.resizePty swallows 'ioctl(2) failed, EBADF' errors thrown by node-pty and completes execution without throwing.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/services/shellExecutionService.test.ts testing that ShellExecutionService.resizePty ignores 'ioctl(2) failed, EBADF' errors.",
+        "Mock activePty.ptyProcess.resize to throw new Error('ioctl(2) failed, EBADF').",
+        "Assert that calling ShellExecutionService.resizePty does not throw an error."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:25Z",
+  "execution_time_seconds": 50.54
+}

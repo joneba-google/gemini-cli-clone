@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27911,
+  "title": "Auto-memory storing project alias as project id leading to 403 errors on GCP",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue describes a clear, systemic defect where auto-memory records a GCP project display name or alias as its GCP Project ID, causing 403 / CONSUMER_INVALID auth errors during GCP API requests.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Updating system prompt memory operational guidelines in packages/core/src/prompts/snippets.ts to distinguish GCP project display names/aliases from Project IDs and adding a corresponding unit test in packages/core/src/prompts/snippets-memory.test.ts is a localized, single-file logic and guideline update."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27911",
+    "summary": {
+      "problem": "Auto-memory stores GCP project display names or aliases as GCP Project IDs, causing 403 and CONSUMER_INVALID authorization errors on GCP.",
+      "root_cause": "The system prompt guidelines for memory persistence in toolUsageRememberingFacts do not explicitly instruct the model that GCP project display names or aliases are distinct from canonical GCP Project IDs (GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_PROJECT_ID) and must never be saved as project IDs in memory files.",
+      "context": "GCP Project IDs are immutable, unique identifiers (e.g., 'terraform-playground-123456'), whereas project names/aliases are customizable display titles (e.g., 'terraform-playground01'). Storing display names as project IDs in memory leads to invalid credentials in subsequent CLI requests."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/prompts/snippets.ts"],
+      "steps": [
+        "Update toolUsageRememberingFacts in packages/core/src/prompts/snippets.ts to add an explicit instruction that GCP project display names or aliases must never be stored or conflated with canonical GCP Project IDs (GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_PROJECT_ID).",
+        "Ensure the guideline clarifies that project display names or aliases cannot be used for authentication or project configuration settings."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/prompts/snippets-memory.test.ts",
+      "expected_behavior": "renderOperationalGuidelines outputs operational instructions that include the GCP project ID vs display name or alias rule for memory persistence.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/prompts/snippets-memory.test.ts asserting that renderOperationalGuidelines output contains the GCP project ID and alias guidelines."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:37:45Z",
+  "execution_time_seconds": 77.7
+}

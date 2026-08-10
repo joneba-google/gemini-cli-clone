@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28518,
+  "title": "[v0.52.0] Utility sub-agent handoff regression: 0 input tokens passed to main model on startup",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear, actionable bug report detailing a regression in v0.52.0 where 0 input tokens are passed to the primary model on startup / sub-agent handoff, leading to API errors and retry loops. It provides detailed client information, versioning, session context, and exported chat histories.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is a localized logic bug in context management (specifically contextManager.ts / toGraph.ts) where pending user requests containing <session_context> are misclassified under envContextId, causing pendingApiHistory to be empty and input tokens to be lost during LLM prompt construction."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28518",
+    "summary": {
+      "problem": "Utility sub-agent handoff regression where 0 input tokens are passed to the main model on startup or prompt execution when <session_context> is present in the prompt, resulting in immediate API errors and retry loops.",
+      "root_cause": "contextManager.renderHistory() fails to identify the pending turn when pendingRequest contains <session_context> because toGraph.ts assigns it the environment context turn ID (envContextId), which contextManager.ts explicitly excludes when searching for pending turns. This leaves pendingApiHistory empty and causes client.ts to construct an invalid or empty apiHistoryOverride.",
+      "context": "Reported in v0.52.0 during startup context setup and utility sub-agent handoff when user requests include session context headers."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/context/contextManager.ts",
+        "packages/core/src/context/graph/toGraph.ts"
+      ],
+      "steps": [
+        "Update turn identification in packages/core/src/context/contextManager.ts so that pending turns containing session context headers are correctly captured in resultPending and returned in pendingApiHistory.",
+        "Refine environment context turn assignment in packages/core/src/context/graph/toGraph.ts to distinguish true startup environment context turns from pending user prompt turns containing <session_context> tags.",
+        "Ensure client.ts receives non-empty pendingApiHistory from renderHistory() when pendingRequest is present."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/context/contextManager.test.ts",
+      "expected_behavior": "contextManager.renderHistory() correctly populates pendingApiHistory when pendingRequest contains <session_context>, ensuring the prompt tokens are preserved and sent to the LLM API.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/context/contextManager.test.ts where pendingRequest contains <session_context> header content.",
+        "Assert that renderHistory() returns a non-empty pendingApiHistory containing the prompt parts.",
+        "Run Vitest tests for contextManager.test.ts and verify all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:33:30Z",
+  "execution_time_seconds": 99.76
+}

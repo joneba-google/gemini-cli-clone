@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28643,
+  "title": "bug: session retention can delete unrelated sessions on short-ID collision",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, detailed, and reproducible bug report identifying session data loss during session retention cleanup when unrelated sessions share an 8-character short ID suffix. It details the exact bug location in packages/cli/src/utils/sessionCleanup.ts, reproduction steps, expected behavior, and root cause.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The bug fix is localized to a single file (packages/cli/src/utils/sessionCleanup.ts) and its unit test (packages/cli/src/utils/sessionCleanup.test.ts). Fix involves checking full session ID / parent session relationships for matching files rather than indiscriminately deleting all files matching an 8-character short ID suffix."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28643",
+    "summary": {
+      "problem": "Session retention cleanup can delete active or non-expired sessions if their filenames happen to share the same 8-character short ID suffix as an expired session.",
+      "root_cause": "When a session is marked for deletion in cleanupExpiredSessions(), the cleanup logic extracts an 8-character short ID suffix from the filename and deletes all session files matching -${shortId}.json or -${shortId}.jsonl without verifying whether each matched file belongs to the expired session family or independently satisfies retention criteria.",
+      "context": "Session files use 8-character hexadecimal suffixes in filenames. If an unrelated recent session has a UUID whose first 8 characters match an expired session's short ID, sessionCleanup.ts unlinks both files and deletes their associated artifacts."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/utils/sessionCleanup.ts"],
+      "steps": [
+        "Update the deletion matching logic in cleanupExpiredSessions() within packages/cli/src/utils/sessionCleanup.ts to inspect the full session ID and parent session relationships of candidate files before deleting them.",
+        "Ensure that files sharing a short ID suffix are only deleted if their full session ID matches the expired session or if they are verified subagent sessions belonging to the expired session.",
+        "Prevent unrelated non-expired sessions from being deleted when a short ID collision occurs."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/sessionCleanup.test.ts",
+      "expected_behavior": "Only expired sessions and their associated subagents are deleted during cleanup. Unrelated active or non-expired sessions sharing the same short ID suffix remain intact.",
+      "verification_steps": [
+        "Add a unit test in packages/cli/src/utils/sessionCleanup.test.ts featuring an expired session and an unrelated recent session sharing the same 8-character filename suffix.",
+        "Run cleanupExpiredSessions() and verify that the expired session is deleted while the recent session and its artifacts survive."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:31:55Z",
+  "execution_time_seconds": 63.98
+}

@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28644,
+  "title": "bug: interrupted Whisper downloads are treated as installed models",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable report of a bug in WhisperModelManager.downloadModel where interrupted downloads leave partial files at the final model destination, causing them to be incorrectly detected as installed models.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is isolated to a single file (packages/core/src/voice/whisperModelManager.ts). It requires changing the file download stream handling to write to a temporary file, respect backpressure, handle error/finish events, clean up on failure, and perform an atomic rename upon success."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28644",
+    "summary": {
+      "problem": "Interrupted Whisper model downloads write partial model files directly to their final destination path. Since model existence checks only verify file existence, incomplete or corrupt files are treated as valid installed models.",
+      "root_cause": "WhisperModelManager.downloadModel() creates a write stream directly targeting the final destination file, ignores write backpressure, does not await completion or catch stream write errors, and fails to clean up temporary output on failure before renaming.",
+      "context": "Whisper models are large files. If a download is interrupted due to network loss, process interruption, or disk error, the partial file remains on disk and causes downstream tools like whisper-stream to fail when attempting to process the corrupt model file."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/voice/whisperModelManager.ts"],
+      "steps": [
+        "In WhisperModelManager.downloadModel(), construct a temporary destination path by appending a temporary extension (e.g., .downloading) to the target model path.",
+        "If a temporary file already exists at the temporary destination path, remove it before starting the download.",
+        "Create the write stream targeting the temporary destination path instead of the final destination.",
+        "In the read loop, check the boolean return value of writer.write(value) and await the drain event on the writer if it returns false to respect backpressure.",
+        "Wrap the download stream in a try-catch-finally block. In the catch block, clean up the temporary file if it exists, and rethrow the error.",
+        "Await write stream completion by listening for finish and error events on the writer stream before proceeding to rename.",
+        "Upon successful write stream completion, atomically rename the temporary file to the final destination path using fs.renameSync."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/voice/whisperModelManager.test.ts",
+      "expected_behavior": "WhisperModelManager.downloadModel() should write to a temporary .downloading file, handle stream errors by deleting the temp file without creating a final model file, and atomically rename the temp file to the final path only upon successful download completion.",
+      "verification_steps": [
+        "Create unit tests in packages/core/src/voice/whisperModelManager.test.ts testing downloadModel behavior using mocked fetch responses.",
+        "Test successful download: verify that data is written to a .downloading temp file and renamed to the final model path, and isModelInstalled returns true.",
+        "Test interrupted download / write error: simulate a stream error or failed response during download, verify that the promise rejects, the temporary .downloading file is deleted, no final model file is left on disk, and isModelInstalled returns false."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:31:28Z",
+  "execution_time_seconds": 36.75
+}

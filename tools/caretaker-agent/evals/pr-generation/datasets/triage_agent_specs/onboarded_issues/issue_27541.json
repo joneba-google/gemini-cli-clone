@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27541,
+  "title": "EBADF Error during folder creationg broke session and terminal glitches",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a complete stack trace, environment details, CLI version, terminal type, and clear reproduction context describing an uncaught EBADF error during PTY resizing with node-pty.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "This issue involves low-level platform-specific pseudo-terminal (node-pty) lifecycle and resizing behavior across Unix/Linux terminal environments, which falls under platform-specific complexities (PTY/Signals)."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27541",
+    "summary": {
+      "problem": "Resizing pseudo-terminal (node-pty) during execution throws an uncaught EBADF ('Bad File Descriptor') error when the PTY descriptor is invalid or closed, crashing the CLI session.",
+      "root_cause": "ShellExecutionService.resizePty catches PTY resize exceptions but re-throws if the error message or code from node-pty on Linux/Unix does not strictly match the expected EBADF/ESRCH check (e.g., native ioctl(2) failures or 'Bad file descriptor' strings). Additionally, global uncaughtException handling must safely filter node-pty resize race conditions.",
+      "context": "During terminal resizes or rapid process termination, node-pty calls ioctl(2) on the PTY file descriptor. If closed concurrently, ioctl fails with EBADF. Gracefully catching and ignoring EBADF/Bad file descriptor errors during PTY resize prevents terminal crashes."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/shellExecutionService.ts",
+        "packages/cli/index.ts"
+      ],
+      "steps": [
+        "In packages/core/src/services/shellExecutionService.ts, expand the try-catch error checks in resizePty to safely match EBADF, 'Bad file descriptor', 'ioctl(2) failed', and ESRCH across err.code, err.message, and String(err).",
+        "In packages/cli/index.ts, ensure the uncaughtException listener suppresses PTY resize EBADF and 'Bad file descriptor' errors originating from node-pty."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/shellExecutionService.test.ts",
+      "expected_behavior": "Calling ShellExecutionService.resizePty on a PTY process throwing EBADF, ioctl(2) failed, or Bad file descriptor errors will catch and swallow the error without breaking the CLI session.",
+      "verification_steps": [
+        "Add unit test cases in packages/core/src/services/shellExecutionService.test.ts simulating mockPtyProcess.resize throwing 'Error: ioctl(2) failed, EBADF' and 'Error: Bad file descriptor'.",
+        "Verify that ShellExecutionService.resizePty executes without throwing an exception."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:39:46Z",
+  "execution_time_seconds": 64.53
+}

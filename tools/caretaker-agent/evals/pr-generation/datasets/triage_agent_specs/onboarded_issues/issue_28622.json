@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28622,
+  "title": "Gemini CLI returns 401 when using a Gemini API key with the Vertex AI endpoint",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a bug where using a Gemini API key with the Vertex AI auth mode returns an uninformative 401 error instead of an explicit error message explaining credential requirements.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix involves updating localized credential validation logic and error messages in packages/cli/src/config/auth.ts and packages/core/src/core/contentGenerator.ts, accompanied by unit tests in packages/cli/src/config/auth.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28622",
+    "summary": {
+      "problem": "Gemini CLI returns an unhelpful 401 Unauthorized HTTP error when configured with Vertex AI auth type while using a Gemini API key.",
+      "root_cause": "When authType is USE_VERTEX_AI, createContentGeneratorConfig in packages/core/src/core/contentGenerator.ts expects GOOGLE_API_KEY or GOOGLE_CLOUD_PROJECT/GOOGLE_CLOUD_LOCATION environment variables. When GEMINI_API_KEY is supplied instead, the generator config leaves apiKey and vertexai flags unset, causing downstream requests to fail with a 401 error rather than triggering a clear validation message.",
+      "context": "Vertex AI authentication requires Google Cloud credentials (project and location) or a Vertex Express Google API Key (GOOGLE_API_KEY). Gemini API keys (GEMINI_API_KEY) are only valid for the Gemini API endpoint."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/config/auth.ts",
+        "packages/core/src/core/contentGenerator.ts"
+      ],
+      "steps": [
+        "Update validateAuthMethod in packages/cli/src/config/auth.ts to explicitly detect when GEMINI_API_KEY is provided under USE_VERTEX_AI auth mode and produce a clear error message indicating that Vertex AI requires GOOGLE_CLOUD_PROJECT/GOOGLE_CLOUD_LOCATION or GOOGLE_API_KEY.",
+        "Update createContentGeneratorConfig in packages/core/src/core/contentGenerator.ts to validate that required credentials exist for USE_VERTEX_AI and avoid producing incomplete configuration objects that fail with 401 errors during execution."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/auth.test.ts",
+      "expected_behavior": "Validating auth method with USE_VERTEX_AI and GEMINI_API_KEY set (without Vertex AI credentials) returns a descriptive error message explaining the required environment variables instead of proceeding to network requests that fail with 401.",
+      "verification_steps": [
+        "Add unit tests in packages/cli/src/config/auth.test.ts to test validateAuthMethod with USE_VERTEX_AI when GEMINI_API_KEY is set but GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION / GOOGLE_API_KEY are missing.",
+        "Verify that validateAuthMethod returns the expected error string in that scenario.",
+        "Run vitest on packages/cli/src/config/auth.test.ts to confirm all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:31:44Z",
+  "execution_time_seconds": 53.6
+}

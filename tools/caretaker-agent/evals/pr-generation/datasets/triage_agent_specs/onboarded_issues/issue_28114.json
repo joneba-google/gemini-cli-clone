@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28114,
+  "title": "Add Node version check",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report contains clear user intent, reproduction details, stack trace, and Node.js version information (v18.20.4) showing a runtime crash due to missing globals on unsupported Node.js versions.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Adding a Node.js version check at CLI startup in packages/cli/index.ts or processUtils.ts is a localized check with a clear and straightforward implementation."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28114",
+    "summary": {
+      "problem": "Running @google/gemini-cli on unsupported Node.js versions (e.g. Node.js 18.x) results in unhandled runtime errors such as ReferenceError: File is not defined.",
+      "root_cause": "The CLI entry point (packages/cli/index.ts) lacks a runtime Node.js version check, allowing execution on Node.js versions below the required minimum (>=20.0.0 specified in package.json).",
+      "context": "Node.js 20 introduced built-in global File support and other Web API standards required by dependencies like undici. When executed on Node.js 18, the CLI fails abruptly with an unhelpful dependency stack trace instead of a user-friendly error message."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/index.ts"],
+      "steps": [
+        "Create a Node.js version validation check that compares the current process.versions.node major version against the minimum supported version (20).",
+        "Invoke the version validation check at the top of the entry point in packages/cli/index.ts prior to launching child processes or loading heavy modules.",
+        "If the detected Node.js major version is less than 20, output a clear error message to process.stderr indicating that Node.js 20.0.0 or higher is required along with the current detected version, and exit process with code 1."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/processUtils.test.ts",
+      "expected_behavior": "The CLI validates the running Node.js version on startup, displaying a descriptive error message and exiting with code 1 if run under Node.js < 20.0.0.",
+      "verification_steps": [
+        "Add unit tests in packages/cli/src/utils/processUtils.test.ts testing the Node version check function.",
+        "Mock process.versions.node with a version below 20 (e.g., '18.20.4') and verify that an error message is printed to stderr and process.exit(1) is called.",
+        "Mock process.versions.node with supported versions (e.g., '20.0.0', '22.0.0') and verify process.exit is not called."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:50Z",
+  "execution_time_seconds": 51.92
+}

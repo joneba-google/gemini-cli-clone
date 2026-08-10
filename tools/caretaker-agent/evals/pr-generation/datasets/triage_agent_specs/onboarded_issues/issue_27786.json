@@ -1,0 +1,48 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27786,
+  "title": "Custom theme `border.default`/`border.focused` are documented but ignored; explicit `DarkGray` is overridden when terminal background is detected",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report describing how documented custom theme border properties (`border.default` and `border.focused`) are ignored by `createCustomTheme` and overridden when terminal background detection is active, complete with detailed reproduction steps, investigation context, and environment details.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing the issue requires cross-package modifications spanning `packages/core` (updating `CustomTheme` schema interface) and `packages/cli` (updating `createCustomTheme` and `ThemeManager` color caching/resolution logic), as well as adding unit tests."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27786",
+    "summary": {
+      "problem": "Custom theme border properties (`border.default` and `border.focused`) documented in docs/cli/themes.md are ignored during custom theme creation, and explicit border/DarkGray colors are unconditionally overridden when terminal background color detection (OSC 11) is active.",
+      "root_cause": "`createCustomTheme` in `theme.ts` does not read `customTheme.border` when building `semanticColors`, setting `semanticColors.border.default` directly to `colors.DarkGray`. Furthermore, `ThemeManager.getColors()` and `ThemeManager.getSemanticColors()` unconditionally recompute `DarkGray` and `border.default` based on `terminalBackground` interpolation, ignoring user-specified custom theme values.",
+      "context": "`CustomTheme` interface in `packages/core/src/config/config.ts` lacks `focused` property under `border`. Custom themes should be able to specify custom border colors that take precedence over automated terminal background color interpolation."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/config/config.ts",
+        "packages/cli/src/ui/themes/semantic-tokens.ts",
+        "packages/cli/src/ui/themes/theme.ts",
+        "packages/cli/src/ui/themes/theme-manager.ts"
+      ],
+      "steps": [
+        "Update `CustomTheme` interface in `packages/core/src/config/config.ts` to include `focused?: string` inside the `border` property.",
+        "Update `SemanticColors` interface in `packages/cli/src/ui/themes/semantic-tokens.ts` to include `focused?: string` inside `border`.",
+        "Modify `createCustomTheme` in `packages/cli/src/ui/themes/theme.ts` to assign `customTheme.border?.default` and `customTheme.border?.focused` to `semanticColors.border`.",
+        "Update `ThemeManager.getColors` and `ThemeManager.getSemanticColors` in `packages/cli/src/ui/themes/theme-manager.ts` so that custom theme border definitions and explicitly specified `DarkGray` values are preserved instead of being overridden by terminal background interpolation."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/themes/theme-manager.test.ts",
+      "expected_behavior": "Custom themes with defined `border.default` or `border.focused` properties (or explicit `DarkGray`) retain their specified border colors when rendered, even when a terminal background color is set.",
+      "verification_steps": [
+        "Add unit test cases in `theme.test.ts` verifying that `createCustomTheme` correctly maps `customTheme.border.default` and `customTheme.border.focused` into `semanticColors.border`.",
+        "Add unit test cases in `theme-manager.test.ts` verifying that `ThemeManager.getSemanticColors()` returns custom border colors when terminal background color is set via `setTerminalBackground`."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:37:42Z",
+  "execution_time_seconds": 49.47
+}

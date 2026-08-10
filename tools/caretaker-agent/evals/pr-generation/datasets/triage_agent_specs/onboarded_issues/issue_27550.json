@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27550,
+  "title": "Regression: GOOGLE_API_KEY + GOOGLE_GEMINI_BASE_URL rejected with \"Invalid auth method selected\" in 0.44.x (worked in 0.43.0)",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear and actionable regression report with reproduction steps, expected vs actual behavior, environment details, and context.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is a localized logic error where AuthType.GATEWAY is missing in validateAuthMethod and GOOGLE_API_KEY needs to be recognized in createContentGeneratorConfig, along with straightforward unit tests."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27550",
+    "summary": {
+      "problem": "Setting GOOGLE_API_KEY and GOOGLE_GEMINI_BASE_URL without GEMINI_API_KEY causes non-interactive execution to fail with exit code 41 ('Invalid auth method selected').",
+      "root_cause": "validateAuthMethod in packages/cli/src/config/auth.ts does not recognize AuthType.GATEWAY (returned by getAuthTypeFromEnv when GOOGLE_GEMINI_BASE_URL is set), causing it to return 'Invalid auth method selected.'. Furthermore, createContentGeneratorConfig in packages/core/src/core/contentGenerator.ts does not check process.env['GOOGLE_API_KEY'] for GATEWAY.",
+      "context": "In 0.44.x, AuthType.GATEWAY was introduced for routing via custom base URLs, but validation in packages/cli/src/config/auth.ts was not updated to accept AuthType.GATEWAY."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/config/auth.ts",
+        "packages/core/src/core/contentGenerator.ts"
+      ],
+      "steps": [
+        "Update validateAuthMethod in packages/cli/src/config/auth.ts to accept AuthType.GATEWAY as a valid auth method and return null.",
+        "Update createContentGeneratorConfig in packages/core/src/core/contentGenerator.ts for AuthType.GATEWAY to check process.env['GOOGLE_API_KEY'] if apiKey or GEMINI_API_KEY is not set."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/auth.test.ts",
+      "expected_behavior": "validateAuthMethod returns null when authMethod is AuthType.GATEWAY, and createContentGeneratorConfig uses GOOGLE_API_KEY when GEMINI_API_KEY is not present.",
+      "verification_steps": [
+        "Add a test in packages/cli/src/config/auth.test.ts verifying validateAuthMethod returns null for AuthType.GATEWAY.",
+        "Add a test in packages/core/src/core/contentGenerator.test.ts verifying createContentGeneratorConfig handles AuthType.GATEWAY with GOOGLE_API_KEY."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:39:34Z",
+  "execution_time_seconds": 53.4
+}

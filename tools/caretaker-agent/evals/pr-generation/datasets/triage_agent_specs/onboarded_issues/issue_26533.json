@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 26533,
+  "title": "Bug: \"HttpsProxyAgent is not a constructor\" crash when using Vertex AI with HTTP_PROXY environment variables",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear report of a runtime crash (TypeError: HttpsProxyAgent is not a constructor) when using Vertex AI authentication with proxy environment variables set. Detailed environment details, error log, root cause analysis, and reproduction steps are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue has a clear root cause and requires a localized fix in two esbuild patch files (`packages/cli/src/patches/https-proxy-agent.ts` and `packages/cli/src/patches/http-proxy-agent.ts`) by adding default exports to complement existing named exports, along with updating test assertions."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26533",
+    "summary": {
+      "problem": "When running Gemini CLI with Vertex AI authentication and proxy environment variables set (HTTP_PROXY/HTTPS_PROXY), execution fails with 'TypeError: HttpsProxyAgent is not a constructor'.",
+      "root_cause": "The patch files aliased by esbuild (`packages/cli/src/patches/https-proxy-agent.ts` and `packages/cli/src/patches/http-proxy-agent.ts`) only export named exports (`export { HttpsProxyAgent }`). When dependencies like `gaxios` or `google-auth-library` dynamically import or require the module expecting a default export or constructor, the import evaluates to the module object rather than the constructor function.",
+      "context": "Gemini CLI aliases `https-proxy-agent` and `http-proxy-agent` in `esbuild.config.js` to custom patch files to handle code splitting and CJS/ESM bundling. Ensuring both default and named exports exist in the patch files allows both default import (`import HttpsProxyAgent`) and named import (`import { HttpsProxyAgent }`) semantics to work seamlessly after esbuild bundling."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/patches/https-proxy-agent.ts",
+        "packages/cli/src/patches/http-proxy-agent.ts"
+      ],
+      "steps": [
+        "In `packages/cli/src/patches/https-proxy-agent.ts`, import `HttpsProxyAgent` from `../../../../node_modules/https-proxy-agent/dist/index.js` and re-export `HttpsProxyAgent` as both a named export and default export (`export default HttpsProxyAgent`).",
+        "In `packages/cli/src/patches/http-proxy-agent.ts`, import `HttpProxyAgent` from `../../../../node_modules/http-proxy-agent/dist/index.js` and re-export `HttpProxyAgent` as both a named export and default export (`export default HttpProxyAgent`)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "scripts/tests/proxy-agent-bundle.test.ts",
+      "expected_behavior": "When bundling the CLI with esbuild, both named exports (`HttpsProxyAgent`, `HttpProxyAgent`) and default exports (`default`) exist on the imported proxy agent modules and can be constructed without throwing errors.",
+      "verification_steps": [
+        "Update `scripts/tests/proxy-agent-bundle.test.ts` to assert that both default export (`https.default`, `http.default`) and named export (`https.HttpsProxyAgent`, `http.HttpProxyAgent`) exist and are constructor functions.",
+        "Verify that constructing instances via both default and named constructors succeeds without throwing 'TypeError: HttpsProxyAgent is not a constructor'.",
+        "Run `npm run test` or `npx vitest run scripts/tests/proxy-agent-bundle.test.ts` to confirm test suite passes."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:35Z",
+  "execution_time_seconds": 114.38
+}

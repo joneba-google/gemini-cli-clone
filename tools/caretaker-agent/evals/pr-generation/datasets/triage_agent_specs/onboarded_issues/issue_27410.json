@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27410,
+  "title": "gemini knew it was about to crash",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides sufficient reproduction context (pasting a large 877-line review into the CLI session), the terminal output showing the memory warning ('High memory usage detected: 7.19 GB'), the full Node.js V8 fatal out-of-memory stack trace ('JavaScript heap out of memory'), and complete environment details.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Diagnosing and addressing high memory usage and process heap exhaustion when pasting or processing large content in the interactive React/Ink CLI UI requires investigating memory monitoring thresholds, input buffer retention, and state management in UI hooks."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27410",
+    "summary": {
+      "problem": "The CLI encounters high memory usage (>7GB RSS) and crashes with a Node.js V8 JavaScript heap out of memory error when pasting large text payloads or accumulating extensive history during an interactive session.",
+      "root_cause": "Large text inputs and session history retained in memory cause process RSS to exceed 7GB and exceed V8 heap allocation limits, triggering the useMemoryMonitor warning before Node.js fatal OOM crash occurs.",
+      "context": "useMemoryMonitor in packages/cli/src/ui/hooks/useMemoryMonitor.ts checks process.memoryUsage().rss against MEMORY_WARNING_THRESHOLD (7GB) and warns the user, but memory growth continues until Node.js crashes with FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/hooks/useMemoryMonitor.ts"],
+      "steps": [
+        "Review memory threshold settings and monitoring logic in packages/cli/src/ui/hooks/useMemoryMonitor.ts.",
+        "Optimize memory usage detection and threshold warnings to alert users or trigger state cleanup before process heap limits are exceeded.",
+        "Ensure memory warnings provide actionable recommendations when memory usage approaches V8 heap limits."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useMemoryMonitor.test.tsx",
+      "expected_behavior": "useMemoryMonitor accurately detects high memory usage and alerts the user prior to heap exhaustion without memory leak side effects.",
+      "verification_steps": [
+        "Run tests using Vitest to verify useMemoryMonitor triggers warning when process RSS exceeds the designated threshold.",
+        "Verify that repeated high memory checks do not emit duplicate warning messages or accumulate unhandled intervals."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:18Z",
+  "execution_time_seconds": 68.35
+}

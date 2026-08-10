@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28598,
+  "title": "CLI crashes on startup when ran inside a Git repository and MacOS seatbelt is enabled",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable bug report, complete with reproduction steps, environment details (macOS, sandbox enabled), and /about client information demonstrating a startup crash inside Git repositories.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing this bug requires handling platform-specific macOS seatbelt (sandbox-exec) restrictions, modifying sandbox policy parameters in packages/cli/src/utils/sandbox.ts, and ensuring safe interactions with Git initialization and worktree settings across packages/cli and packages/core."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28598",
+    "summary": {
+      "problem": "Gemini CLI crashes on startup when executed inside a Git repository with macOS Seatbelt sandbox enabled.",
+      "root_cause": "When macOS seatbelt (sandbox-exec) is enabled, file write and directory access permissions are strictly limited by sandbox profile definitions. Git operations on startup (such as GitService initializing a shadow repository or worktree settings resolution) trigger file system operations to paths restricted under the seatbelt policy, causing permission denials and startup crashes.",
+      "context": "The macOS seatbelt configuration in sandbox.ts uses .sb profile files (e.g., sandbox-macos-permissive-open.sb) that define allowed write paths like TARGET_DIR, TMP_DIR, CACHE_DIR, and ~/.gemini. Starting the CLI inside a Git repository causes Git utilities (simple-git, execa('git', ...)) to interact with repository configuration, locks, or root discovery paths that require explicit permission under seatbelt policies."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/utils/sandbox.ts",
+        "packages/cli/src/utils/sandbox-macos-permissive-open.sb"
+      ],
+      "steps": [
+        "Inspect seatbelt profiles in packages/cli/src/utils/ to identify missing allowed paths or permissions required for Git operations inside repositories.",
+        "Update packages/cli/src/utils/sandbox.ts to pass appropriate directory flags and environment variables to sandbox-exec for Git repository boundaries.",
+        "Ensure GitService initialization and worktree resolution in packages/core handle seatbelt sandbox restrictions gracefully without crashing."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/sandbox.test.ts",
+      "expected_behavior": "Gemini CLI starts up successfully without crashing when executed inside a Git repository with macOS Seatbelt sandbox enabled.",
+      "verification_steps": [
+        "Add unit test cases in packages/cli/src/utils/sandbox.test.ts to verify sandbox-exec command generation when running within a Git repository.",
+        "Run 'npx vitest run packages/cli/src/utils/sandbox.test.ts' to ensure all sandbox tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:33:42Z",
+  "execution_time_seconds": 135.02
+}

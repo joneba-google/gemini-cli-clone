@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27940,
+  "title": "Validate workflow_run origin in chained_e2e before using the repo_name artifact",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable report regarding a security flaw in the chained_e2e.yml workflow where unverified repo_name artifacts from fork PRs can lead to checkout of arbitrary repositories in workflow_run context.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires adding a condition in .github/workflows/chained_e2e.yml to verify that workflow_run events originate from the base repository before consuming the artifact."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27940",
+    "summary": {
+      "problem": "chained_e2e.yml consumes the repo_name artifact produced by trigger_e2e.yml without validating that the triggering workflow_run originated from the base repository.",
+      "root_cause": "download_repo_name does not check whether github.event.workflow_run.head_repository.full_name equals github.repository, allowing fork PR artifacts to specify arbitrary repository checkout targets for downstream E2E jobs.",
+      "context": "Gating download_repo_name on github.event.workflow_run.head_repository.full_name == github.repository ensures runs from fork PRs safely fall back to the base repository and head SHA."
+    },
+    "implementation_plan": {
+      "files_to_modify": [".github/workflows/chained_e2e.yml"],
+      "steps": [
+        "In .github/workflows/chained_e2e.yml, update the 'if' condition of the download_repo_name job so that workflow_run triggers require github.event.workflow_run.head_repository.full_name == github.repository."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "download_repo_name will only execute and consume artifacts for workflow_run events originating from the base repository, falling back to base repo/sha for fork PR runs.",
+      "verification_steps": [
+        "Verify YAML syntax of .github/workflows/chained_e2e.yml.",
+        "Test workflow_run behavior with both same-repo and fork PR triggers."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "processed_at": "2026-08-06T17:36:52Z",
+  "execution_time_seconds": 34.88
+}

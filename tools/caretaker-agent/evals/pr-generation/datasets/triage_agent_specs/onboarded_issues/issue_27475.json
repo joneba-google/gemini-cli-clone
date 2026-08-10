@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27475,
+  "title": "Authentication issues",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides clear details, client environment information, expected vs actual behavior, and an explicit API error log ('invalid_grant', 'invalid_rapt') when resuming a session under Vertex AI authentication after re-authenticating.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Resolving this issue requires updating authentication validation and session resumption logic across packages/cli and packages/core to handle stale Vertex AI re-authentication tokens (invalid_grant/invalid_rapt errors) and re-check authentication status."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27475",
+    "summary": {
+      "problem": "When a user resumes an existing session after re-authenticating with Vertex AI, the CLI fails with an 'invalid_grant' reauth error ('invalid_rapt') instead of re-verifying/refreshing authentication.",
+      "root_cause": "When resuming an existing session under Vertex AI authentication, the CLI uses cached authentication state or assumes valid credentials without re-validating the token/credentials or catching reauth-required errors ('invalid_grant' / 'invalid_rapt') to refresh or re-initialize authentication.",
+      "context": "Google Cloud authentication policies may require periodic Re-authentication Proof Tokens (invalid_rapt). When re-authentication occurs, existing cached tokens or session credentials become invalid and need to be re-fetched via GoogleAuth or re-verified before making API requests."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/core/auth.ts",
+        "packages/core/src/config/config.ts",
+        "packages/core/src/utils/errorParsing.ts"
+      ],
+      "steps": [
+        "Update performInitialAuth and refreshAuth to check credential validity when restoring or resuming a session under Vertex AI (AuthType.USE_VERTEX_AI).",
+        "Enhance error parsing in packages/core/src/utils/errorParsing.ts to detect invalid_grant and invalid_rapt re-authentication errors.",
+        "Ensure session restoration logic in packages/cli/src/core/auth.ts attempts to re-verify or refresh authentication state if credentials are stale or returned an invalid_grant error."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/core/auth.test.ts",
+      "expected_behavior": "When resuming a session with expired or reauth-required Vertex AI credentials, the CLI catches the invalid_grant error and re-initiates authentication or prompts for re-authentication rather than failing silently with an unhandled API error.",
+      "verification_steps": [
+        "Add a unit test in packages/cli/src/core/auth.test.ts mocking a Vertex AI auth session that encounters an invalid_grant / invalid_rapt API error.",
+        "Verify that performInitialAuth or session setup handles the re-auth error appropriately and triggers credential refresh or appropriate user-facing error guidance."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:02Z",
+  "execution_time_seconds": 134.34
+}

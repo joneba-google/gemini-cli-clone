@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25867,
+  "title": "Backspace deletes word instead of character on Windows",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear bug report detailing that pressing Backspace on Windows deletes an entire word instead of a single character, along with relevant environment details (win32, Kitty Keyboard Protocol: Unsupported).",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "This issue is platform-specific to Windows ('win32') and involves low-level terminal keypress parsing and keybinding matching in 'KeypressContext.tsx' and 'keyBindings.ts'. Because it is platform-specific and requires verifying key code mappings on Windows terminal input streams without Kitty Keyboard Protocol, it cannot be classified as SMALL per the effort estimation guidelines. A MEDIUM effort is appropriate as it involves adjusting key event normalization and keybindings across terminal input handling components."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#25867",
+    "summary": {
+      "problem": "Pressing the Backspace key on Windows deletes an entire word instead of a single character.",
+      "root_cause": "On Windows terminals without Kitty Keyboard Protocol, backspace keypress sequences or control characters (such as '\\x17' or '\\x08') are misparsed or matched against 'Command.DELETE_WORD_BACKWARD' ('ctrl+backspace' or 'ctrl+w') instead of 'Command.DELETE_CHAR_LEFT' in 'KeypressContext.tsx' and 'keyBindings.ts', causing 'buffer.deleteWordLeft()' to be triggered.",
+      "context": "Terminal keypress handling in 'KeypressContext.tsx' translates raw stdin control sequences into 'Key' objects. On Windows ('win32'), non-Kitty terminals emit specific ASCII control sequences for backspace that need to be correctly mapped to single character deletion rather than word deletion."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/contexts/KeypressContext.tsx",
+        "packages/cli/src/ui/key/keyBindings.ts"
+      ],
+      "steps": [
+        "Inspect key sequence parsing in 'KeypressContext.tsx' for Windows ('win32') terminal control sequences when Kitty Keyboard Protocol is unsupported.",
+        "Ensure backspace input control sequences (such as '\\x08' or '\\x7f' or '\\x17') on Windows map correctly to 'name: backspace' with 'ctrl: false' for character deletion unless Ctrl is explicitly held.",
+        "Update platform keybinding configuration in 'keyBindings.ts' so 'Command.DELETE_CHAR_LEFT' and 'Command.DELETE_WORD_BACKWARD' correctly differentiate single-character backspace from word backspace on 'win32'."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/contexts/KeypressContext.test.tsx",
+      "expected_behavior": "Pressing Backspace on Windows without modifier keys should trigger 'Command.DELETE_CHAR_LEFT' (deleting a single character) rather than 'Command.DELETE_WORD_BACKWARD'.",
+      "verification_steps": [
+        "Add a test case in 'KeypressContext.test.tsx' simulating Windows backspace key sequences when process.platform is 'win32'.",
+        "Verify that the emitted Key object has 'name: backspace' and 'ctrl: false', matching 'Command.DELETE_CHAR_LEFT'.",
+        "Run 'npm test' or 'vitest' on 'KeypressContext.test.tsx' and 'keyMatchers.test.ts' to confirm all key matching unit tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:22Z",
+  "execution_time_seconds": 135.67
+}

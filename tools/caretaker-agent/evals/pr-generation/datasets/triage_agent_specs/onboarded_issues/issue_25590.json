@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25590,
+  "title": "Bug: relaunchAppInChildProcess does not forward signals to child, orphaning it when parent is killed",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable bug report detailing process handling in relaunchAppInChildProcess, complete with reproduction steps, root cause analysis, environment details, and a proposed fix.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "The issue involves POSIX signal forwarding (SIGTERM, SIGHUP, etc.) and child_process.spawn management, which falls under Platform-Specific Complexities (PTY/Signals) and is categorized as LARGE effort."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25590",
+    "summary": {
+      "problem": "relaunchAppInChildProcess does not forward process signals (such as SIGTERM, SIGHUP) to the spawned child process, causing the child to become orphaned when the parent process is killed by process managers.",
+      "root_cause": "When relaunchAppInChildProcess spawns a child process in packages/cli/src/utils/relaunch.ts, no signal listeners are attached to process to pass termination signals to child.kill(signal). When the parent receives a signal, it exits, leaving the child process running.",
+      "context": "Process managers like systemd, container runtimes, or ACP clients terminate processes using SIGTERM/SIGHUP. Without signal forwarding, the child continues running and holding open sessions and allocated heap."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/utils/relaunch.ts"],
+      "steps": [
+        "Define a list of signals to forward to child processes (SIGTERM, SIGHUP, SIGINT, SIGQUIT, SIGUSR1, SIGUSR2).",
+        "In relaunchAppInChildProcess in packages/cli/src/utils/relaunch.ts, set up signal listeners on process for each target signal when spawning a child process.",
+        "Forward received signals to the child process via child.kill(signal) wrapped in a try/catch block to handle races where the child has already exited.",
+        "Ensure all registered process signal listeners are cleaned up when the child process emits 'close' or 'error' events to prevent memory/listener leaks across relaunch iterations."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/relaunch.test.ts",
+      "expected_behavior": "When termination signals are emitted on the process, relaunchAppInChildProcess forwards the signal to child.kill(signal). Upon child exit or error, signal listeners are cleanly removed from process.",
+      "verification_steps": [
+        "In packages/cli/src/utils/relaunch.test.ts, add unit tests verifying that process signals (e.g. SIGTERM) cause child.kill to be called with the signal name.",
+        "Verify that process signal listeners are removed after the child process closes or encounters an error."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:37Z",
+  "execution_time_seconds": 63.69
+}

@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22465,
+  "title": "Gemini CLI gets stuck at interactive prompt creating vite app",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear report that Gemini CLI hangs at interactive prompts when creating a Vite app, and requests adding a behavioral eval and updating system prompts to ensure non-interactive flags are used.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The change involves adding explicit non-interactive scaffolding guidance to the interactive command prompt snippets in packages/core/src/prompts/snippets.ts and adding a new test case to evals/interactive-hang.eval.ts, which is a localized prompt and test update."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#22465",
+    "summary": {
+      "problem": "Gemini CLI gets stuck at interactive prompts when prompted to create or scaffold a new Vite application.",
+      "root_cause": "The system prompt snippet for interactive shell command usage in packages/core/src/prompts/snippets.ts lacks explicit instructions for the model to use non-interactive flags (e.g. '--yes', '-y', '--template') when calling project scaffolding commands like 'npm create vite'.",
+      "context": "Executing project creation commands without non-interactive flags causes CLI tools to block waiting for user input on stdin, leading to hangs."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/prompts/snippets.ts"],
+      "steps": [
+        "Update toolUsageInteractive in packages/core/src/prompts/snippets.ts to specify that scaffolding commands (such as 'npm create vite' or 'npm init') must be passed non-interactive flags (e.g. '--yes', '-y', or specific template parameters) to prevent blocking on interactive prompts."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "evals/interactive-hang.eval.ts",
+      "expected_behavior": "The agent uses non-interactive flags when creating a Vite application, allowing the command to complete without hanging.",
+      "verification_steps": [
+        "Add a new behavioral eval in evals/interactive-hang.eval.ts for creating a Vite app.",
+        "Assert that the shell command executed by the agent includes non-interactive flags such as '--yes', '-y', or '--template'.",
+        "Execute 'npx vitest run evals/interactive-hang.eval.ts' to verify that the test suite passes."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:00Z",
+  "execution_time_seconds": 68.13
+}

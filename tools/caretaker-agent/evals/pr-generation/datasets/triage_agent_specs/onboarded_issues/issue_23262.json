@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 23262,
+  "title": "Flaky Test: integration-tests/symlink-install.test.ts",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue identifies a specific flaky integration test (integration-tests/symlink-install.test.ts) experiencing intermittent failures in CI, including PR context (#23259), making it a valid and actionable bug report.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "Investigating and stabilizing intermittent integration test flakiness that involves node-pty process management and async file persistence across CI environments requires reproducing timing issues and signal/process handling."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#23262",
+    "summary": {
+      "problem": "The integration test integration-tests/symlink-install.test.ts experiences intermittent failures in the Chained E2E workflow during extension symlink installation and folder trust verification.",
+      "root_cause": "Race condition in interactive PTY execution where the spawned CLI process is forcibly killed (run1.kill()) right after matching prompt text, before trustedFolders.json is fully flushed to disk or process cleanup finishes.",
+      "context": "The test verifies extension symlink install spoofing protection using node-pty. It was marked as flaky (skipIf(skipFlaky)) in PR #23259 and needs stabilization."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/commands/extensions/install.ts"],
+      "steps": [
+        "Ensure extension installation and trust registration complete file writes to trustedFolders.json synchronously before returning or writing completion status to stdout.",
+        "Ensure process cleanup and exit handlers in CLI commands properly wait for pending configuration persistence operations."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "integration-tests/symlink-install.test.ts",
+      "expected_behavior": "The symlink install spoofing protection test completes reliably in CI environments without timing out or missing file system assertions.",
+      "verification_steps": [
+        "Run the integration test with RUN_FLAKY_INTEGRATION=true vitest run integration-tests/symlink-install.test.ts.",
+        "Verify that trustedFolders.json assertions pass consistently across multiple repeated test runs."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:56Z",
+  "execution_time_seconds": 45.85
+}

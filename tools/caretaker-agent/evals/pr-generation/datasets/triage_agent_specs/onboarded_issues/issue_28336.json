@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28336,
+  "title": "Security: supply chain RCE via pull_request_target in eval-pr.yml (fork code executes with GEMINI_API_KEY)",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report clearly identifies a security vulnerability in .github/workflows/eval-pr.yml where pull_request_target is used alongside checkout and execution of untrusted fork code with repository secrets.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Restructuring .github/workflows/eval-pr.yml to decouple untrusted fork code execution from privileged actions requires splitting workflow triggers into pull_request and workflow_run, managing artifact passing, and updating comment posting mechanics."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28336",
+    "summary": {
+      "problem": "The workflow .github/workflows/eval-pr.yml uses pull_request_target and executes fork code with access to repository secrets like GEMINI_API_KEY.",
+      "root_cause": "The pull_request_target trigger runs in the context of the base repository with secrets enabled; checking out and building/executing PR head code from a fork allows untrusted code to read repository secrets.",
+      "context": "To mitigate supply chain code execution risks, untrusted PR code must run under a pull_request trigger without secrets, and privileged operations must be separated into a workflow_run workflow."
+    },
+    "implementation_plan": {
+      "files_to_modify": [".github/workflows/eval-pr.yml"],
+      "steps": [
+        "Refactor .github/workflows/eval-pr.yml to use the pull_request event trigger instead of pull_request_target for untrusted code execution.",
+        "Remove GEMINI_API_KEY secret injection from steps running untrusted PR head code.",
+        "Separate privileged PR commenting and secret access into a workflow_run workflow triggered on completion of the pull_request workflow.",
+        "Upload evaluation result artifacts from the pull_request workflow and download them in the workflow_run workflow to post comments safely."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "Fork pull requests execute PR evaluation steps without access to GEMINI_API_KEY or repository write permissions, and evaluation reports are safely posted via a workflow_run workflow.",
+      "verification_steps": [
+        "Validate YAML syntax of the modified GitHub Actions workflow files.",
+        "Verify that pull_request event triggers without repository secrets for external fork PRs.",
+        "Verify that workflow_run triggers upon completion to download evaluation artifacts and post PR comments."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:57Z",
+  "execution_time_seconds": 109.88
+}

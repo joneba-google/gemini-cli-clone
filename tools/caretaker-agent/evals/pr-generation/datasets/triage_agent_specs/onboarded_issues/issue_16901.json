@@ -1,0 +1,58 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 16901,
+  "title": "Stop using Wombat for publishing npms",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides clear, actionable instructions to stop using Wombat Dressing Room for publishing npm packages and transition to OSS Exit Gates for NPM in compliance with MOSS requirements.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "Migrating the NPM publishing process from Wombat Dressing Room to OSS Exit Gates requires a major overhaul of CI/CD release infrastructure across multiple GitHub workflows, custom composite actions, .npmrc configurations, and release documentation."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#16901",
+    "summary": {
+      "problem": "The repository currently uses Wombat Dressing Room for publishing npm packages, which must be replaced with OSS Exit Gates for NPM to comply with MOSS Capability 1, Step 12 requirements.",
+      "root_cause": "Existing release workflows, composite actions, .npmrc, and documentation rely on Wombat Dressing Room registry endpoints (https://wombat-dressing-room.appspot.com) and Wombat token secrets (WOMBAT_TOKEN_*).",
+      "context": "MOSS Capability 1, Step 12 mandates that all open source npm packages be published via trusted methods such as OSS Exit Gates for NPM."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        ".npmrc",
+        ".github/actions/setup-npmrc/action.yml",
+        ".github/actions/npm-auth-token/action.yml",
+        ".github/actions/publish-release/action.yml",
+        ".github/actions/tag-npm-release/action.yml",
+        ".github/workflows/release-manual.yml",
+        ".github/workflows/release-nightly.yml",
+        ".github/workflows/release-promote.yml",
+        ".github/workflows/release-patch-3-release.yml",
+        ".github/workflows/release-change-tags.yml",
+        ".github/workflows/release-rollback.yml",
+        "docs/releases.md"
+      ],
+      "steps": [
+        "Update .npmrc and .github/actions/setup-npmrc/action.yml to remove Wombat registry URLs and replace them with the official NPM registry / OSS Exit Gate endpoint configuration.",
+        "Modify .github/actions/npm-auth-token/action.yml to replace Wombat token parameters (wombat-token-cli, wombat-token-core, wombat-token-a2a-server) with authentication mechanics required by OSS Exit Gates.",
+        "Update composite actions .github/actions/publish-release/action.yml and .github/actions/tag-npm-release/action.yml to use the updated auth token action and updated parameters.",
+        "Update release workflow files (.github/workflows/release-manual.yml, release-nightly.yml, release-promote.yml, release-patch-3-release.yml, release-change-tags.yml, release-rollback.yml) to remove WOMBAT_TOKEN_* secret references and configure OSS Exit Gate authentication.",
+        "Update documentation in docs/releases.md to reflect the new NPM release process using OSS Exit Gates instead of Wombat Dressing Room."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "NPM package releases and tag updates authenticate through OSS Exit Gates for NPM without referencing Wombat Dressing Room endpoints or secrets.",
+      "verification_steps": [
+        "Trigger manual dry-run release workflow (release-manual.yml) to verify workflow execution and npm configuration without publishing.",
+        "Verify that .npmrc no longer contains references to wombat-dressing-room.appspot.com.",
+        "Verify that all GitHub action steps compile and pass workflow validation."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "processed_at": "2026-08-06T17:48:31Z",
+  "execution_time_seconds": 74.0
+}

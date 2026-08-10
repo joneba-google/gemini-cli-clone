@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27273,
+  "title": "Cleanup and --list-sessions race each other",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a race condition between background session cleanup (`cleanupExpiredSessions`) and the `--list-sessions` handler on startup, complete with file/line references in `packages/cli/src/gemini.tsx` and detailed explanation of expected behavior.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to `packages/cli/src/gemini.tsx` where the session cleanup promise should be stored and awaited prior to listing or deleting sessions, preventing concurrent session directory operations."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27273",
+    "summary": {
+      "problem": "Background session cleanup (`cleanupExpiredSessions`) runs concurrently with `--list-sessions` and `--delete-session`, causing race conditions and potential errors during session directory scanning.",
+      "root_cause": "In `packages/cli/src/gemini.tsx`, `cleanupExpiredSessions` is launched as an un-awaited background promise during startup. When `--list-sessions` or `--delete-session` is specified, session files are read or deleted while cleanup is concurrently deleting expired session files.",
+      "context": "Session listing reads metadata files from the sessions directory. Deleting files concurrently during readdir/readFile can lead to non-deterministic listing snapshots or unexpected missing file errors."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/gemini.tsx"],
+      "steps": [
+        "Store the Promise returned by `cleanupExpiredSessions(config, settings.merged)` during startup initialization in `packages/cli/src/gemini.tsx`.",
+        "Await the session cleanup Promise before calling `listSessions(config)` or `deleteSession(config, ...)` to guarantee cleanup completes before session file operations start."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/gemini.test.tsx",
+      "expected_behavior": "Session cleanup completes prior to `listSessions` or `deleteSession` execution when `--list-sessions` or `--delete-session` options are supplied.",
+      "verification_steps": [
+        "In `packages/cli/src/gemini.test.tsx`, add a unit test confirming `cleanupExpiredSessions` resolves before `listSessions` or `deleteSession` is executed.",
+        "Run Vitest unit tests for gemini CLI to verify test suite passes."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:42Z",
+  "execution_time_seconds": 50.52
+}

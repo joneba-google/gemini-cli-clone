@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22813,
+  "title": "keybindings.json not being honored for intput.submit and input.newline",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides clear reproduction details including the exact keybindings.json content, expected behavior, and environment information to identify and fix the defect.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires a localized update to the Zod schema and loader loop in packages/cli/src/ui/key/keyBindings.ts along with unit test coverage in keyBindings.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#22813",
+    "summary": {
+      "problem": "Keybindings defined in keybindings.json using the 'keys' array property (e.g. for input.newline) fail validation in loadCustomKeybindings, causing all custom keybindings in keybindings.json to be ignored.",
+      "root_cause": "The keybindingsSchema Zod definition in packages/cli/src/ui/key/keyBindings.ts required a single 'key' string property and did not accept a 'keys' string array property. When keybindings.json contains an entry with 'keys', schema validation fails completely and custom keybindings fall back to defaults.",
+      "context": "Users who want to rebind or unbind shortcuts like input.newline often provide an array of key sequences using 'keys'. Supporting both 'key' (string) and 'keys' (string array) in keybindingsSchema and iterating over each key in loadCustomKeybindings ensures custom keybindings work as expected."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/key/keyBindings.ts"],
+      "steps": [
+        "Update keybindingsSchema in packages/cli/src/ui/key/keyBindings.ts to accept either optional 'key' (string) or 'keys' (array of strings) per binding item.",
+        "Add refinement or transform logic to normalize 'key' and 'keys' into an array of key string patterns for each command entry.",
+        "Update loadCustomKeybindings in packages/cli/src/ui/key/keyBindings.ts to iterate over all key patterns in the normalized array, binding or unbinding each specified key pattern accordingly."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/key/keyBindings.test.ts",
+      "expected_behavior": "loadCustomKeybindings successfully parses keybindings.json containing entries with 'keys' array property or 'key' string property, applying unbindings and new bindings as expected.",
+      "verification_steps": [
+        "Add a unit test in packages/cli/src/ui/key/keyBindings.test.ts that provides a custom keybindings.json with 'keys' array property (such as unbinding -input.newline with multiple keys and binding enter to input.newline and ctrl+enter to input.submit).",
+        "Verify that loadCustomKeybindings successfully loads the configuration without schema validation errors and that the custom bindings for input.newline and input.submit are correctly reflected in the resulting KeyBindingConfig."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:44:27Z",
+  "execution_time_seconds": 64.04
+}

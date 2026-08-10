@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28390,
+  "title": "Browser agent and web search tools not working",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable description of a systemic defect where web-enabled tools (google_web_search and web_fetch) fail with an INVALID_MODEL error due to referencing gemini-3-flash-preview, along with environment and configuration information.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is a localized configuration error and context instantiation bug. The fix involves updating default model alias mappings in defaultModelConfigs.ts to use fallback/configurable flash model aliases and fixing the context parameter in WebSearchToolInvocation."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28390",
+    "summary": {
+      "problem": "Web search and web fetch tools fail with an INVALID_MODEL error when executing queries or fetching content.",
+      "root_cause": "In packages/core/src/config/defaultModelConfigs.ts, web-search, web-fetch, and web-fetch-fallback aliases extend gemini-3-flash-base which hardcodes model: 'gemini-3-flash-preview'. This model is invalid or unavailable under standard API key authentication or for users without preview access. Furthermore, WebSearchTool passes this.context.config instead of this.context when instantiating WebSearchToolInvocation.",
+      "context": "Utility tools perform auxiliary LLM operations using internal model aliases. Hardcoding preview model names in base aliases leads to API errors when the user operates with an API key or non-preview tier model."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/config/defaultModelConfigs.ts",
+        "packages/core/src/tools/web-search.ts"
+      ],
+      "steps": [
+        "Update the web-search, web-fetch, and web-fetch-fallback model alias definitions in packages/core/src/config/defaultModelConfigs.ts to use a dynamic/fallback flash model alias instead of extending gemini-3-flash-base.",
+        "In packages/core/src/tools/web-search.ts, update WebSearchTool.createInvocation to pass this.context to WebSearchToolInvocation instead of this.context.config."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/web-search.test.ts",
+      "expected_behavior": "Web search and fetch tools resolve model aliases to valid, accessible flash models and execute without INVALID_MODEL errors.",
+      "verification_steps": [
+        "Run unit tests in packages/core/src/tools/web-search.test.ts and packages/core/src/tools/web-fetch.test.ts.",
+        "Verify that model resolution for web tools resolves to an available flash model during invocation under API key context."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:08Z",
+  "execution_time_seconds": 97.61
+}

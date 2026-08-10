@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 23261,
+  "title": "Flaky Test: integration-tests/hooks-system.test.ts",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly identifies a specific flaky integration test (integration-tests/hooks-system.test.ts) experiencing intermittent failures in CI, and provides useful context regarding recent changes in PR #23259.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Investigating and deflaking intermittent test failures in integration tests requires analyzing process execution, timeout limits, asynchronous hooks timing, and execution context across CI runners, which involves moderate overhead for reproduction and debugging."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#23261",
+    "summary": {
+      "problem": "The integration test suite integration-tests/hooks-system.test.ts exhibits intermittent test flakiness during CI execution in the Chained E2E workflow.",
+      "root_cause": "Asynchronous hooks execution, process spawning timeouts, or race conditions during child process response collection and telemetry event propagation in hookRunner.ts and hookEventHandler.ts lead to non-deterministic test failures under load in CI environments.",
+      "context": "The test suite was temporarily moved to a non-blocking suite using describe.skipIf(skipFlaky) in PR #23259 to unblock PR merges while awaiting investigation and deflaking."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/hooks/hookRunner.ts",
+        "packages/core/src/hooks/hookEventHandler.ts",
+        "packages/core/src/hooks/hookSystem.ts"
+      ],
+      "steps": [
+        "Investigate process lifecycle management, stream cleanup, and output buffer collection timing in packages/core/src/hooks/hookRunner.ts.",
+        "Ensure robust handling and proper timeout bounds for hook subprocess execution to prevent hanging or race conditions in packages/core/src/hooks/hookEventHandler.ts and packages/core/src/hooks/hookSystem.ts.",
+        "Stabilize asynchronous event emission and telemetry reporting to eliminate timing sensitivity during integration test execution."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "integration-tests/hooks-system.test.ts",
+      "expected_behavior": "The hook system integration tests execute deterministically and pass consistently across all CI environment runners without intermittent timeouts or failed assertions.",
+      "verification_steps": [
+        "Run npx vitest run integration-tests/hooks-system.test.ts with RUN_FLAKY_INTEGRATION=true across multiple sequential iterations to confirm stability.",
+        "Verify that all hook event callbacks (BeforeTool, AfterTool, etc.) complete clean process execution without hanging or unhandled promise rejections."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:47Z",
+  "execution_time_seconds": 36.12
+}

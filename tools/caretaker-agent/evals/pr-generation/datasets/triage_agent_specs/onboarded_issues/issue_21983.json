@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21983,
+  "title": "browser subagent fails in wayland",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is an actionable bug report with clear context, error logs, and expected behavior. It describes a failure in the browser subagent on Linux/Wayland when headful browser initialization fails due to a missing X server.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "This issue is platform-specific to Linux environments without X11/DISPLAY servers (such as Wayland). Per effort guidelines, platform-specific issues requiring cross-environment setup and testing cannot be rated as SMALL, so it is estimated as MEDIUM."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21983",
+    "summary": {
+      "problem": "Browser subagent fails on Linux environments under Wayland or without an active X server when attempting to launch a headful browser, yielding error: 'Missing X server to start the headful browser'.",
+      "root_cause": "BrowserManager attempts to launch chrome-devtools-mcp in headful mode by default. On Linux systems lacking X11 or DISPLAY environment variables, Puppeteer fails to launch headful Chrome.",
+      "context": "Users running under Wayland or headless Linux configurations expect the browser agent to fall back to headless mode when headful browser creation fails due to missing X display servers."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/agents/browser/browserManager.ts",
+        "packages/core/src/agents/browser/browserAgentFactory.ts"
+      ],
+      "steps": [
+        "Add error classification in BrowserManager for missing X server launch errors ('Missing X server').",
+        "Implement automatic fallback in BrowserManager to retry connection with `--headless` enabled when missing X server is encountered during headful startup.",
+        "Expose an `isHeadless()` method on `BrowserManager` reflecting whether headless mode is active (either via config or fallback).",
+        "Update `browserAgentFactory.ts` to check `browserManager.isHeadless()` before attempting overlay or input blocker injections."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/agents/browser/browserManager.test.ts",
+      "expected_behavior": "When headful browser connection fails due to a missing X server error, BrowserManager falls back to headless mode and retries connection successfully.",
+      "verification_steps": [
+        "Add unit test in `browserManager.test.ts` simulating initial headful connection rejection with 'Missing X server to start the headful browser'.",
+        "Verify BrowserManager catches the error, emits an informational feedback event, and retries spawning `chrome-devtools-mcp` with `--headless` flag.",
+        "Verify `browserManager.isHeadless()` returns true following fallback."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:10Z",
+  "execution_time_seconds": 54.54
+}

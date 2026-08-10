@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28337,
+  "title": "OAuth succeeds and credentials are saved, but Gemini CLI 0.50.0 keeps re-entering auth flow on macOS",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a thorough and actionable bug report including client environment details, settings configurations, verified network callback behavior, isolated environment reproduction steps, and exact error symptoms.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The bug is a localized credential state persistence issue in packages/core/src/code_assist/oauth2.ts. The fix requires updating cacheCredentials to merge existing file-based OAuth credentials before overwriting oauth_creds.json, along with adding a unit test in oauth2.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28337",
+    "summary": {
+      "problem": "Gemini CLI repeatedly re-enters the OAuth authentication flow on subsequent runs despite previous OAuth credentials being saved locally.",
+      "root_cause": "When OAuth tokens refresh during CLI usage, the 'tokens' event emitted by google-auth-library contains only the updated access_token and expiry_date, omitting the refresh_token. The file-based cacheCredentials function in packages/core/src/code_assist/oauth2.ts overwrites oauth_creds.json without merging existing credential fields, thereby stripping the saved refresh_token. On subsequent runs, token refresh fails due to the missing refresh_token, forcing the CLI to prompt for Google login again.",
+      "context": "OAuthCredentialStorage (used for encrypted storage) already merges refresh_token from existing stored credentials, but the default file-based cacheCredentials implementation in oauth2.ts overwrote the file directly."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/code_assist/oauth2.ts"],
+      "steps": [
+        "In packages/core/src/code_assist/oauth2.ts, update cacheCredentials to read any existing credential file at Storage.getOAuthCredsPath() before saving.",
+        "Merge the newly received Credentials with existing credentials, preserving fields such as refresh_token, scope, and id_token if they are omitted in the new tokens object.",
+        "Write the merged credentials back to Storage.getOAuthCredsPath() with mode 0o600."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/code_assist/oauth2.test.ts",
+      "expected_behavior": "When cacheCredentials is called with a token update lacking a refresh_token, the saved oauth_creds.json file should retain the existing refresh_token, scope, and id_token.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/code_assist/oauth2.test.ts simulating a token refresh event where new tokens lack a refresh_token.",
+        "Verify that oauth_creds.json on disk contains both the updated access_token and the previously saved refresh_token."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:04Z",
+  "execution_time_seconds": 117.44
+}

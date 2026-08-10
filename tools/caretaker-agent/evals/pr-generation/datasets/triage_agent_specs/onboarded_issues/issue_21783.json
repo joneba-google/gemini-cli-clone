@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21783,
+  "title": "ACP: no tool_call session update before request_permission",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable description of a bug in ACP mode where tool_call session updates are omitted prior to session/request_permission. It provides exact code references, expected vs actual behavior according to the ACP tool calls spec, reproduction steps, and debug logs.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires emitting a tool_call session update with status 'pending' prior to requestPermission in packages/cli/src/acp/acpSession.ts and updating unit test expectations in packages/cli/src/acp/acpSession.test.ts. This is a localized single-file logic fix with a clear root cause and low blast radius."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21783",
+    "summary": {
+      "problem": "In ACP mode, when a tool requires user confirmation, runTool() sends session/request_permission without sending a preceding tool_call session update to the client.",
+      "root_cause": "In packages/cli/src/acp/acpSession.ts, this.sendUpdate with sessionUpdate: 'tool_call' is only executed in the else branch when confirmationDetails is falsy. In the if (confirmationDetails) branch, requestPermission is called directly without emitting a tool_call update first.",
+      "context": "According to the ACP tool calls specification, the agent should report a tool_call session update (with status 'pending' when confirmation is required) prior to requesting permission, allowing clients to track the tool call lifecycle."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/acp/acpSession.ts"],
+      "steps": [
+        "In packages/cli/src/acp/acpSession.ts, locate runTool() where confirmationDetails is handled.",
+        "Before calling this.connection.requestPermission, call await this.sendUpdate with sessionUpdate: 'tool_call', status 'pending', and the tool call details (toolCallId, title, content, locations, kind)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/acp/acpSession.test.ts",
+      "expected_behavior": "When a tool execution requires confirmation, a tool_call session update with status 'pending' is emitted via sendUpdate before connection.requestPermission is invoked.",
+      "verification_steps": [
+        "In packages/cli/src/acp/acpSession.test.ts, update or add unit test cases where requestPermission is mocked to verify that mockConnection.sessionUpdate was called with sessionUpdate: 'tool_call' and status: 'pending' before requestPermission was called."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:22Z",
+  "execution_time_seconds": 36.72
+}

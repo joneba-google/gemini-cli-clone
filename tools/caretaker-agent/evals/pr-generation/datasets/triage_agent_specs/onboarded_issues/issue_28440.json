@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28440,
+  "title": "OAuth login fails on headless VPS: \"Premature close\" fetching oauth2.googleapis.com/token (CLI HTTP stack only)",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides detailed environment information (gemini-cli v0.51.0, Node v22.23.0, Ubuntu 24.04 VPS), exact error traces ('Premature close' fetching oauth2.googleapis.com/token), and thorough isolation testing results showing that curl, Python, and raw Node fetch work on the same system while only the CLI bundle fails.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Investigating network stream premature close errors in Node/google-auth-library during OAuth token exchange across different network stack environments requires debugging HTTP transport options, retry logic, and asynchronous flow handling in packages/core/src/code_assist/oauth2.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28440",
+    "summary": {
+      "problem": "OAuth login fails with 'Premature close' error when requesting tokens from oauth2.googleapis.com in headless VPS environments.",
+      "root_cause": "The HTTP transport layer inside google-auth-library/OAuth2Client encounters stream premature closure when communicating with the token endpoint under specific Node.js HTTP stack/network configurations.",
+      "context": "Both browser redirect and NO_BROWSER=true user-code auth flows fail during token exchange with FatalAuthenticationError (exit code 41)."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/code_assist/oauth2.ts"],
+      "steps": [
+        "Update OAuth2Client transport options in initOauthClient in packages/core/src/code_assist/oauth2.ts to handle HTTP request options and retry policies for token endpoint fetch operations.",
+        "Add error handling and retry logic around client.getToken calls in authWithUserCode and authWithWeb to gracefully handle premature connection closures.",
+        "Ensure cached credentials in OAuthCredentialStorage are appropriately validated and handled if re-authentication fails."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/code_assist/oauth2.test.ts",
+      "expected_behavior": "OAuth token exchange completes successfully or retries transient transport errors, preventing FatalAuthenticationError caused by premature HTTP response stream closures.",
+      "verification_steps": [
+        "Run Vitest suite on packages/core/src/code_assist/oauth2.test.ts.",
+        "Add unit tests mocking premature stream close responses on client.getToken to verify retry logic and proper exception handling."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:33:06Z",
+  "execution_time_seconds": 65.79
+}

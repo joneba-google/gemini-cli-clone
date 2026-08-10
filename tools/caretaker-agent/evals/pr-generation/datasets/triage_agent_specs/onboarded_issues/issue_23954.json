@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 23954,
+  "title": "bug: autocomplete doesn't add trailing space, preventing immediate execution on Enter",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a bug where autocomplete suggestions do not append a trailing space, preventing immediate command execution on Enter or typing additional arguments. Clear reproduction steps and environment details are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is isolated to localized logic in `packages/cli/src/ui/hooks/useCommandCompletion.tsx` regarding space padding during slash command completion, with test coverage in `useCommandCompletion.test.tsx`."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#23954",
+    "summary": {
+      "problem": "Selecting a command from autocomplete suggestions via Tab or typing does not append a trailing space, forcing users to manually add a space before hitting Enter to submit.",
+      "root_cause": "In `useCommandCompletion.tsx`, the `shouldAddSpace` logic for slash completions sets `shouldAddSpace = !isExecutableCommand || requiresArguments;`, preventing space padding for executable commands and causing Enter to trigger suggestion acceptance repeatedly instead of command submission.",
+      "context": "Regression from PR #20136 where trailing space logic was tightened for slash command completion."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/hooks/useCommandCompletion.tsx"],
+      "steps": [
+        "In `packages/cli/src/ui/hooks/useCommandCompletion.tsx`, update the `shouldAddSpace` calculation for `CompletionMode.SLASH` so that completed command suggestions append a trailing space.",
+        "Ensure selecting an executable slash command suggestion allows immediate Enter submission or argument entry without forcing manual space insertion."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useCommandCompletion.test.tsx",
+      "expected_behavior": "Selecting a command suggestion via autocomplete appends a trailing space so that Enter can submit the command immediately or arguments can be typed directly.",
+      "verification_steps": [
+        "Update unit tests in `packages/cli/src/ui/hooks/useCommandCompletion.test.tsx` under the `handleAutocomplete` suite to assert trailing space insertion for executable slash commands.",
+        "Run unit tests using Vitest to verify that `useCommandCompletion.test.tsx` and `InputPrompt.test.tsx` pass without regressions."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:32Z",
+  "execution_time_seconds": 56.65
+}

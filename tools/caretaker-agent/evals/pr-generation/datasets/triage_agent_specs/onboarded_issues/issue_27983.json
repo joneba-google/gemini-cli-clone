@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27983,
+  "title": "read_mcp_resource returns MCP resource text to the model without wrapUntrusted(), unlike sibling tools",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a valid, clear bug report identifying a security oversight where read_mcp_resource returns raw text without calling wrapUntrusted(), inconsistent with other MCP tools in mcp-tool.ts.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires importing and applying wrapUntrusted() to resource text output in packages/core/src/tools/read-mcp-resource.ts and updating corresponding unit tests in packages/core/src/tools/read-mcp-resource.test.ts. This is a localized, single-file logic change."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27983",
+    "summary": {
+      "problem": "The read_mcp_resource tool returns MCP resource content directly in llmContent without wrapping it in wrapUntrusted(), unlike sibling MCP tools.",
+      "root_cause": "ReadMcpResourceToolInvocation.execute in packages/core/src/tools/read-mcp-resource.ts assigns unwrapped resource text to llmContent instead of wrapping it with wrapUntrusted().",
+      "context": "mcp-tool.ts wraps text and embedded resource text in wrapUntrusted() to mark external MCP content as untrusted for LLM consumption. read_mcp_resource missed this wrapper."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/tools/read-mcp-resource.ts"],
+      "steps": [
+        "Import wrapUntrusted from ../utils/textUtils.js in packages/core/src/tools/read-mcp-resource.ts.",
+        "In ReadMcpResourceToolInvocation.execute, wrap contentText using wrapUntrusted(contentText) when assigning llmContent in the returned ToolResult."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/read-mcp-resource.test.ts",
+      "expected_behavior": "When read_mcp_resource tool is executed, llmContent returned in ToolResult is wrapped with wrapUntrusted().",
+      "verification_steps": [
+        "Update tests in packages/core/src/tools/read-mcp-resource.test.ts to expect llmContent to be wrapped with wrapUntrusted().",
+        "Run Vitest test suite on packages/core/src/tools/read-mcp-resource.test.ts to verify all test cases pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:36:28Z",
+  "execution_time_seconds": 38.63
+}

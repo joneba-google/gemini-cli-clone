@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28399,
+  "title": "Gemini CLI v0.50.0 fails to load .gemini/settings.json in VS Code Dev Container",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear title, description, step-by-step reproduction instructions, environment details, and client information describing a specific bug where .gemini/settings.json is not loaded in a VS Code Dev Container.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Resolving this issue requires handling workspace directory fallback logic for VS Code Dev Container / IDE companion environments and ensuring setting resolution operates correctly across cross-environment setups."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#28399",
+    "summary": {
+      "problem": "Gemini CLI fails to load workspace-level configuration from .gemini/settings.json when running inside a VS Code Dev Container.",
+      "root_cause": "The loadSettings function defaults workspaceDir strictly to process.cwd() when invoked without arguments, failing to check GEMINI_CLI_IDE_WORKSPACE_PATH set by the VS Code Dev Container/companion extension environment.",
+      "context": "In VS Code Dev Containers, GEMINI_CLI_IDE_WORKSPACE_PATH is set to the workspace root directory, which may differ from process.cwd() or require explicit fallback when starting the CLI session."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/config/settings.ts"],
+      "steps": [
+        "Modify loadSettings in packages/cli/src/config/settings.ts to check process.env['GEMINI_CLI_IDE_WORKSPACE_PATH'] when workspaceDir is omitted.",
+        "Parse the primary workspace folder path using path.delimiter if GEMINI_CLI_IDE_WORKSPACE_PATH contains multiple folder paths.",
+        "Fallback to process.cwd() if GEMINI_CLI_IDE_WORKSPACE_PATH is not defined."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/settings.test.ts",
+      "expected_behavior": "When loadSettings() is called without explicit arguments and GEMINI_CLI_IDE_WORKSPACE_PATH is set, settings are loaded from the directory specified in GEMINI_CLI_IDE_WORKSPACE_PATH.",
+      "verification_steps": [
+        "Add a unit test in packages/cli/src/config/settings.test.ts that sets process.env['GEMINI_CLI_IDE_WORKSPACE_PATH'].",
+        "Verify that loadSettings() loads .gemini/settings.json from the workspace path specified in the environment variable."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:54Z",
+  "execution_time_seconds": 156.9
+}

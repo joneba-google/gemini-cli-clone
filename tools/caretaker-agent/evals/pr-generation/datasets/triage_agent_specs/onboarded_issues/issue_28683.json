@@ -1,0 +1,50 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28683,
+  "title": "Missing usageMetadata is recorded as all-zero, indistinguishable from a real zero-token response",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report provides a clear, detailed, and actionable description of a telemetry defect where missing usageMetadata is recorded as all-zero token usage. It identifies the exact lines in packages/core/src/telemetry/types.ts and packages/core/src/telemetry/loggers.ts and explains the impact on telemetry service and OpenTelemetry GenAI metrics compliance.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires modifying ApiResponseEvent in packages/core/src/telemetry/types.ts to keep usage optional and only populated when usage_data is present, along with small null-checks in loggers.ts, uiTelemetry.ts, and clearcut-logger.ts. The scope is localized to telemetry modules with clear existing unit test coverage."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28683",
+    "summary": {
+      "problem": "When an API response omits usageMetadata, ApiResponseEvent fills all token fields with zero fallback values (?? 0), recording the request as a zero-token response rather than omitting usage.",
+      "root_cause": "The ApiResponseEvent constructor in packages/core/src/telemetry/types.ts assigns zero defaults for token counts when usage_data is undefined instead of keeping usage undefined.",
+      "context": "OpenTelemetry GenAI metrics guidelines state that token usage metrics should not be recorded when token counts cannot be obtained. Omit token recording when usageMetadata is missing to distinguish no data from zero tokens used."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/telemetry/types.ts",
+        "packages/core/src/telemetry/loggers.ts",
+        "packages/core/src/telemetry/uiTelemetry.ts",
+        "packages/core/src/telemetry/clearcut-logger/clearcut-logger.ts"
+      ],
+      "steps": [
+        "In packages/core/src/telemetry/types.ts, update the usage property on ApiResponseEvent to be optional (usage?: GenAIUsageDetails) and only populate this.usage in the constructor if usage_data is provided.",
+        "In packages/core/src/telemetry/types.ts, update toLogRecord to only attach input_token_count, output_token_count, cached_content_token_count, thoughts_token_count, tool_token_count, and total_token_count attributes if this.usage is defined.",
+        "In packages/core/src/telemetry/loggers.ts, update logApiResponse to wrap token metric recording (recordTokenUsageMetrics) in a check for event.usage.",
+        "In packages/core/src/telemetry/uiTelemetry.ts, update processApiResponse to only accumulate token counts into modelMetrics.tokens and roleMetrics.tokens if event.usage is defined.",
+        "In packages/core/src/telemetry/clearcut-logger/clearcut-logger.ts, use optional chaining for event.usage when setting token count values."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/telemetry/loggers.test.ts",
+      "expected_behavior": "ApiResponseEvent created with usage_data=undefined will leave usage undefined, and logApiResponse will skip recording token metrics.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/telemetry/loggers.test.ts constructing ApiResponseEvent with usage_data undefined and verifying event.usage is undefined.",
+        "Verify logApiResponse does not call recordTokenUsageMetrics when event.usage is undefined.",
+        "Run unit tests using Vitest to confirm no regressions."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:32:09Z",
+  "execution_time_seconds": 78.25
+}

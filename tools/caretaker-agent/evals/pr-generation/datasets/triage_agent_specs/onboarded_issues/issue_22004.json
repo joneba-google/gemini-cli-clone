@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22004,
+  "title": "When running gemini-cli inside a tmux session, the 'thinking' spinner (\u283c) causes severe screen flickering. Please implement Synchronized Output (DCS = 1 s ST) and optimize the terminal clear/redraw logic during spinner ticks, similar to Claude Code.",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a terminal UI rendering bug (severe screen flickering in tmux during spinner ticks) with version info (0.33.0) and environmental context (tmux session).",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Addressing terminal redraw flickering during spinner animation ticks inside terminal multiplexers like tmux involves modifying stdout stream writing or Ink render wrappers to implement Synchronized Output sequences. As specified in the guidelines, issues involving terminal redraw flickering and cross-environment setups like tmux require medium effort (2-3 days)."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#22004",
+    "summary": {
+      "problem": "Running gemini-cli inside tmux causes severe screen flickering when the thinking spinner animates.",
+      "root_cause": "Frequent frame updates from the spinner trigger rapid clear and redraw calls to stdout without synchronized output escape sequences (DCS = 1 s ST or Mode 2026), causing tmux to render partial frames.",
+      "context": "Terminal multiplexers like tmux display visible flickering when terminal clear and redraw sequences are received unbuffered across multiple write calls during spinner ticks."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/stdio.ts",
+        "packages/cli/src/interactiveCli.tsx"
+      ],
+      "steps": [
+        "Update createWorkingStdio in packages/core/src/utils/stdio.ts to support wrapping terminal frame writes with Synchronized Output escape sequences (DCS = 1 s ST or ANSI mode 2026) when writing to stdout.",
+        "In packages/cli/src/interactiveCli.tsx, ensure the Ink stdout stream utilizes synchronized output blocks or batching during render ticks to eliminate screen flickering in tmux and terminal multiplexers."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/stdio.test.ts",
+      "expected_behavior": "Stdout writes from Ink during UI/spinner redraws incorporate synchronized output delimiters or optimized frame flushing to prevent screen flicker in multiplexed terminals.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/utils/stdio.test.ts to verify that createWorkingStdio handles synchronized output escape sequence wrapping for terminal frame updates."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:02Z",
+  "execution_time_seconds": 52.23
+}

@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28651,
+  "title": "bug: A2A OpenID Connect config validates but cannot be constructed",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a systemic code defect where OpenID Connect authentication passes validation via A2AAuthProviderFactory.validateAuthConfig but throws an error ('openIdConnect auth provider not yet implemented') during provider construction in A2AAuthProviderFactory.create. Clear steps to reproduce and affected source files are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix involves updating validation logic in A2AAuthProviderFactory within packages/core/src/agents/auth-provider/factory.ts so that openIdConnect auth configuration is rejected early during validation as unsupported rather than failing unexpectedly at runtime creation."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28651",
+    "summary": {
+      "problem": "A2A OpenID Connect authentication passes compatibility validation in A2AAuthProviderFactory.validateAuthConfig, but A2AAuthProviderFactory.create throws 'openIdConnect auth provider not yet implemented' at runtime when attempting to construct the provider.",
+      "root_cause": "A2AAuthProviderFactory.findMatchingScheme treats authConfig.type === 'openIdConnect' as a valid match for openIdConnect security schemes, even though A2AAuthProviderFactory.create does not implement openIdConnect provider construction.",
+      "context": "OpenID Connect is defined in A2AAuthProviderType and OpenIdConnectAuthConfig in types.ts. Until full OIDC discovery and token handling are implemented, validation should explicitly mark openIdConnect as unsupported (similar to mutualTLS) to fail fast during configuration validation."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/agents/auth-provider/factory.ts"],
+      "steps": [
+        "Update A2AAuthProviderFactory.findMatchingScheme in packages/core/src/agents/auth-provider/factory.ts to mark openIdConnect as not yet supported in missingConfig (similar to mutualTLS) so that validateAuthConfig returns valid: false.",
+        "Ensure A2AAuthProviderFactory.create continues to throw an informative error if called directly with openIdConnect config."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/agents/auth-provider/factory.test.ts",
+      "expected_behavior": "A2AAuthProviderFactory.validateAuthConfig should return valid: false with a missingConfig message stating that OpenID Connect authentication is not yet supported, preventing unexpected runtime creation failures.",
+      "verification_steps": [
+        "Update existing unit tests in packages/core/src/agents/auth-provider/factory.test.ts for openIdConnect scheme matching to assert valid: false with the missingConfig error message.",
+        "Add a test verifying the validate-to-create lifecycle for openIdConnect configuration."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:32:38Z",
+  "execution_time_seconds": 107.16
+}

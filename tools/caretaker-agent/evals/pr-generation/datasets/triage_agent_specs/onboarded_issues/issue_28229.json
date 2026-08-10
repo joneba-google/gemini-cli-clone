@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28229,
+  "title": "OAuth login fails for Google AI Pro users: \"This client is no longer supported for Gemini Code Assist for individuals\"",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear, actionable bug report providing step-by-step reproduction instructions, environment details, expected behavior, and the exact error message encountered when attempting OAuth authentication with a Google AI Pro account.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Addressing this issue requires updating error classification and handling across package boundaries (packages/core and packages/cli), providing dedicated UI/messaging for unsupported individual accounts migrating to Antigravity, and updating corresponding unit tests in both packages."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28229",
+    "summary": {
+      "problem": "OAuth login with Google AI Pro accounts fails in Gemini CLI during authentication with the error message 'This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products.'",
+      "root_cause": "Google AI Pro / Gemini Code Assist for individuals accounts are returned as ineligible tiers by the Code Assist backend (LoadCodeAssistResponse), throwing an IneligibleTierError in packages/core/src/code_assist/setup.ts. The CLI auth handler in packages/cli/src/core/auth.ts catches this error and wraps it generically as 'Failed to sign in. Message: ...', failing to provide distinct handling or user-friendly migration guidance.",
+      "context": "When Google AI Pro users authenticate via OAuth, the Code Assist backend responds with an ineligible tier error indicating individual client deprecation. The CLI lacks specialized error handling for individual account deprecation and migration notices."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/code_assist/setup.ts",
+        "packages/cli/src/core/auth.ts",
+        "packages/cli/src/ui/auth/useAuth.ts"
+      ],
+      "steps": [
+        "In packages/core/src/code_assist/setup.ts, update setupUser and IneligibleTierError handling to structuredly classify individual account deprecation messages from LoadCodeAssistResponse.",
+        "In packages/cli/src/core/auth.ts, update performInitialAuth to catch IneligibleTierError and format user-friendly error details and migration instructions.",
+        "In packages/cli/src/ui/auth/useAuth.ts, update the auth hook to display clear migration guidance and prompt alternative authentication options (e.g. GEMINI_API_KEY)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/core/auth.test.ts",
+      "expected_behavior": "When setupUser throws an IneligibleTierError for deprecated individual accounts, performInitialAuth catches the error and returns formatted migration instructions without generic failure text.",
+      "verification_steps": [
+        "Mock config.refreshAuth to throw an IneligibleTierError containing the migration message.",
+        "Call performInitialAuth with OAuth auth type.",
+        "Verify that authError contains the expected migration instructions and message."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:43Z",
+  "execution_time_seconds": 103.73
+}

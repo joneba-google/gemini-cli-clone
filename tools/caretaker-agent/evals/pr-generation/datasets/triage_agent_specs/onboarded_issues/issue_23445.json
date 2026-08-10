@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 23445,
+  "title": "Bug(telemetry): logChatCompression bypasses bufferTelemetryEvent wrapper",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a bug where logChatCompression in packages/core/src/telemetry/loggers.ts bypasses bufferTelemetryEvent, unlike all other logging functions in the module. Concrete evidence, line numbers, and impact are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is a localized logic update in a single file (packages/core/src/telemetry/loggers.ts) wrapping existing code inside a bufferTelemetryEvent call, alongside corresponding test updates in packages/core/src/telemetry/loggers.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#23445",
+    "summary": {
+      "problem": "logChatCompression in packages/core/src/telemetry/loggers.ts bypasses the bufferTelemetryEvent wrapper used by all other telemetry logging functions.",
+      "root_cause": "logChatCompression directly calls logger.emit and recordChatCompressionMetrics outside of bufferTelemetryEvent. If called before OpenTelemetry SDK initialization completes, events and metrics are emitted against a no-op provider and silently dropped.",
+      "context": "bufferTelemetryEvent buffers telemetry events until the OpenTelemetry SDK is initialized. Every other logging function in loggers.ts wraps its OpenTelemetry logger emissions inside bufferTelemetryEvent."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/telemetry/loggers.ts"],
+      "steps": [
+        "In packages/core/src/telemetry/loggers.ts, wrap the logger emission and metric recording logic inside logChatCompression with bufferTelemetryEvent(() => { ... }).",
+        "Keep ClearcutLogger.getInstance(config)?.logChatCompressionEvent(event) outside bufferTelemetryEvent to match the standard pattern in loggers.ts."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/telemetry/loggers.test.ts",
+      "expected_behavior": "logChatCompression buffers its OpenTelemetry emission and metrics recording using bufferTelemetryEvent, preventing events from being dropped before SDK initialization.",
+      "verification_steps": [
+        "Run vitest on packages/core/src/telemetry/loggers.test.ts to confirm existing and new tests pass.",
+        "Verify or add unit test cases in packages/core/src/telemetry/loggers.test.ts ensuring bufferTelemetryEvent is called during logChatCompression."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:47Z",
+  "execution_time_seconds": 58.31
+}

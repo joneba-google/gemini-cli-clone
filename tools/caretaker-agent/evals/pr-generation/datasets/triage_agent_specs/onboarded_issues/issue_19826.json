@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 19826,
+  "title": "test(a2a-server): migrate process.env to vi.stubEnv() per GEMINI.md conventions",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly identifies test files in packages/a2a-server/ where direct process.env modifications are used instead of Vitest's vi.stubEnv() and vi.unstubAllEnvs(), which violates testing conventions in GEMINI.md and can lead to test state leakage.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Migrating direct process.env assignments and deletions to vi.stubEnv() / vi.unstubAllEnvs() across test files in packages/a2a-server is a localized test cleanup with clear requirements and minimal risk."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#19826",
+    "summary": {
+      "problem": "Test files in packages/a2a-server directly modify process.env instead of using Vitest's vi.stubEnv() and vi.unstubAllEnvs() per GEMINI.md guidelines.",
+      "root_cause": "Direct assignments and deletions of process.env properties in test setups and test cases cause environment variable state leakage across tests.",
+      "context": "GEMINI.md specifies using vi.stubEnv('NAME', 'value') in beforeEach and vi.unstubAllEnvs() in afterEach when testing environment variable dependent code."
+    },
+    "implementation_plan": {
+      "files_to_modify": [],
+      "steps": [
+        "In packages/a2a-server/src/commands/init.test.ts, replace process.env['CODER_AGENT_WORKSPACE_PATH'] assignment with vi.stubEnv('CODER_AGENT_WORKSPACE_PATH', mockWorkspacePath) and ensure vi.unstubAllEnvs() is invoked in afterEach.",
+        "In packages/a2a-server/src/http/app.test.ts, replace direct process.env manipulations (assignments and deletes of CODER_AGENT_WORKSPACE_PATH) with vi.stubEnv and vi.unstubAllEnvs.",
+        "Audit packages/a2a-server/src/config/config.test.ts and ensure all environment overrides consistently use vi.stubEnv and vi.unstubAllEnvs."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/a2a-server/src/commands/init.test.ts",
+      "expected_behavior": "All tests in packages/a2a-server run cleanly with environment variable stubs automatically reset after each test.",
+      "verification_steps": [
+        "Run vitest on packages/a2a-server/src/commands/init.test.ts, packages/a2a-server/src/config/config.test.ts, and packages/a2a-server/src/http/app.test.ts.",
+        "Verify that tests pass and environment variables are properly unstubbed after each test execution."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:30Z",
+  "execution_time_seconds": 47.17
+}

@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27789,
+  "title": "gemini-3.5-flash is defined in Gemini CLI model configuration but is not available for selection or use",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear, actionable bug report detailing that gemini-3.5-flash is defined in the model configuration but is unavailable in the model selection menu and fails with a 404 access error when invoked via gemini --model gemini-3.5-flash using Google OAuth / Code Assist authentication (LOGIN_WITH_GOOGLE). Complete reproduction details, environment information, and error messages are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix involves updating isGemini31LaunchedForAuthType in packages/core/src/config/config.ts to include AuthType.LOGIN_WITH_GOOGLE and AuthType.COMPUTE_ADC, enabling hasGemini35FlashGAAccess() to evaluate to true for personal OAuth users. This is a localized configuration logic change with straightforward unit test coverage in packages/core/src/config/config.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#27789",
+    "summary": {
+      "problem": "gemini-3.5-flash is defined in the model configuration but is not available in the model selection menu or via the --model flag when using personal OAuth authentication (LOGIN_WITH_GOOGLE).",
+      "root_cause": "isGemini31LaunchedForAuthType in packages/core/src/config/config.ts excludes AuthType.LOGIN_WITH_GOOGLE and AuthType.COMPUTE_ADC, causing hasGemini35FlashGAAccess() to return false and fallback model resolutions to fail.",
+      "context": "For LOGIN_WITH_GOOGLE authentication, gemini-3.5-flash should be enabled and mapped via CCPA_AI_MODEL_MAPPINGS to gemini-3-flash on backend requests."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/config/config.ts"],
+      "steps": [
+        "Update isGemini31LaunchedForAuthType in packages/core/src/config/config.ts to include AuthType.LOGIN_WITH_GOOGLE and AuthType.COMPUTE_ADC.",
+        "Ensure hasGemini35FlashGAAccess() evaluates to true for LOGIN_WITH_GOOGLE auth type, properly setting flash model defaults and allowing gemini-3.5-flash selection."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/config/config.test.ts",
+      "expected_behavior": "hasGemini35FlashGAAccess() returns true for LOGIN_WITH_GOOGLE auth type without requiring experiment flags, enabling gemini-3.5-flash in model configuration.",
+      "verification_steps": [
+        "Add unit test in packages/core/src/config/config.test.ts to confirm hasGemini35FlashGAAccess() returns true for AuthType.LOGIN_WITH_GOOGLE.",
+        "Verify that DEFAULT_GEMINI_FLASH_MODEL and PREVIEW_GEMINI_FLASH_MODEL are both updated to gemini-3.5-flash for LOGIN_WITH_GOOGLE auth."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:19Z",
+  "execution_time_seconds": 87.79
+}

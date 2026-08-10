@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 17448,
+  "title": "Agent repeatedly runs broad searches causing massive context overflow",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a defect where broad tool calls (e.g. SearchText returning thousands of matches) produce massive token payloads exceeding the context window limit, causing the CLI to display a confusing 'Sending this message...' warning while the request is blocked and leaving the UI state unclear. Detailed reproduction details, version info, and logs are provided.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Addressing this issue spans packages/core (token overflow handling and event details) and packages/cli (UI warning messages and stream execution state management in useGeminiStream.ts)."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#17448",
+    "summary": {
+      "problem": "When a tool execution (such as SearchText) yields thousands of matches or massive outputs, the resulting context token count can dramatically exceed the remaining context window limit. When this limit is exceeded, the CLI stops sending the request and emits a ContextWindowWillOverflow event, but the UI message incorrectly states 'Sending this message... might exceed', confusing the user about whether the request is actively being sent or hanging.",
+      "root_cause": "The client detects that estimated request token count exceeds the context window limit and halts execution via ContextWindowWillOverflow, but the UI handler in useGeminiStream.ts renders a warning formatted as 'Sending this message...' without explicitly informing the user that the request was blocked/cancelled, leading to UI confusion and lack of clarity on execution state.",
+      "context": "Tool outputs should be properly bounded or truncated, and when a message payload exceeds the token limit, the UI should clearly state that transmission was blocked due to context size rather than implying it is currently sending."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/hooks/useGeminiStream.ts",
+        "packages/core/src/core/client.ts"
+      ],
+      "steps": [
+        "In packages/core/src/core/client.ts, ensure ContextWindowWillOverflow event provides clear context on request blockage due to exceeding context window limits.",
+        "In packages/cli/src/ui/hooks/useGeminiStream.ts, update handleContextWindowWillOverflowEvent to state clearly that the request was blocked from being sent because it exceeds the context window limit, and ensure the UI state transitions out of the sending/responding state cleanly."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useGeminiStream.test.tsx",
+      "expected_behavior": "When an estimated request token count exceeds the remaining context limit, the system blocks sending the message and displays a clear notification that the request was not sent due to exceeding the context window limit.",
+      "verification_steps": [
+        "Add a test case in useGeminiStream.test.tsx that simulates a ContextWindowWillOverflow event during streaming.",
+        "Verify that handleContextWindowWillOverflowEvent adds an informational message stating the request was blocked due to token size rather than being sent.",
+        "Verify that the responding/sending UI state is properly reset."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:49:15Z",
+  "execution_time_seconds": 129.11
+}

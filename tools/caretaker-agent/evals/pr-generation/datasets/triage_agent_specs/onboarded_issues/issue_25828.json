@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25828,
+  "title": "Bug : Session exit after shell action execution over SSH/Remote Terminal",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed description, hardware/OS environment info, reproduction steps, and clear expected vs. observed behavior regarding process exit after shell command execution over SSH.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "The issue involves platform-specific terminal/PTY handling (node-pty, child_process, raw mode TTY handoff) and is intermittent and environment-dependent on low-resource hardware over SSH."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25828",
+    "summary": {
+      "problem": "When running Gemini CLI over SSH/remote terminal connections (e.g. Raspberry Pi Zero 2 W), executing shell actions intermittently causes the session to exit to the system shell rather than returning to the interactive prompt.",
+      "root_cause": "Race condition during TTY / stdin handoff after PTY or child process execution finishes, causing process.stdin or terminal raw mode state to lose focus or encounter premature EOF/stream closure before the interactive Ink UI re-attaches.",
+      "context": "Reported on Node.js v24 over SSH on Raspberry Pi OS. Occurs when enableInteractiveShell is active on resource-constrained devices or slow TTY connections."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/shellExecutionService.ts",
+        "packages/cli/src/ui/hooks/useExecutionLifecycle.ts"
+      ],
+      "steps": [
+        "Ensure process.stdin state and raw mode re-initialization are handled safely following PTY and child process exit.",
+        "Add safeguards against premature EOF/stream cleanup during execution lifecycle completion in shell execution handlers.",
+        "Verify terminal state restoration in CLI execution lifecycle hook when returning control to the interactive prompt."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useExecutionLifecycle.test.tsx",
+      "expected_behavior": "The interactive CLI prompt remains active and responsive after executing shell commands without terminating the session.",
+      "verification_steps": [
+        "Test that useExecutionLifecycle correctly restores UI focus and stdin handle after shell command execution completes.",
+        "Verify that process exit callbacks are not triggered prematurely during stream cleanup."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:26Z",
+  "execution_time_seconds": 66.05
+}

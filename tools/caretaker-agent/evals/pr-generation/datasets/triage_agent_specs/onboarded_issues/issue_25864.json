@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25864,
+  "title": "gemini-cli installations done through brew having Keychain perpetually unavailable",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a functional bug where gemini-cli installed via Homebrew cannot access or store sensitive extension variables in the macOS Keychain, defaulting to file storage, whereas npm-installed versions work properly.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Investigating platform-specific native module binding issues (@github/keytar), macOS codesign/entitlement differences, and Homebrew vs NPM installation paths requires testing across packaged environments on macOS."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25864",
+    "summary": {
+      "problem": "gemini-cli installed via Homebrew fails to load or access the macOS Keychain via @github/keytar, falling back to FileKeychain.",
+      "root_cause": "Homebrew-installed gemini-cli packages or standalone binary distributions either fail to bundle/resolve the native @github/keytar .node addon or fail macOS Keychain security default-keychain checks in non-NPM execution contexts.",
+      "context": "NPM installations run within a node_modules environment where native modules resolve normally, whereas Homebrew builds or binary bundles rely on staged native modules or specific runtime path resolution."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/services/keychainService.ts"],
+      "steps": [
+        "Update loadKeychainModule in packages/core/src/services/keychainService.ts to support fallback native module resolution for packaged distributions when standard ESM import of @github/keytar fails.",
+        "Enhance error logging and diagnostic messaging in getNativeKeychain to report specific native addon loading or initialization errors."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/keychainService.test.ts",
+      "expected_behavior": "KeychainService properly attempts native module loading with fallbacks and provides detailed debug log messages when native keychain bindings are missing or fail to initialize.",
+      "verification_steps": [
+        "Add unit test cases in packages/core/src/services/keychainService.test.ts to verify module import failure handling.",
+        "Verify that isUsingFileFallback correctly returns true when native keychain bindings cannot be resolved."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:38Z",
+  "execution_time_seconds": 30.9
+}

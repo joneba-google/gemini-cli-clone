@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28128,
+  "title": "bug: cross-server MCP resource URI confusion in read_mcp_resource (unscoped findResourceByUri fallback)",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and detailed bug report describing cross-server MCP resource URI collision, complete with file locations, root cause analysis, PoC output, and proposed code fixes.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The required changes are localized logic fixes in packages/core/src/tools/mcp-client-manager.ts and packages/core/src/tools/read-mcp-resource.ts, with clear implementation steps and test paths."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28128",
+    "summary": {
+      "problem": "Unscoped fallback in findResourceByUri leads to cross-server MCP resource URI confusion where the first registered server's resource is returned regardless of intended server. Additionally, ReadMcpResourceToolInvocation lacks server-scoped policy permissions and re-queries resources during execution.",
+      "root_cause": "McpClientManager.findResourceByUri falls back to returning the first matching URI across all servers when qualified lookup fails or on direct URI match. Furthermore, ReadMcpResourceToolInvocation does not override getPolicyUpdateOptions to include mcpName, and re-executes URI resolution in execute() instead of utilizing the instance's resolved this.resource.",
+      "context": "Proper resource isolation across MCP servers requires fail-closed behavior when URI collisions occur across multiple servers, scoping approval policy updates to specific MCP server names, and reusing resolved resources across invocation lifecycle."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/mcp-client-manager.ts",
+        "packages/core/src/tools/read-mcp-resource.ts"
+      ],
+      "steps": [
+        "In packages/core/src/tools/mcp-client-manager.ts, update findResourceByUri to filter all resources matching the URI when no qualified match exists. If exactly one resource matches, return it. If multiple servers register the same URI, log a warning and return undefined.",
+        "In packages/core/src/tools/read-mcp-resource.ts, override getPolicyUpdateOptions in ReadMcpResourceToolInvocation to return { mcpName: this.resource.serverName } when this.resource is defined.",
+        "In packages/core/src/tools/read-mcp-resource.ts, update execute() in ReadMcpResourceToolInvocation to reuse this.resource instead of calling mcpManager.findResourceByUri(uri) again."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/read-mcp-resource.test.ts",
+      "expected_behavior": "When multiple MCP servers provide resources with colliding URIs without server qualification, findResourceByUri fails closed by returning undefined and logging a warning. Tool execution uses the resolved resource and scopes approval policies to the specific MCP server name.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/tools/mcp-client-manager.test.ts verifying findResourceByUri returns undefined and logs a warning when multiple servers register the same URI.",
+        "Add unit tests in packages/core/src/tools/read-mcp-resource.test.ts verifying getPolicyUpdateOptions returns the mcpName corresponding to the resolved resource's server name.",
+        "Add unit tests in packages/core/src/tools/read-mcp-resource.test.ts verifying execute() reuses this.resource."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:36Z",
+  "execution_time_seconds": 221.42
+}

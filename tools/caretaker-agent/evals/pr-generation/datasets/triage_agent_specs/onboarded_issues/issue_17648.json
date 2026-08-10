@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 17648,
+  "title": "BUG: `codebase_investigator` Agent Fails to Initialize in Gemini CLI",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides clear reproduction steps, environment specifications, actual vs. expected behavior, and specific error messages detailing schema validation failures when delegating tasks to codebase_investigator.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to subagent schema configuration in codebase-investigator.ts and parameter mapping in agent-tool.ts to ensure required parameters are properly supplied and schema validation succeeds during subagent initialization."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#17648",
+    "summary": {
+      "problem": "Delegating tasks to codebase_investigator repeatedly fails schema validation, causing an infinite retry loop that consumes quota without successfully launching the subagent.",
+      "root_cause": "The input schema definition for codebase_investigator requires specific fields such as 'objective', but parameter mapping in AgentTool or prompt generation fails to supply or map the required fields properly, triggering validation errors.",
+      "context": "AgentTool handles parameter mapping between the caller prompt and subagent input schemas. Mismatches or strict required fields without fallback handling cause gemini-2.5-flash invocations to fail schema checks repeatedly."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/agents/codebase-investigator.ts",
+        "packages/core/src/agents/agent-tool.ts"
+      ],
+      "steps": [
+        "Review and update the inputSchema in codebase-investigator.ts to accommodate prompt delegation inputs and ensure property descriptions and required fields are aligned.",
+        "Update the mapParams helper in agent-tool.ts to ensure prompt inputs map cleanly to required schema properties such as 'objective' or 'question'.",
+        "Add fallback handling to prevent schema validation failures from triggering infinite retry loops."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/agents/codebase-investigator.test.ts",
+      "expected_behavior": "Delegating a task to codebase_investigator successfully maps parameters to the input schema and initializes the agent without schema validation errors.",
+      "verification_steps": [
+        "Add unit tests in codebase-investigator.test.ts to verify input schema structure and validation compatibility.",
+        "Verify in agent-tool.test.ts that delegating to codebase_investigator maps the prompt parameter correctly without throwing schema validation errors."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:49:45Z",
+  "execution_time_seconds": 162.31
+}

@@ -1,0 +1,49 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21841,
+  "title": "Harden ReadManyFilesTool: Concurrency Control and Defensive Guards",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable report and hardening proposal for ReadManyFilesTool. It describes specific failure modes (EMFILE from unbounded parallelism, memory spikes and context size overflow from unbounded file counts/sizes, and unnecessary I/O during binary detection) and outlines concrete technical improvements.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Implementing concurrency control, file count limits, bulk file size limits, and binary check optimizations in ReadManyFilesTool requires updating async execution logic with bounded concurrency, updating tool parameter definitions and schemas, handling edge case truncation/skipping behaviors, and updating unit tests in Vitest."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21841",
+    "summary": {
+      "problem": "ReadManyFilesTool processes matched files using unbounded Promise.allSettled concurrency without file count or per-file size safeguards, leading to EMFILE errors (file descriptor exhaustion), memory spikes, context size overflows, and excessive I/O during binary detection for broad glob patterns.",
+      "root_cause": "The execution loop in ReadManyFilesToolInvocation maps all discovered file paths directly to async readFile operations and runs them simultaneously via Promise.allSettled without concurrency limits or file count capping. In addition, file type detection runs stat and read header operations for every file before checking size constraints or explicit requested extensions.",
+      "context": "ReadManyFilesTool is designed for multi-file context gathering. Broad globs such as '**/*' or 'src/**/*' return hundreds or thousands of files, causing Node.js to hit OS file descriptor limits and overloading the Gemini model context window."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/read-many-files.ts",
+        "packages/core/src/tools/definitions/base-declarations.ts",
+        "packages/core/src/tools/definitions/model-family-sets/default-legacy.ts",
+        "packages/core/src/tools/definitions/model-family-sets/gemini-3.ts"
+      ],
+      "steps": [
+        "Add concurrency control (e.g. chunking or bounded batch processing) when executing file reading promises to prevent EMFILE errors.",
+        "Introduce a file count guard and max_files parameter in ReadManyFilesParams and tool declarations to cap the maximum number of files processed per execution.",
+        "Implement a bulk per-file size guard during multi-file reads to skip or truncate excessively large files before attempting full reads into memory.",
+        "Optimize binary detection and directory exclusion checks so unnecessary file header reads are avoided during broad glob scans."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/read-many-files.test.ts",
+      "expected_behavior": "ReadManyFilesTool bounds concurrent file reads, respects max_files limits, skips or truncates oversized files, avoids EMFILE errors on large file batches, and correctly reports skipped files in the output summary.",
+      "verification_steps": [
+        "Add unit tests verifying that concurrency limits prevent simultaneous file descriptor opening when matching a large number of files.",
+        "Add unit tests validating max_files parameter behavior and verifying that excess files beyond the threshold are skipped with appropriate feedback.",
+        "Add unit tests for bulk file size limits and binary file detection optimization."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:09Z",
+  "execution_time_seconds": 96.11
+}

@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27894,
+  "title": "Gemini CLI Bug Report: Extension System Failure on Sandbox EACCES",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a valid and actionable bug report detailing how extension loading fails when encountering an unreadable workspace .env file due to EACCES permission errors, even when advanced.ignoreLocalEnv is set to true. Reproduction steps, environment information, and error output are clearly documented.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The root cause is an unhandled filesystem exception in getScopedEnvContents and a missing check for advanced.ignoreLocalEnv in ExtensionManager. The fix requires localized changes across two files in packages/cli to catch filesystem read errors and respect the ignoreLocalEnv setting."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27894",
+    "summary": {
+      "problem": "The extension system fails to load any extensions when encountering an unreadable workspace .env file due to sandbox EACCES permission denied errors, even when advanced.ignoreLocalEnv is set to true.",
+      "root_cause": "getScopedEnvContents in extensionSettings.ts attempts to stat and read workspace .env files without catching filesystem errors like EACCES, causing uncaught exceptions that bubble up to ExtensionManager.loadExtension and cause extension loading to be skipped. In addition, ExtensionManager attempts to load workspace settings from .env without checking if advanced.ignoreLocalEnv is enabled.",
+      "context": "In sandboxed environments or Linux setups with restricted permissions (e.g. chmod 000 .env), attempting to read or stat workspace .env throws EACCES."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/config/extension-manager.ts",
+        "packages/cli/src/config/extensions/extensionSettings.ts"
+      ],
+      "steps": [
+        "In packages/cli/src/config/extension-manager.ts, update loadExtension to check !this.settings.advanced?.ignoreLocalEnv before resolving workspace settings via getScopedEnvContents.",
+        "In packages/cli/src/config/extensions/extensionSettings.ts, wrap the filesystem stat and read operations in getScopedEnvContents in a try/catch block so that EACCES or other read errors log a warning rather than throwing an exception."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/extensions/extensionSettings.test.ts",
+      "expected_behavior": "Extension loading succeeds without failure when workspace .env returns EACCES permission denied, and workspace .env file reading is bypassed when advanced.ignoreLocalEnv is set to true.",
+      "verification_steps": [
+        "Add a unit test in packages/cli/src/config/extensions/extensionSettings.test.ts verifying that getScopedEnvContents gracefully handles filesystem read errors (e.g. EACCES) without throwing an exception.",
+        "Add a test verifying that setting advanced.ignoreLocalEnv to true skips attempting to load workspace .env settings."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:21Z",
+  "execution_time_seconds": 104.68
+}

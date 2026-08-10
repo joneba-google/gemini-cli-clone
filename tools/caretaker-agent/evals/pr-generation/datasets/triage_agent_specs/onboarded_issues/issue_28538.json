@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28538,
+  "title": "Gemini CLI v0.52.0 returns ACCESS_TOKEN_TYPE_UNSUPPORTED with valid GEMINI_API_KEY",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a complete and actionable bug report with detailed environment details (WSL2 Ubuntu, Node v24.18.0, Gemini CLI v0.52.0), exact error details (401 UNAUTHENTICATED ACCESS_TOKEN_TYPE_UNSUPPORTED), affected API method, and evidence that direct REST API calls work with the same API key.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to auth header resolution in `packages/core/src/core/contentGenerator.ts` to ensure stale or conflicting OAuth Authorization headers are stripped when `AuthType.USE_GEMINI` is selected with `GEMINI_API_KEY`."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28538",
+    "summary": {
+      "problem": "When authenticating with GEMINI_API_KEY (AuthType.USE_GEMINI) after previously attempting Google Sign-in, prompts fail with 401 UNAUTHENTICATED ACCESS_TOKEN_TYPE_UNSUPPORTED on GenerativeService.StreamGenerateContent.",
+      "root_cause": "When constructing HTTP options for GoogleGenAI in AuthType.USE_GEMINI mode, leftover OAuth Authorization headers or token options from previous login sessions remain in the request headers, causing the Generative Language API endpoint to reject the request due to an unsupported access token type.",
+      "context": "Direct REST API requests with GEMINI_API_KEY succeed because they do not transmit the conflicting OAuth Authorization header."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/core/contentGenerator.ts"],
+      "steps": [
+        "Inspect header construction in createContentGenerator within packages/core/src/core/contentGenerator.ts.",
+        "Ensure that when config.authType is AuthType.USE_GEMINI, any Authorization header present in baseHeaders or customHeaders is removed unless apiKeyAuthMechanism is explicitly set to 'bearer'.",
+        "Verify that GoogleGenAI client initialization does not merge conflicting GoogleAuth options when AuthType.USE_GEMINI is active."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/contentGenerator.test.ts",
+      "expected_behavior": "When AuthType.USE_GEMINI is active, requests created via GoogleGenAI should exclude any OAuth Authorization headers and rely solely on the configured API key.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/core/contentGenerator.test.ts asserting that when AuthType.USE_GEMINI is configured with GEMINI_API_KEY, any Authorization header is stripped from httpOptions.headers.",
+        "Run `npx vitest run packages/core/src/core/contentGenerator.test.ts` to verify test execution."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:33:04Z",
+  "execution_time_seconds": 77.13
+}

@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 26523,
+  "title": "Surface or quarantine invalid Auto Memory inbox patches",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable report regarding memory inbox patch lifecycle management, identifying specific problems with invalid patch filtering and prompt context pollution.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Requires updating patch validation, aggregate dismiss, and inbox summary generation across `memoryService.ts`, `memoryPatchUtils.ts`, and `memory.ts`, as well as adding unit tests for malformed, hunk-less, and out-of-root patch handling."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26523",
+    "summary": {
+      "problem": "Invalid memory patches (malformed, missing hunks, or targeting files outside the allowed memory root) are silently hidden from `/memory inbox` and aggregate dismiss actions, while still being included in the background extractor's pending inbox summary prompt context.",
+      "root_cause": "`listInboxMemoryPatches` and `listValidInboxPatchFiles` filter out invalid patch files without surfacing them or enabling dismissal, while `buildPendingInboxSummary` reads all `.patch` files on disk regardless of validity.",
+      "context": "Auto Memory inbox stores `.patch` files under `<memoryDir>/.inbox/{private,global}/`. Accumulating invalid patch files creates permanent invisible artifacts that pollute future extraction prompts."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/memoryService.ts",
+        "packages/core/src/services/memoryPatchUtils.ts",
+        "packages/core/src/commands/memory.ts"
+      ],
+      "steps": [
+        "Update `buildPendingInboxSummary` in `packages/core/src/services/memoryService.ts` to only include memory patch files that pass validation (or utilize `listValidInboxPatchFiles`), preventing invalid patch files from leaking into extraction prompts.",
+        "Update memory patch handling in `packages/core/src/commands/memory.ts` and `packages/core/src/services/memoryPatchUtils.ts` so that invalid memory patch files (malformed, no hunks, or out-of-root) are either surfaced with an invalid state and dismiss action, quarantined, or cleaned up upon dismiss.",
+        "Ensure aggregate dismiss operations clean up non-actionable or invalid `.patch` files so they do not accumulate in the inbox directory."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/memoryService.test.ts",
+      "expected_behavior": "Invalid memory patch files (malformed diffs, missing hunks, or out-of-root targets) are excluded from extraction prompts and can be dismissed or cleaned up from the memory inbox.",
+      "verification_steps": [
+        "Add unit test cases in `memoryService.test.ts` verifying `buildPendingInboxSummary` excludes malformed patches, patches without hunks, and patches targeting files outside the allowed root.",
+        "Add unit test cases in `memory.test.ts` verifying that invalid patch files are properly surfaced, quarantined, or deleted when dismissing or applying inbox entries."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:28Z",
+  "execution_time_seconds": 46.08
+}

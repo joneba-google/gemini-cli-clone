@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27471,
+  "title": "Bug: interactive prompt input line flickers in agent mode (CLI 0.42.0, linux)",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a bug where the interactive prompt input line flickers and undergoes rapid redraw while typing in agent mode on CLI 0.42.0 (Linux), providing expected vs actual behavior and full environment context.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing terminal redraw flickering during typing in agent mode involves React/Ink UI state management, optimizing re-render boundaries, and ensuring layout stability across InputPrompt and Composer components."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#27471",
+    "summary": {
+      "problem": "The interactive prompt input line flickers and rapidly redraws while typing in agent mode.",
+      "root_cause": "Unnecessary re-renders or layout recalculations in InputPrompt and Composer triggered on input buffer updates during keypress events in agent mode.",
+      "context": "Reported on CLI version 0.42.0 on Linux when typing in interactive prompt mode."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/components/InputPrompt.tsx",
+        "packages/cli/src/ui/components/Composer.tsx"
+      ],
+      "steps": [
+        "Audit keystroke handling and state updates in InputPrompt and Composer during active agent mode.",
+        "Memoize render outputs and state derivations triggered on text buffer input to prevent redundant component updates on every keypress.",
+        "Ensure layout dimensions for the input container remain stable during typing."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/InputPrompt.test.tsx",
+      "expected_behavior": "The input prompt input line renders smoothly and stably without flickering during user typing in agent mode.",
+      "verification_steps": [
+        "Simulate sequential keypresses in agent mode within InputPrompt.test.tsx.",
+        "Verify that render frame counts remain optimal and no layout or flickering regression occurs."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:39:51Z",
+  "execution_time_seconds": 63.06
+}

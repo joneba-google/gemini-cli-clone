@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27180,
+  "title": "Session loss during unexpected system shutdown",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports session history loss following an unexpected system shutdown and describes unable-to-resume behavior. Investigation of the codebase indicates that session history is stored as line-delimited JSON (.jsonl). An abrupt system shutdown can leave an incomplete or corrupted line at the end of the file. On next startup, parsing errors cause loadConversationRecord to fail, resulting in sessionInfo being set to null in sessionUtils.ts. Subsequently, identifySessionsToDelete in sessionCleanup.ts automatically deletes all files where sessionInfo is null, permanently erasing the user's chat session instead of recovering valid history.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Implementing a robust fix requires cross-package changes across packages/core (enhancing JSONL parsing in chatRecordingService.ts to salvage valid lines prior to truncated end-of-file lines) and packages/cli (modifying sessionCleanup.ts and sessionUtils.ts to avoid unlinking partially corrupted session files that contain recoverable conversation history)."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27180",
+    "summary": {
+      "problem": "Chat session history is permanently deleted after an unexpected system shutdown because truncated JSONL files fail full validation and are automatically purged by startup session cleanup.",
+      "root_cause": "When a system crash or power outage occurs during a chat session, the active JSONL file in the session directory may end with an incomplete line or unflushed buffer. On the subsequent run, loadConversationRecord in chatRecordingService.ts fails to parse the file or missing required metadata, causing getAllSessionFiles in sessionUtils.ts to mark sessionInfo as null. Startup cleanup in sessionCleanup.ts subsequently purges all files with null sessionInfo as corrupted.",
+      "context": "Session data is recorded incrementally line-by-line. Parsing valid preceding lines while ignoring incomplete trailing lines enables session recovery after unexpected system crashes."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/chatRecordingService.ts",
+        "packages/cli/src/utils/sessionCleanup.ts"
+      ],
+      "steps": [
+        "Update loadConversationRecord in packages/core/src/services/chatRecordingService.ts to gracefully handle unparseable or truncated trailing lines at end-of-file while retaining all valid preceding message records and metadata.",
+        "Ensure loadConversationRecord returns a valid conversation record as long as valid metadata and at least one valid message are recoverable.",
+        "Update identifySessionsToDelete in packages/cli/src/utils/sessionCleanup.ts so that session files containing recoverable partial records are preserved rather than automatically unlinked as corrupted during startup cleanup."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/sessionCleanup.test.ts",
+      "expected_behavior": "When a session JSONL file contains valid session metadata and messages followed by a truncated JSON line caused by an abrupt system shutdown, the session remains recoverable and is not deleted during startup session cleanup.",
+      "verification_steps": [
+        "Add a test case in sessionCleanup.test.ts that creates a session file ending with an incomplete JSON string.",
+        "Verify that identifySessionsToDelete does not classify this session file as a corrupted file to delete.",
+        "Verify that loadConversationRecord successfully recovers valid history records prior to the truncated line."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:14Z",
+  "execution_time_seconds": 73.49
+}

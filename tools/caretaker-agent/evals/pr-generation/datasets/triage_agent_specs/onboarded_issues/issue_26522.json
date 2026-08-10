@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 26522,
+  "title": "Stop Auto Memory from retrying low-signal sessions indefinitely",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a logic defect in Auto Memory session extraction tracking, where candidate sessions surfaced to the agent but skipped (not read via read_file) remain unprocessed and are repeatedly surfaced in subsequent extraction runs. It provides reproduction context, target file (packages/core/src/services/memoryService.ts), expected behavior, and acceptance criteria.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires localized updates in packages/core/src/services/memoryService.ts to record skipped candidate sessions in extraction state so they are not endlessly retried, along with corresponding unit test coverage in packages/core/src/services/memoryService.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26522",
+    "summary": {
+      "problem": "Auto Memory extraction runs treat candidate sessions as processed only when successfully read via the read_file tool call. Low-signal sessions surfaced as candidates but intentionally skipped are not recorded as processed, causing them to resurface repeatedly on every background extraction interval.",
+      "root_cause": "In memoryService.ts, runExtraction populates processedSessions solely from processedSessionKeys, which are added during successful read_file tool execution events. Surfaced candidate sessions that the agent chooses not to read remain marked as unprocessed and continue to be selected as [NEW] candidate sessions in future runs.",
+      "context": "Background extraction runs execute on a 30-minute interval. Repeatedly selecting and evaluating low-signal candidate sessions wastes background execution cycles and LLM tokens."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/services/memoryService.ts"],
+      "steps": [
+        "Update ExtractionRun and ExtractionState metadata in packages/core/src/services/memoryService.ts to record skipped or attempted candidate sessions alongside processed sessions.",
+        "In runExtraction, track candidate sessions that were surfaced but not read via read_file, distinguishing skipped sessions from failed reads.",
+        "Update isSessionVersionProcessed or candidate selection logic so that skipped or attempted low-signal candidate sessions are excluded from being repeatedly surfaced as new candidates in buildSessionIndex."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/memoryService.test.ts",
+      "expected_behavior": "Candidate sessions surfaced to the extraction agent that are intentionally skipped (not read via read_file) are recorded as skipped/attempted in extraction state and are not resurfaced as new candidate sessions on subsequent extraction runs.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/services/memoryService.test.ts simulating buildSessionIndex and runExtraction with candidate sessions where no read_file tool call is executed.",
+        "Assert that the extraction run state properly records the candidate sessions as skipped or attempted.",
+        "Assert that subsequent calls to buildSessionIndex do not mark the skipped sessions as [NEW] candidate sessions."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:27Z",
+  "execution_time_seconds": 45.05
+}

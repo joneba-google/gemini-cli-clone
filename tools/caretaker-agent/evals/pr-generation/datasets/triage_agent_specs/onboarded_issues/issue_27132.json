@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27132,
+  "title": "VS Code UI lockup and Gemini lag: globalState storage blocking main thread",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed, actionable bug report identifying VS Code main thread UI lockups caused by storing large amounts of chat history in VS Code's globalState instead of using storageUri/globalStorageUri. Renderer logs and client environment details are included.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The issue involves performance degradation and UI lockup in the VS Code IDE companion extension caused by storing large history data in globalState. Bugs involving IDE companion extensions and IPC main thread overhead require cross-environment setup and testing, placing it in the MEDIUM effort tier."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27132",
+    "summary": {
+      "problem": "VS Code UI locks up and becomes unresponsive due to large extension state stored in VS Code's globalState API.",
+      "root_cause": "The extension stores large data (such as chat history) in VS Code's globalState API, which requires JSON serialization and IPC transfers across the main thread, blocking the renderer UI.",
+      "context": "VS Code renderer logs report a warning [mainThreadStorage] large extension state detected (~1.33 MB). VS Code recommends using context.globalStorageUri or context.storageUri to store this data on disk instead."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/vscode-ide-companion/src/extension.ts"],
+      "steps": [
+        "Refactor state persistence in packages/vscode-ide-companion/src/extension.ts to avoid storing large payloads in context.globalState.",
+        "Utilize context.globalStorageUri to persist large extension state files directly to disk.",
+        "Ensure the storage directory exists using vscode.workspace.fs.createDirectory prior to reading or writing state files.",
+        "Implement asynchronous file read and write operations using vscode.workspace.fs.readFile and vscode.workspace.fs.writeFile to prevent main thread IPC blockage."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/vscode-ide-companion/src/extension.test.ts",
+      "expected_behavior": "Extension state is persisted asynchronously to disk via globalStorageUri without storing large objects in globalState, preserving main UI thread responsiveness.",
+      "verification_steps": [
+        "Mock context.globalStorageUri and vscode.workspace.fs in extension.test.ts.",
+        "Verify that saving and loading extension state reads and writes from globalStorageUri on disk instead of globalState.",
+        "Verify activation and state management operate correctly without globalState bloat."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:52Z",
+  "execution_time_seconds": 41.2
+}

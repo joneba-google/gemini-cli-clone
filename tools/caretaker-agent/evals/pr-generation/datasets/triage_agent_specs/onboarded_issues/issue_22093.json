@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22093,
+  "title": "(Sub)agents running without permission since v0.33.0",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue describes a clear regression in v0.33.0 where subagents (like generalist) remain active and run even when agents mode is disabled in configuration.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The bug is isolated to `packages/core/src/agents/registry.ts` where `loadBuiltInAgents()` is called before checking whether agents are enabled. Fixing this requires reordering the initialization check and updating unit tests."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#22093",
+    "summary": {
+      "problem": "Subagents (like generalist) continue to run even when agents mode is set to disabled in configuration.",
+      "root_cause": "In `AgentRegistry.loadAgents` (`packages/core/src/agents/registry.ts`), `loadBuiltInAgents()` is called prior to checking `if (!this.config.isAgentsEnabled())`. As a result, built-in agents are registered regardless of the `isAgentsEnabled()` setting.",
+      "context": "Starting in v0.33.0, users with agents disabled in settings still observed generalist and other built-in subagents being executed."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/agents/registry.ts"],
+      "steps": [
+        "In `packages/core/src/agents/registry.ts`, update `loadAgents()` to check `if (!this.config.isAgentsEnabled())` before calling `this.loadBuiltInAgents()`.",
+        "Ensure no built-in or custom agent definitions are registered in `this.agents` when `isAgentsEnabled()` returns `false`."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/agents/registry.test.ts",
+      "expected_behavior": "When `enableAgents` is `false`, `AgentRegistry` has zero registered agent definitions.",
+      "verification_steps": [
+        "Add or update unit tests in `packages/core/src/agents/registry.test.ts` to verify that when `enableAgents` is `false` (without requiring explicit per-agent overrides), `getAllDefinitions()` returns an empty array."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:44:57Z",
+  "execution_time_seconds": 51.45
+}

@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27373,
+  "title": "[BUG] \"gemni --resume\"  crushed",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a complete, clear bug report with reproduction steps, stack trace, root cause analysis, and affected component details for a crash during 'gemini --resume'.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "The issue involves low-level pseudo-terminal (node-pty) process handling and platform-specific POSIX signal/error conditions (EBADF error code during ioctl call on closed terminal file descriptors). Platform-specific PTY issues fall into the LARGE effort classification."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27373",
+    "summary": {
+      "problem": "Running 'gemini --resume' to restore a session crashes the CLI with 'ERROR ioctl(2) failed, EBADF' when attempting to resize the PTY.",
+      "root_cause": "When restoring a session via '--resume', the underlying PTY file descriptor may already be closed or stale. 'ShellExecutionService.resizePty()' calls 'ptyProcess.resize()', which fails with 'EBADF' (bad file descriptor). The existing catch block only catches 'ESRCH' and Windows exit messages, allowing 'EBADF' to propagate and crash the application.",
+      "context": "In 'ShellExecutionService.resizePty()', 'EBADF' errors should be handled as safely ignorable, similar to 'ESRCH' when the terminal or underlying file descriptor has closed."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/shellExecutionService.ts"
+      ],
+      "steps": [
+        "In 'packages/core/src/services/shellExecutionService.ts', locate the 'resizePty' static method.",
+        "In the try/catch block around 'ptyProcess.resize()', add a check for 'EBADF' error code or message (e.g., 'err.code === 'EBADF' || err.message?.includes('EBADF')').",
+        "Update the error condition to safely ignore 'EBADF' alongside 'ESRCH' and Windows PTY exit errors."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/shellExecutionService.test.ts",
+      "expected_behavior": "Calling 'ShellExecutionService.resizePty()' on a PTY process that throws an 'EBADF' error during resize should be safely ignored without raising an unhandled exception.",
+      "verification_steps": [
+        "Add a unit test in 'packages/core/src/services/shellExecutionService.test.ts' under the 'resizePty' suite.",
+        "Mock 'ptyProcess.resize' to throw an error with code 'EBADF'.",
+        "Call 'ShellExecutionService.resizePty()' and verify that it resolves without throwing an error."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:03Z",
+  "execution_time_seconds": 36.5
+}

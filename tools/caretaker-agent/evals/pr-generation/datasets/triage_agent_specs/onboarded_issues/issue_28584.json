@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28584,
+  "title": "Sandbox Dockerfile is on node:20-slim (EOL 2026-04-30), though #1038 moved it to Node 22 in 2025",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly identifies that the Dockerfile and container images are using node:20-slim, which reached end-of-life on 2026-04-30. It provides specific line references from Dockerfile and requests upgrading to an active Node LTS release (Node 22). This is a valid, clear, and actionable issue.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Updating the base image version from node:20-slim to node:22-slim in Dockerfile and .gcp/Dockerfile.development is a straightforward base image configuration update."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28584",
+    "summary": {
+      "problem": "The repository Dockerfiles use node:20-slim base image, which reached end-of-life on 2026-04-30 and no longer receives security updates.",
+      "root_cause": "The base image in Dockerfile and .gcp/Dockerfile.development is explicitly pinned to docker.io/library/node:20-slim.",
+      "context": "Upgrading the Docker base image to node:22-slim resolves security vulnerabilities and ensures the sandbox environment runs on an active Node LTS version."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["Dockerfile", ".gcp/Dockerfile.development"],
+      "steps": [
+        "In Dockerfile, change 'FROM docker.io/library/node:20-slim AS builder' to 'FROM docker.io/library/node:22-slim AS builder'.",
+        "In Dockerfile, change 'FROM docker.io/library/node:20-slim' to 'FROM docker.io/library/node:22-slim'.",
+        "In .gcp/Dockerfile.development, change 'FROM docker.io/library/node:20-slim AS base' to 'FROM docker.io/library/node:22-slim AS base'."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "The Docker container images build successfully and run with Node 22 runtime.",
+      "verification_steps": [
+        "Build the Docker sandbox image with 'docker build -t gemini-cli-sandbox .'.",
+        "Run 'docker run --rm gemini-cli-sandbox node -v' to confirm the container runs Node 22."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "processed_at": "2026-08-06T17:32:07Z",
+  "execution_time_seconds": 37.31
+}

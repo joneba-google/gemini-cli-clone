@@ -1,0 +1,48 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28139,
+  "title": "Patch shell command dependencies for public security advisories",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly identifies vulnerable runtime dependencies (shell-quote@1.8.3 and simple-git@3.28.0), references public security advisories (GHSA-w7jw-789q-3m8p, GHSA-jcxm-m3jx-f287, GHSA-r275-fr43-pm7q, GHSA-hffm-xvc3-vprc), and provides specific patched versions (shell-quote@1.9.0 and simple-git@3.36.0).",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Updating dependency versions in package manifests and updating the package-lock.json is a straightforward configuration update that requires minimal effort."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28139",
+    "summary": {
+      "problem": "Direct runtime dependencies shell-quote@1.8.3 and simple-git@3.28.0 are flagged for public security advisories (GHSA-w7jw-789q-3m8p, GHSA-jcxm-m3jx-f287, GHSA-r275-fr43-pm7q, and GHSA-hffm-xvc3-vprc).",
+      "root_cause": "The package manifests specify outdated dependency versions shell-quote@1.8.3 and simple-git@3.28.0 in root, CLI, and core packages.",
+      "context": "Updating shell-quote to 1.9.0 and simple-git to 3.36.0 resolves all associated security advisories without breaking changes."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "package.json",
+        "packages/cli/package.json",
+        "packages/core/package.json",
+        "package-lock.json"
+      ],
+      "steps": [
+        "Update 'simple-git' dependency version to '3.36.0' in package.json.",
+        "Update 'shell-quote' dependency version to '1.9.0' and 'simple-git' to '3.36.0' in packages/cli/package.json.",
+        "Update 'shell-quote' dependency version to '1.9.0' and 'simple-git' to '3.36.0' in packages/core/package.json.",
+        "Update package-lock.json to reflect the updated versions for shell-quote and simple-git."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "shell-quote is updated to 1.9.0 and simple-git is updated to 3.36.0 across root and subpackage package manifests and lockfile without public security vulnerability advisories.",
+      "verification_steps": [
+        "Run 'npm audit --omit=dev' to verify shell-quote and simple-git security advisories are resolved.",
+        "Run 'npm run build' and 'npm test' to ensure package compilation and unit tests pass with updated dependency versions."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:50Z",
+  "execution_time_seconds": 62.42
+}

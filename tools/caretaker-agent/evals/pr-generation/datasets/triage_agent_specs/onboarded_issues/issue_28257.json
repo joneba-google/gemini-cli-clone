@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28257,
+  "title": "refactor(cli): optimize slash command resolution parsing with pre-computed map",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly identifies a performance bottleneck and an existing TODO comment in packages/cli/src/utils/commands.ts regarding two-pass linear search during slash command resolution, offering a clear and actionable O(1) map lookup refactoring plan.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The refactoring is a localized logic change within packages/cli/src/utils/commands.ts and packages/cli/src/services/CommandService.ts to build and query a pre-computed command lookup map, supported by existing unit tests."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28257",
+    "summary": {
+      "problem": "Slash command resolution in parseSlashCommand performs a two-pass linear search over commands and their aliases for each path segment.",
+      "root_cause": "Commands and subcommands are searched sequentially via Array.prototype.find twice per path segment\u2014first for primary names and then for alternate names.",
+      "context": "A TODO comment in packages/cli/src/utils/commands.ts highlights this exact optimization opportunity, suggesting a pre-computed lookup map in CommandService.ts."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/utils/commands.ts",
+        "packages/cli/src/services/CommandService.ts"
+      ],
+      "steps": [
+        "Create a helper or map structure to index command names and altNames to their corresponding SlashCommand objects.",
+        "Refactor parseSlashCommand in packages/cli/src/utils/commands.ts to perform single O(1) map lookups instead of two-pass find searches.",
+        "Expose or pre-compute the lookup map in CommandService.ts during command loading and conflict resolution."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/commands.test.ts",
+      "expected_behavior": "Command and subcommand resolution continues to function identically for primary names, aliases, subcommands, arguments, and backtracking, but with O(1) lookup efficiency.",
+      "verification_steps": [
+        "Run npx vitest run packages/cli/src/utils/commands.test.ts to verify all command parsing tests pass.",
+        "Add unit test cases verifying primary name and alias lookup map resolution."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:39Z",
+  "execution_time_seconds": 41.26
+}

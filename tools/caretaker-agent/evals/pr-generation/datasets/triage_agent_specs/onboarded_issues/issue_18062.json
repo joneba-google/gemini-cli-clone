@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 18062,
+  "title": "[Cloud Shell] API Error: \"Requested entity was not found\" when using Lab Accounts in ",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides complete reproduction steps and environment details (Cloud Shell Lab account with compute-default-credentials) for an unhandled API 404 error on the default cloudshell-gca project.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is a localized error handling fix in server.ts to catch 404 (Requested entity was not found) errors alongside 403 errors when using the default cloudshell-gca project, and surface a clear user-facing guidance error."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#18062",
+    "summary": {
+      "problem": "When running Gemini CLI in Cloud Shell using a Google Cloud Lab account, the default project 'cloudshell-gca' returns an API error 'Requested entity was not found' (404), which is unhandled and displayed directly to the user instead of displaying a helpful error message.",
+      "root_cause": "The loadCodeAssist method in server.ts only catches 403 Permission Denied errors when cloudaicompanionProject is 'cloudshell-gca'. It does not catch 404 Not Found errors, causing 404 responses from lab accounts to fall through to an unhandled API error.",
+      "context": "Cloud Shell environments default GOOGLE_CLOUD_PROJECT to 'cloudshell-gca'. In Lab Accounts or environments where this project entity is missing/not found, the API responds with a 404 'Requested entity was not found' error rather than 403."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/code_assist/server.ts"],
+      "steps": [
+        "Add a helper function or update error checks in packages/core/src/code_assist/server.ts to identify 404 (Not Found) errors in API responses.",
+        "Update the error handling in loadCodeAssist to check for both 403 (Permission Denied) and 404 (Not Found) errors when req.cloudaicompanionProject is 'cloudshell-gca'.",
+        "Throw the friendly error message advising the user to set their own Google Cloud project using 'gcloud config set project [PROJECT_ID]' or setting 'GOOGLE_CLOUD_PROJECT' when a 404 error is encountered on 'cloudshell-gca'."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/code_assist/server.test.ts",
+      "expected_behavior": "When loadCodeAssist encounters a 404 Not Found error on the 'cloudshell-gca' project, it throws the friendly error message explaining that default Cloud Shell Gemini project access was denied or not found and provides instructions on setting a project.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/code_assist/server.test.ts that mocks a 404 response for loadCodeAssist with cloudaicompanionProject set to 'cloudshell-gca'.",
+        "Assert that calling loadCodeAssist rejects with an error matching /Access to the default Cloud Shell Gemini project/."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:49:02Z",
+  "execution_time_seconds": 133.26
+}

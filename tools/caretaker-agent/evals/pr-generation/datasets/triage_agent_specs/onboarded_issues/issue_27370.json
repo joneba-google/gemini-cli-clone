@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27370,
+  "title": "0.43 activate_skill \u6d88\u5931\uff0c\u53ea\u5269 ReadFile/Shell/WriteFile",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a bug in CLI version 0.43.0 where standard built-in tools (such as activate_skill, google_web_search, and web_fetch) are missing from the tools list, leaving only ReadFile, Shell, and WriteFile. Complete client environment details and expected vs actual behavior are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is caused by tool registration filtering logic in packages/core/src/config/config.ts when processing core tools or tool allowlists. Fixing the tool matching and registration logic in config.ts is a localized bug fix in a single configuration file."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27370",
+    "summary": {
+      "problem": "In CLI version 0.43.0, built-in tools such as activate_skill, google_web_search, and web_fetch are missing from the available tools list, leaving only ReadFile, Shell, and WriteFile registered.",
+      "root_cause": "The maybeRegister helper in packages/core/src/config/config.ts filters registered tools against the coreTools allowlist using toolName and className. When coreTools filtering is active or when tool identifier resolution mismatches occur between internal tool names (e.g., activate_skill) and class names (e.g., ActivateSkillTool), non-file/shell tools are inadvertently omitted during createToolRegistry().",
+      "context": "Tool registration in createToolRegistry() uses maybeRegister to conditionally instantiate tools based on this.getCoreTools(). Mismatches in tool identifier resolution cause tools like ActivateSkillTool and WebSearchTool to be filtered out."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/config/config.ts"],
+      "steps": [
+        "Inspect maybeRegister in packages/core/src/config/config.ts to ensure coreTools filtering checks both canonical tool IDs (e.g., ActivateSkillTool.Name) and class names properly.",
+        "Ensure ActivateSkillTool and other default core tools are correctly registered when coreTools is undefined or when skill tools should be implicitly enabled.",
+        "Verify that tool allowlist matching in maybeRegister correctly resolves both snake_case tool names (e.g., activate_skill) and PascalCase class names (e.g., ActivateSkillTool)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/config/config.test.ts",
+      "expected_behavior": "When creating a ToolRegistry under default configuration, all standard built-in tools including activate_skill, google_web_search, and web_fetch are registered and available.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/config/config.test.ts verifying that createToolRegistry() registers ActivateSkillTool, WebSearchTool, and WebFetchTool alongside file and shell tools under default configuration.",
+        "Run npm test packages/core/src/config/config.test.ts using Vitest to verify all tool registration tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:53Z",
+  "execution_time_seconds": 144.86
+}

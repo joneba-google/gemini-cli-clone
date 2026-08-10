@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 24999,
+  "title": "bug(ci): SDK tests not run in PR CI; nightly broken by incorrect mock in session.test.ts",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed, actionable report of failing unit tests in packages/sdk/src/session.test.ts and missing test coverage for @google/gemini-cli-sdk in .github/workflows/ci.yml. It includes clear error messages, root cause analysis, failing test cases, and precise suggested fixes.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue requires localized updates: updating mock objects in packages/sdk/src/session.test.ts to match the AgentLoopContext interface properties, and adding @google/gemini-cli-sdk to the test matrix in .github/workflows/ci.yml. The root cause and fix are straightforward with low complexity."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24999",
+    "summary": {
+      "problem": "Nightly release tests in packages/sdk/src/session.test.ts fail due to an invalid mock object, and @google/gemini-cli-sdk tests are not executed during PR CI runs.",
+      "root_cause": "GeminiCliSession accesses toolRegistry, messageBus, and geminiClient as properties on AgentLoopContext (casted from this.config), but mockConfig in session.test.ts provided them as methods (getGeminiClient(), getToolRegistry(), getMessageBus()). Furthermore, .github/workflows/ci.yml omits --workspace \"@google/gemini-cli-sdk\" from the others test shard, so SDK tests are skipped on PRs.",
+      "context": "AgentLoopContext interface in @google/gemini-cli-core exposes geminiClient, toolRegistry, and messageBus as direct properties rather than getter functions."
+    },
+    "implementation_plan": {
+      "files_to_modify": [".github/workflows/ci.yml"],
+      "steps": [
+        "In .github/workflows/ci.yml, add --workspace \"@google/gemini-cli-sdk\" to the others test shard commands."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/sdk/src/session.test.ts",
+      "expected_behavior": "All tests in packages/sdk/src/session.test.ts pass, and @google/gemini-cli-sdk unit tests run as part of the others shard in PR CI checks.",
+      "verification_steps": [
+        "In packages/sdk/src/session.test.ts, update mockConfig to include geminiClient, toolRegistry, and messageBus as properties matching AgentLoopContext.",
+        "Run `npm run test:ci --workspace \"@google/gemini-cli-sdk\"` to verify all tests in session.test.ts pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:50Z",
+  "execution_time_seconds": 44.89
+}

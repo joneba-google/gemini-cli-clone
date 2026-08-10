@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28392,
+  "title": "Temporary Directory Leak During Background Shell Execution",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, detailed bug report with reproduction steps, affected component paths, root cause analysis, and expected behavior regarding a temporary directory resource leak in background shell executions.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to passing the temporary directory path (tempDir) from shell.ts to ShellExecutionService.background(...), storing it on the background process lifecycle/entry, and cleaning it up when the process exits or is killed."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#28392",
+    "summary": {
+      "problem": "Temporary directories (gemini-shell-*) created for background shell commands are never deleted after the process completes, causing a resource leak.",
+      "root_cause": "When executing a background command (is_background: true), ShellToolInvocation.execute() skips cleaning up the created tempDir in its finally block so the background process can use bgpids.tmp. However, tempDir is not passed to ShellExecutionService.background(), so no process tracking cleans up tempDir when the background process exits.",
+      "context": "Background shell commands use temporary directories to hold bgpids.tmp for POSIX background job tracking. Transferring ownership of tempDir to ShellExecutionService allows automatic removal upon process exit or kill."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/shell.ts",
+        "packages/core/src/services/shellExecutionService.ts"
+      ],
+      "steps": [
+        "Update ShellExecutionService.background to accept an optional tempDir string parameter.",
+        "Store tempDir in ShellExecutionService tracking structures (ActivePty, ActiveChildProcess, or background process records).",
+        "Add cleanup logic in ShellExecutionService when a background process exits or is killed to remove the temporary directory recursively using fs.promises.rm.",
+        "Update ShellToolInvocation.execute in packages/core/src/tools/shell.ts to pass tempDir when calling ShellExecutionService.background(pid, sessionId, strippedCommand, tempDir)."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/shell.test.ts",
+      "expected_behavior": "When a command is executed in the background and completes, its temporary directory (gemini-shell-*) should be automatically deleted.",
+      "verification_steps": [
+        "Add unit test in packages/core/src/tools/shell.test.ts verifying that ShellExecutionService.background accepts tempDir.",
+        "Assert that tempDir is removed when the background process completes or exits."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:43Z",
+  "execution_time_seconds": 134.61
+}

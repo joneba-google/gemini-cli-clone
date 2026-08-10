@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27470,
+  "title": "[Bug] Extra spaces appear between CJK characters in shell output",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and detailed bug report describing how CJK wide characters produce extra spaces in terminal output, complete with steps to reproduce, expected vs. actual behavior, client environment details, and the root cause in the codebase.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The bug can be resolved with a localized fix in packages/core/src/utils/terminalSerializer.ts by skipping width-0 continuation cells during terminal serialization, along with adding a targeted test case in packages/core/src/utils/terminalSerializer.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27470",
+    "summary": {
+      "problem": "When shell output contains wide CJK characters, extra spaces appear between characters in the rendered terminal output box.",
+      "root_cause": "In xterm, wide characters span two cells where the second cell has width 0 and empty character content. In serializeTerminalToObject, processing width-0 continuation cells causes getChars() to fall back to ' ' ('cell.getChars() || ' ''), converting empty continuation cells into physical spaces.",
+      "context": "The serializeTerminalToObject function converts xterm active buffer cells into AnsiToken arrays. Wide characters (width 2) use a continuation cell (width 0) that should not be processed as an independent character cell."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/utils/terminalSerializer.ts"],
+      "steps": [
+        "In packages/core/src/utils/terminalSerializer.ts, inside serializeTerminalToObject's x-loop, check if cellData exists and has a width of 0 (cellData.getWidth() === 0).",
+        "If cellData.getWidth() === 0, continue to skip the iteration so continuation cells for wide characters are ignored and no extra spaces are added."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/terminalSerializer.test.ts",
+      "expected_behavior": "Serializing terminal output containing full-width CJK characters returns text without extra space characters inserted between CJK characters.",
+      "verification_steps": [
+        "Add a test case in packages/core/src/utils/terminalSerializer.test.ts that writes CJK text (e.g., '\u3053\u3093\u306b\u3061\u306f') to an xterm Terminal instance.",
+        "Invoke serializeTerminalToObject on the terminal and verify that the serialized token text equals '\u3053\u3093\u306b\u3061\u306f' exactly."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:39:20Z",
+  "execution_time_seconds": 31.91
+}

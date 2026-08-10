@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28160,
+  "title": "SessionStart hook not observed on startup, clear, or resume in v0.47.0",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear and actionable bug report. It provides complete environment details, hook configuration, reproduction steps, and observed vs expected behavior. Code exploration confirmed that matchesTrigger in HookPlanner performs strict string equality instead of regex matching, preventing regex matchers like 'startup|resume|clear' from matching event triggers.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to updating the matchesTrigger method in packages/core/src/hooks/hookPlanner.ts to support regex pattern matching like matchesToolName does, along with adding unit test cases in packages/core/src/hooks/hookPlanner.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28160",
+    "summary": {
+      "problem": "SessionStart hooks configured with regex matchers like 'startup|resume|clear' do not fire on startup, clear, or resume.",
+      "root_cause": "In packages/core/src/hooks/hookPlanner.ts, matchesTrigger compares the matcher and trigger using strict string equality (matcher === trigger) instead of regex matching. As a result, regex matchers like 'startup|resume|clear' evaluate to false against triggers like 'startup', 'resume', or 'clear'.",
+      "context": "Tool event matchers support regex pattern matching via matchesToolName, but trigger-based lifecycle events use matchesTrigger which lacked regex support."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/hooks/hookPlanner.ts"],
+      "steps": [
+        "Update matchesTrigger in packages/core/src/hooks/hookPlanner.ts to evaluate trigger matchers as regular expressions with fallback to exact string equality if regex construction fails."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/hooks/hookPlanner.test.ts",
+      "expected_behavior": "SessionStart and other trigger-based hooks with regex matchers (e.g., 'startup|resume|clear') match corresponding trigger context values and fire properly.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/hooks/hookPlanner.test.ts to verify that trigger matching supports regex patterns such as 'startup|resume|clear'.",
+        "Run Vitest on packages/core/src/hooks/hookPlanner.test.ts to verify all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:30Z",
+  "execution_time_seconds": 50.81
+}

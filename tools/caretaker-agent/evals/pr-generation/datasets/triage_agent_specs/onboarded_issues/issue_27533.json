@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27533,
+  "title": "Gemini CLI crashes with `ioctl(2) failed, EBADF` in `node-pty` during `resizePty`",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed bug report with stack traces, environment information, reproduction details, and logs describing a crash in node-pty during PTY resizing.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "This issue involves low-level pseudo-terminal (PTY) handling via node-pty on Linux/SSH environments, which falls under Platform-Specific Complexities (PTY/Signals) and is classified as LARGE effort per guidelines."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27533",
+    "summary": {
+      "problem": "Gemini CLI crashes with `ioctl(2) failed, EBADF` during PTY resize operations when running in terminal environments such as SSH.",
+      "root_cause": "When `ShellExecutionService.resizePty` attempts to resize a PTY process that has already closed or has an invalid file descriptor, `node-pty` throws an error (e.g. `ioctl(2) failed, EBADF`). Although `ShellExecutionService.resizePty` has error handling, unhandled exceptions propagate when `node-pty` error messages or component catch blocks do not match expected error formats.",
+      "context": "PTY resize operations can race with process termination or file descriptor invalidation, especially in SSH sessions on Linux hosting environments."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/shellExecutionService.ts",
+        "packages/cli/src/ui/components/messages/ShellToolMessage.tsx"
+      ],
+      "steps": [
+        "In `packages/core/src/services/shellExecutionService.ts`, update `resizePty` error handling to safely ignore `ioctl(2) failed` and `EBADF` errors thrown by `node-pty` during resize operations on closed or invalid PTY file descriptors.",
+        "In `packages/cli/src/ui/components/messages/ShellToolMessage.tsx`, update the catch block around `ShellExecutionService.resizePty` to safely handle PTY resize errors rather than re-throwing non-matching errors."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/shellExecutionService.test.ts",
+      "expected_behavior": "`ShellExecutionService.resizePty` gracefully handles `EBADF` and `ioctl(2) failed` errors during PTY resizing without throwing an exception.",
+      "verification_steps": [
+        "Add a test case in `packages/core/src/services/shellExecutionService.test.ts` where `mockPtyProcess.resize` throws `new Error('ioctl(2) failed, EBADF')`.",
+        "Verify that calling `ShellExecutionService.resizePty` does not throw an exception."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:39:46Z",
+  "execution_time_seconds": 64.42
+}

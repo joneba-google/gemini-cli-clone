@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 24828,
+  "title": "Sandbox does not forward GOOGLE_GENAI_API_VERSION into container",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a bug where GOOGLE_GENAI_API_VERSION is not forwarded into sandbox containers when GEMINI_SANDBOX=true. Reproduction steps, client version, root cause analysis, and target code references in sandbox.ts are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is a straightforward single-file edit in packages/cli/src/utils/sandbox.ts to include GOOGLE_GENAI_API_VERSION in both Docker and LXC environment variable forwarding lists, alongside updating existing unit tests in packages/cli/src/utils/sandbox.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24828",
+    "summary": {
+      "problem": "The GOOGLE_GENAI_API_VERSION environment variable is silently dropped when entering sandbox mode (GEMINI_SANDBOX=true).",
+      "root_cause": "packages/cli/src/utils/sandbox.ts maintains explicit allowlists for environment variables to forward into Docker and LXC sandboxes. GOOGLE_GENAI_API_VERSION was omitted from both forwarding routines.",
+      "context": "Without GOOGLE_GENAI_API_VERSION forwarded into the container, requests to Vertex-compatible base URLs that rely on apiVersion fail with 404 ModelNotFoundError."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/utils/sandbox.ts"],
+      "steps": [
+        "Add an environment variable forwarding block for GOOGLE_GENAI_API_VERSION in the Docker container launch args in packages/cli/src/utils/sandbox.ts.",
+        "Add GOOGLE_GENAI_API_VERSION: process.env['GOOGLE_GENAI_API_VERSION'] to the envVarsToForward object in LXC container setup in packages/cli/src/utils/sandbox.ts."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/sandbox.test.ts",
+      "expected_behavior": "When GOOGLE_GENAI_API_VERSION is present in process.env, sandbox startup forwards --env GOOGLE_GENAI_API_VERSION=<value> to the container runner.",
+      "verification_steps": [
+        "Add a unit test in packages/cli/src/utils/sandbox.test.ts asserting that GOOGLE_GENAI_API_VERSION is included in docker spawn arguments when defined in process.env."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:55Z",
+  "execution_time_seconds": 40.05
+}

@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21477,
+  "title": "bug: TUI hangs indefinitely on \"Initializing...\" \u2014 IdeClient.getInstance() blocks BuiltinCommandLoader in bare terminal",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report is actionable and clear. It identifies the exact root cause of the TUI hang during initialization (a hanging ps process call in getProcessInfo() during IDE process traversal on Linux in bare terminals), provides instrumentation evidence, and includes clear reproduction steps and environment details.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "This issue involves OS-specific process hierarchy traversal (Unix ps command) and IDE integration/detection mechanisms (IdeClient), requiring verification across bare terminal environments and platform-specific process execution."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21477",
+    "summary": {
+      "problem": "The interactive TUI hangs indefinitely at 'Initializing...' when launched from a bare Linux terminal.",
+      "root_cause": "BuiltinCommandLoader awaits ideCommand(), which calls IdeClient.getInstance() and getIdeProcessInfo(). On Unix, getIdeProcessInfoForUnix traverses parent processes using getProcessInfo(pid), which executes `ps -o ppid=,command= -p <pid>` via execAsync without a timeout. On certain Linux configurations, execAsync('ps ...') hangs indefinitely on specific ancestor PIDs, blocking the startup sequence forever.",
+      "context": "Headless mode (`gemini -p ...`) works fine because command loading is handled differently or slash commands are not needed for single prompt execution in the same way. The hang prevents slashCommands from resolving in CommandService.create(), locking the UI in ConfigInitDisplay."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/ide/process-utils.ts"],
+      "steps": [
+        "In packages/core/src/ide/process-utils.ts, update getProcessInfo to pass an execution timeout option (e.g., { timeout: 3000 }) to execAsync when running `ps -o ppid=,command= -p ${pid}`.",
+        "Ensure getProcessTableWindows also includes a timeout option (e.g., { timeout: 5000 }) on execAsync for PowerShell calls as a safeguard.",
+        "In getProcessInfo, ensure that if execAsync throws or times out, it gracefully returns default empty process info { parentPid: 0, name: '', command: '' } so parent traversal in getIdeProcessInfoForUnix terminates cleanly."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/ide/process-utils.test.ts",
+      "expected_behavior": "When execAsync times out or fails during ps execution in getProcessInfo, the function should catch the error, return default process info, and allow getIdeProcessInfo to resolve without hanging.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/ide/process-utils.test.ts where mockedExec rejects with a timeout error during getProcessInfo execution.",
+        "Verify getIdeProcessInfo() resolves cleanly with a fallback PID and command instead of hanging or throwing an unhandled rejection."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:52Z",
+  "execution_time_seconds": 51.92
+}

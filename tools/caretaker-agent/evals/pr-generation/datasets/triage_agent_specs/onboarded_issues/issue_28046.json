@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28046,
+  "title": "docs(hooks): the BeforeTool `decision: \"ask\"` value is implemented but undocumented (reference only lists allow/deny)",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly and accurately describes a documentation omission in docs/hooks/reference.md. Specifically, the BeforeTool hook decision value 'ask' (and its effect of forcing an interactive prompt with systemMessage) is fully implemented in the core runtime (packages/core/src/hooks/types.ts, packages/core/src/scheduler/hook-utils.ts, packages/core/src/scheduler/scheduler.ts, packages/core/src/hooks/hookAggregator.ts) but missing from the hooks documentation reference tables and sections. The issue is actionable and provides complete context.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "This issue requires updating docs/hooks/reference.md to document the existing 'ask' decision value for hooks and BeforeTool, and clarifying the 'approve' status. It involves straightforward documentation changes without code logic updates."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28046",
+    "summary": {
+      "problem": "The BeforeTool hook decision value 'ask' is fully implemented in code but undocumented in docs/hooks/reference.md.",
+      "root_cause": "docs/hooks/reference.md was not updated when the 'ask' decision value was added to the hook runtime in packages/core/src/hooks/types.ts and scheduler logic.",
+      "context": "Returning decision 'ask' from a BeforeTool hook forces an interactive user confirmation prompt even in auto-approved modes and displays the hook's systemMessage. The 'approve' decision is also present in the TypeScript union type but currently unconsumed."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["docs/hooks/reference.md"],
+      "steps": [
+        "In docs/hooks/reference.md, update the 'Common output fields' table to list 'ask' as a valid decision value alongside 'allow' and 'deny' (alias 'block').",
+        "In docs/hooks/reference.md under 'BeforeTool' -> 'Relevant Output Fields', add 'ask' and explain that it forces an interactive confirmation prompt showing the hook's systemMessage.",
+        "Add a note in docs/hooks/reference.md regarding 'approve' being present in the HookDecision union type but currently unconsumed/reserved."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "N/A",
+      "expected_behavior": "docs/hooks/reference.md completely and accurately documents all supported decision values ('allow', 'deny'/'block', 'ask') and notes the status of 'approve'.",
+      "verification_steps": [
+        "Verify that docs/hooks/reference.md contains clear documentation for decision value 'ask' under Common output fields and BeforeTool.",
+        "Verify that docs/hooks/reference.md mentions 'approve' status."
+      ],
+      "framework": "N/A"
+    }
+  },
+  "processed_at": "2026-08-06T17:35:53Z",
+  "execution_time_seconds": 31.31
+}

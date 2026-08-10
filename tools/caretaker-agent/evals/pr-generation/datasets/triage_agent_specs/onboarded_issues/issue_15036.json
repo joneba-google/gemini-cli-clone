@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 15036,
+  "title": "Gemini Code Assist Enterprise cannot use Gemini 3",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The report contains a clear description of a regression when using Gemini 3 with a Gemini Code Assist Enterprise subscription, including complete CLI environment details (/about command output: CLI version 0.20.2, model pro, auth OAuth, GCP project rubii04, OS darwin), exact API error payload (HTTP 404 Requested entity was not found), and confirmation that administrative release channel (Preview) is configured.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Addressing this issue requires updating model resolution logic and quota preview checking in packages/core as well as error handling and fallback behavior in packages/cli, spanning across package boundaries."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#15036",
+    "summary": {
+      "problem": "Users with active Gemini Code Assist Enterprise subscriptions who set model to 'pro' or Gemini 3 receive an API 404 'Requested entity was not found' error.",
+      "root_cause": "When requesting Gemini 3 under Gemini Code Assist Enterprise, model resolution maps 'pro' to 'gemini-3-pro-preview'. If the enterprise backend endpoint returns 404 NOT_FOUND or quota check fails to detect preview access, the CLI throws an unhandled ModelNotFoundError without triggering fallback.",
+      "context": "Enterprise users configuring Preview release channels require model resolution in packages/core to validate preview access and fall back gracefully to gemini-2.5-pro when encountering a 404 ModelNotFoundError."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/config/models.ts",
+        "packages/core/src/config/config.ts",
+        "packages/cli/src/ui/hooks/useQuotaAndFallback.ts"
+      ],
+      "steps": [
+        "Update model resolution in packages/core/src/config/models.ts to validate model availability and fall back when preview models return not found.",
+        "Update quota bucket checking in packages/core/src/config/config.ts to accurately evaluate preview access for enterprise accounts.",
+        "Update fallback handling in packages/cli/src/ui/hooks/useQuotaAndFallback.ts to transition from gemini-3-pro-preview to gemini-2.5-pro on ModelNotFoundError."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/config/models.test.ts",
+      "expected_behavior": "When a 404 ModelNotFoundError is encountered on enterprise preview requests, model resolution gracefully falls back to gemini-2.5-pro.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/config/models.test.ts verifying resolveModel fallback when preview access is absent or returns 404.",
+        "Run vitest on packages/core/src/config/models.test.ts and packages/cli/src/ui/hooks/useQuotaAndFallback.test.ts to confirm all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:49:18Z",
+  "execution_time_seconds": 94.94
+}

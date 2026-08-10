@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25583,
+  "title": "[BUG] PTY Master Device Exhaustion (ENXIO) on macOS after prolonged usage in YOLO mode",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report is clear, detailed, and actionable. It provides precise diagnostic evidence (sysctl ptmx_max, lsof output, PID tracking, process state sample), environmental details, reproduction steps, and links to related issues regarding PTY master descriptor leaks on macOS.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "The bug involves low-level platform-specific pseudo-terminal (node-pty) management, process group signal handling, and file descriptor resource retention, which is categorized as LARGE effort under triage rules."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#25583",
+    "summary": {
+      "problem": "Running gemini-cli with --approval-mode yolo in long-running sessions causes PTY master file descriptor exhaustion (ENXIO: Device not configured) on macOS when reaching the system limit of 511 /dev/ptmx descriptors.",
+      "root_cause": "Shell executions using node-pty in ShellExecutionService fail to reliably destroy PTY master descriptors across all process termination paths (such as process aborts, kills, or when child processes retain slave PTY file descriptors after exit), leaving orphan PTY master descriptors open in the main process.",
+      "context": "macOS imposes a default limit on open PTY master devices (kern.tty.ptmx_max = 511). Prolonged usage involving frequent tool calls and sub-agent sub-shells leaks open descriptors until no new terminal sessions can be allocated system-wide."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/shellExecutionService.ts"
+      ],
+      "steps": [
+        "Ensure destroyPtyProcess and cleanupPtyEntry are called during all termination pathways in ShellExecutionService, including process aborts and explicit kill calls.",
+        "Add explicit PTY process destruction logic in abortHandler and lifecycle kill methods to release open /dev/ptmx descriptors even if node-pty onExit event handling is delayed.",
+        "Verify activePtys and background logging stream cleanup occurs reliably upon execution completion or error."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/shellExecutionService.test.ts",
+      "expected_behavior": "All PTY master processes are explicitly destroyed and cleaned up from activePtys on process completion, abort, or kill, releasing file descriptors back to the OS.",
+      "verification_steps": [
+        "Add a unit test in shellExecutionService.test.ts to verify destroyPtyProcess is called when an execution is aborted.",
+        "Add a unit test to verify PTY entries are removed from activePtys and headless terminals disposed when killing or completing PTY processes."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:59Z",
+  "execution_time_seconds": 80.94
+}

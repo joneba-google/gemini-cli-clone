@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21335,
+  "title": "/compress command is not persistent across session resume",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a detailed, actionable bug report describing how the /compress command fails to persist compressed chat history to the session file on disk, leading to uncompressed history upon resuming a session. Clear reproduction steps and technical context are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The bug is a localized logic issue in packages/core where ChatRecordingService is not persisting the compressed message history checkpoint to the session file upon chat compression. The fix is clear and limited to core client and session recording files."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21335",
+    "summary": {
+      "problem": "The /compress command summarizes chat history in-memory, but this compressed history is not persisted to the session file on disk. Upon resuming the session (using --resume), the CLI reloads the original uncompressed chat history from disk.",
+      "root_cause": "When tryCompressChat completes successfully in GeminiClient, it starts a new GeminiChat session with the compressed history and passes the existing session file reference (resumedData). However, ChatRecordingService is not instructed to write back or persist the compressed history checkpoint to disk, leaving the uncompressed message records in the session file.",
+      "context": "ChatRecordingService handles reading and writing session logs in JSONL format. To support persistence across resumes, ChatRecordingService needs to persist the compressed history checkpoint to disk when a chat session is compressed."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/client.ts",
+        "packages/core/src/services/chatRecordingService.ts"
+      ],
+      "steps": [
+        "In ChatRecordingService, ensure that updating or resetting messages from history writes a metadata update checkpoint ($set: { messages }) to the session log file.",
+        "In GeminiClient.tryCompressChat (packages/core/src/core/client.ts), verify that when starting the new GeminiChat instance with compressed history, the recording service persists the updated history state to the session file."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/client.test.ts",
+      "expected_behavior": "When tryCompressChat successfully compresses the conversation history, the updated compressed history is saved to the session recording file on disk so that subsequent resumes load the compressed state.",
+      "verification_steps": [
+        "Run unit tests for client.ts using vitest to ensure existing chat compression tests pass.",
+        "Add a test case in packages/core/src/core/client.test.ts asserting that after tryCompressChat succeeds, the session recording service persists the updated compressed history."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:47:27Z",
+  "execution_time_seconds": 124.91
+}

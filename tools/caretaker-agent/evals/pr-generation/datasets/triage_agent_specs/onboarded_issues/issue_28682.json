@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28682,
+  "title": "Aborted streaming responses discard already-received usageMetadata",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a bug where usage metadata from aborted streaming responses is discarded. It provides specific file references (packages/core/src/core/turn.ts and loggingContentGenerator.ts), test references (turn.test.ts), expected vs actual behavior, and technical details to fix or reproduce.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Modifying asynchronous response stream handling and telemetry error logging across turn.ts and loggingContentGenerator.ts to capture partial token usage upon stream cancellation requires updating async generators, event structures, and error-handling blocks."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28682",
+    "summary": {
+      "problem": "When a streaming response is aborted (via Ctrl-C, timeout, or signal abort), already-received usageMetadata is discarded instead of being logged or emitted.",
+      "root_cause": "In Turn.run (packages/core/src/core/turn.ts), stream cancellation returns or yields UserCancelled before emitting a Finished event, dropping accumulated usageMetadata. In LoggingContentGenerator (packages/core/src/core/loggingContentGenerator.ts), lastUsageMetadata is captured per-chunk but only flushed via _logApiResponse on stream completion, skipping telemetry recording in the catch block for AbortError.",
+      "context": "Telemetry, logging, and token usage tracking depend on logging wrappers and event emissions. Discarding usage metadata on aborted turns prevents accurate token billing and telemetry reporting for partial generations."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/core/turn.ts",
+        "packages/core/src/core/loggingContentGenerator.ts"
+      ],
+      "steps": [
+        "In packages/core/src/core/loggingContentGenerator.ts, update loggingStreamWrapper to handle stream abortion in the catch block by logging lastUsageMetadata if present before rethrowing.",
+        "In packages/core/src/core/turn.ts, track lastUsageMetadata from streamed chunks during iteration.",
+        "In packages/core/src/core/turn.ts, update UserCancelled event or cancellation handling to retain and emit the captured usageMetadata when signal?.aborted is triggered."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/turn.test.ts",
+      "expected_behavior": "When a stream is aborted after receiving content chunks with usageMetadata, the usage metadata received prior to cancellation is retained and reported.",
+      "verification_steps": [
+        "In packages/core/src/core/turn.test.ts, add or update a test where stream chunks contain usageMetadata before an abort signal is triggered.",
+        "Assert that stream cancellation preserves and yields or logs the usageMetadata received up to the abort point."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:31:56Z",
+  "execution_time_seconds": 64.93
+}

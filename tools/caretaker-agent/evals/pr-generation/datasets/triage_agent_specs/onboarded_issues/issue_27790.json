@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27790,
+  "title": "fix(vscode-ide-companion): comma operator in activate() leaks two Disposables (gemini.diff.accept, onDidChangeWorkspaceFolders)",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a well-documented bug report detailing a specific bug in packages/vscode-ide-companion/src/extension.ts where comma expressions cause two Disposables to leak on activation. It includes root cause analysis, reproduction steps, and clear expected vs actual behavior.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The bug resides in the VS Code IDE companion extension (packages/vscode-ide-companion). According to the effort estimation guidelines, bugs involving IDE companion extensions (VS Code or Android Studio) require testing and verification within the companion extension context, which carries additional overhead and is categorized as MEDIUM effort."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27790",
+    "summary": {
+      "problem": "In packages/vscode-ide-companion/src/extension.ts, activate() leaks two Disposables (gemini.diff.accept command and onDidChangeWorkspaceFolders listener) due to stray parentheses turning registration pairs into comma expressions.",
+      "root_cause": "The activate() function wraps two pairs of registration calls in extra parentheses: (vscode.commands.registerCommand('gemini.diff.accept', ...), vscode.commands.registerCommand('gemini.diff.cancel', ...)) and (vscode.workspace.onDidChangeWorkspaceFolders(...), vscode.workspace.onDidGrantWorkspaceTrust(...)). In JavaScript, comma expressions evaluate both operands but return only the last value. Consequently, only gemini.diff.cancel and onDidGrantWorkspaceTrust are passed to context.subscriptions.push(), leaving gemini.diff.accept and onDidChangeWorkspaceFolders untracked and never disposed.",
+      "context": "Leaking gemini.diff.accept causes 'command gemini.diff.accept already exists' errors when the extension is re-activated without reloading the process. Leaking onDidChangeWorkspaceFolders leaves stale event listeners active after deactivation."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/vscode-ide-companion/src/extension.ts"],
+      "steps": [
+        "In packages/vscode-ide-companion/src/extension.ts within activate(), remove the outer surrounding parentheses from the registerCommand group so that vscode.commands.registerCommand('gemini.diff.accept', ...) and vscode.commands.registerCommand('gemini.diff.cancel', ...) are passed as separate arguments to context.subscriptions.push().",
+        "In packages/vscode-ide-companion/src/extension.ts within activate(), remove the outer surrounding parentheses from the event listener group so that vscode.workspace.onDidChangeWorkspaceFolders(...) and vscode.workspace.onDidGrantWorkspaceTrust(...) are passed as separate arguments to context.subscriptions.push()."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/vscode-ide-companion/src/extension.test.ts",
+      "expected_behavior": "All Disposables created during activate() (including gemini.diff.accept and onDidChangeWorkspaceFolders) are pushed to context.subscriptions and tracked for disposal.",
+      "verification_steps": [
+        "Add or update unit tests in packages/vscode-ide-companion/src/extension.test.ts to verify that activate(context) pushes all created disposables to context.subscriptions.",
+        "Ensure mocks for vscode.commands.registerCommand and vscode.workspace.onDidChangeWorkspaceFolders return disposable objects and assert that context.subscriptions contains all expected disposables after activation."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:37:53Z",
+  "execution_time_seconds": 61.91
+}

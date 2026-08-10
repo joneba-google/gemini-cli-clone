@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22267,
+  "title": "[BUG] Browser Agent ignores settings.json overrides (e.g., maxTurns)",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports a bug where the Browser Agent ignores settings.json configuration overrides (such as maxTurns), unlike other sub-agents. It provides specific details about the unexpected behavior, client environment, root cause analysis, and affected files.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The bug is localized to packages/core/src/agents/browser/browserAgentFactory.ts. Updating createBrowserAgentDefinition to check for and use the existing definition registered in AgentRegistry (or fall back to BrowserAgentDefinition) requires modifying a single source file and adding a unit test in browserAgentFactory.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#22267",
+    "summary": {
+      "problem": "The Browser Agent ignores configuration overrides specified in settings.json (such as maxTurns and maxTimeMinutes).",
+      "root_cause": "When the Browser Agent is invoked, createBrowserAgentDefinition in browserAgentFactory.ts instantiates a fresh BrowserAgentDefinition object rather than retrieving the pre-merged agent definition from AgentRegistry, which already has settings.json overrides applied.",
+      "context": "Other sub-agents registered in AgentRegistry receive merged runConfig and modelConfig settings overrides upon initialization. Browser Agent bypasses this because createBrowserAgentDefinition recreates the definition directly."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/agents/browser/browserAgentFactory.ts"
+      ],
+      "steps": [
+        "Retrieve any pre-registered definition from the AgentRegistry using config.getAgentRegistry()?.getDefinition(BROWSER_AGENT_NAME).",
+        "If a registry definition exists, use it as the base definition so that settings.json overrides (such as runConfig) are preserved; otherwise fall back to calling BrowserAgentDefinition(config, !visionDisabledReason).",
+        "Construct the final LocalAgentDefinition by combining the base definition with updated promptConfig and toolConfig containing discovered MCP tools."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/agents/browser/browserAgentFactory.test.ts",
+      "expected_behavior": "When settings.json contains overrides for browser_agent (e.g. runConfig with maxTurns: 10), createBrowserAgentDefinition should return a definition that includes the overridden runConfig values from the AgentRegistry.",
+      "verification_steps": [
+        "Add a test case in browserAgentFactory.test.ts where AgentRegistry contains a browser_agent definition with runConfig overrides.",
+        "Assert that createBrowserAgentDefinition returns an agent definition that preserves the runConfig overrides from AgentRegistry."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:44:53Z",
+  "execution_time_seconds": 57.96
+}

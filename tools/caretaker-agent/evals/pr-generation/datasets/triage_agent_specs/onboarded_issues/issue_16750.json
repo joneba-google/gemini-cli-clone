@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 16750,
+  "title": "\"Allow for session\" only allows once for shell commands that include a path",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear problem description, steps to reproduce, and expected vs actual behavior regarding 'Allow for this session' failing for shell commands that contain directory paths.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing path-aware shell command permission matching spans across shell tool invocation logic (`shell.ts`), policy manager state (`sandboxPolicyManager.ts`), and command normalization utilities (`shell-utils.ts`) in `packages/core` to properly handle path-qualified commands during session approval and policy evaluation."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#16750",
+    "summary": {
+      "problem": "Selecting 'Allow for this session' when prompted for shell commands containing directory paths (e.g., 'tools/autotest.py foo') fails to prevent subsequent prompts for identical executions.",
+      "root_cause": "When storing and checking session approvals, command names with directory paths are passed through `normalizeCommand`, which strips directory components and returns only the base filename. This inconsistency between path representations and stored permission keys prevents accurate matching for path-qualified shell commands.",
+      "context": "Shell tool execution approvals rely on `getCommandRoots` and `normalizeCommand` across `ShellToolInvocation` and `SandboxPolicyManager`. Stripping directory paths during normalization loses path-specific context and breaks session approvals."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/shell.ts",
+        "packages/core/src/policy/sandboxPolicyManager.ts",
+        "packages/core/src/utils/shell-utils.ts"
+      ],
+      "steps": [
+        "Ensure command normalization preserves relative and absolute directory paths when present in command root names while preserving base name normalization for standard binaries.",
+        "Update `ShellToolInvocation.getConfirmationDetails` and `getPolicyUpdateOptions` in `packages/core/src/tools/shell.ts` to retain path details when creating session approvals and policy updates.",
+        "Update `SandboxPolicyManager` in `packages/core/src/policy/sandboxPolicyManager.ts` to support path-aware lookup keys so session approvals match path-qualified command roots."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/shell.test.ts",
+      "expected_behavior": "When 'Allow for this session' is selected for a shell command with a path (e.g., 'tools/autotest.py'), subsequent invocations of the same command path are approved without re-prompting the user.",
+      "verification_steps": [
+        "Add unit tests in `shell.test.ts` for shell commands containing directory paths (e.g., `tools/autotest.py foo`).",
+        "Verify that `getPolicyUpdateOptions` and session approval handlers record the path-qualified command root.",
+        "Assert that subsequent executions of the same command path return an allowed policy decision during session approval checks."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:49:12Z",
+  "execution_time_seconds": 112.64
+}

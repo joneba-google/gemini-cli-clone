@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27738,
+  "title": "Large tool output (e.g. run_shell_command) sent to model uncapped exceeds 1M input limit and permanently wedges the session",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a valid, actionable bug report detailing how large tool outputs (such as run_shell_command returning ~24MB) sent uncapped in functionResponse exceed the 1M input token limit, causing HTTP 500 errors that permanently wedge the session. Specific reproduction details, error logs, and expected behavior are provided.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing this issue requires updating context window management and tool output masking processors in packages/core/src/context/ to cap or truncate large tool outputs even on the latest turn before sending the history to the model."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27738",
+    "summary": {
+      "problem": "Large tool execution outputs (e.g. run_shell_command returning ~24MB) sent uncapped in functionResponse exceed the 1M model input token limit and permanently wedge the session history.",
+      "root_cause": "Tool output masking services skip the latest turn or lack an absolute per-output safety cap before adding tool responses to the conversation history, causing oversized tool results to repeatedly trigger HTTP 500 max token errors on subsequent turns.",
+      "context": "Tool outputs are already saved to disk under the session directory, but because the full raw response is sent inline in the model request payload without truncation on the latest turn, the oversized context persists across turns."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/context/toolOutputMaskingService.ts",
+        "packages/core/src/context/processors/toolMaskingProcessor.ts"
+      ],
+      "steps": [
+        "Enforce a mandatory upper bound on individual tool output payload sizes in ToolOutputMaskingService and ToolMaskingProcessor even when processing the latest turn.",
+        "When a functionResponse payload exceeds the string length or token threshold, persist the raw output to disk, truncate the inline content, and substitute a masked snippet referencing the saved file path.",
+        "Ensure context processing sanitizes history payloads before constructing the Gemini API request to prevent unmasked oversized tool outputs from causing token overflow."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/context/toolOutputMaskingService.test.ts",
+      "expected_behavior": "Oversized tool outputs in any conversation turn are safely masked and truncated inline, preserving the full output on disk while keeping the API payload within the model's token limit.",
+      "verification_steps": [
+        "Add unit tests in packages/core/src/context/toolOutputMaskingService.test.ts simulating tool responses exceeding context length thresholds in the latest turn.",
+        "Assert that the oversized tool output is truncated/masked and offloaded to disk.",
+        "Assert that the token count of the returned history stays below the allowable threshold."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:01Z",
+  "execution_time_seconds": 49.79
+}

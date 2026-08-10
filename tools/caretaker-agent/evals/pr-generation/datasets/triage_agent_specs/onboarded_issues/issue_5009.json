@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 5009,
+  "title": "Scroll position jumps to top on new message arrival",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a bug where the chat scroll position jumps to the top upon receiving a new message from the agent, complete with clear reproduction steps and expected vs actual behavior.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Fixing state synchronization and scroll positioning logic in VirtualizedList during dynamic list growth and re-renders in Ink/React requires careful state tracking across updates and thorough testing with component lifecycle/rendering behavior."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#5009",
+    "summary": {
+      "problem": "When a new message is received from the Gemini agent, the chat window scroll position jumps to the top instead of preserving the user's current scroll position.",
+      "root_cause": "In VirtualizedList.tsx, when data grows or updates upon receiving a new message, the scroll anchor state calculation and layout effect logic for clamping/auto-scrolling fail to properly preserve the current scroll position when the user is scrolled up in the conversation history, resetting or re-anchoring to index 0.",
+      "context": "MainContent renders conversation history and pending items via ScrollableList/VirtualizedList. When a message completes streaming or arrives, data items in virtualizedData change, causing VirtualizedList layout effects to recompute actualScrollTop and scrollAnchor."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/components/shared/VirtualizedList.tsx"
+      ],
+      "steps": [
+        "Update the layout effect and scroll state calculation in VirtualizedList.tsx to ensure that when list items update or new items arrive, existing scroll anchors remain stable if the user was scrolled up.",
+        "Ensure getAnchorForScrollTop accurately maps the existing scrollTop to the updated list offsets without falling back or clamping to top (index 0).",
+        "Ensure that auto-scrolling to bottom only occurs if isStickingToBottom or wasAtBottom is true, preserving scroll offset when the user is viewing earlier history."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/shared/VirtualizedList.test.tsx",
+      "expected_behavior": "When new items are added to VirtualizedList while scrolled up, the scroll position should remain anchored at the current position instead of jumping to the top.",
+      "verification_steps": [
+        "Add a unit test in VirtualizedList.test.tsx that renders a long list, scrolls up away from the bottom, appends new items to data, and verifies the scroll position/visible items remain unchanged."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:51:23Z",
+  "execution_time_seconds": 187.62
+}

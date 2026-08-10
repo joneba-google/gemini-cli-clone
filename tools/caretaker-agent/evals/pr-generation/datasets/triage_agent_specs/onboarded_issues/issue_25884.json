@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 25884,
+  "title": "Bug: CLI agent introduces invalid whitespaces/newlines in terminal commands",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides clear, actionable details describing a defect where the CLI agent introduces invalid newlines or whitespaces within terminal commands in its output, breaking shell syntax when copied. Steps to reproduce, expected vs actual behavior, error message, and environment information are all provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue requires updating prompt guidelines in `packages/core/src/prompts/snippets.ts` and `packages/core/src/prompts/snippets.legacy.ts` to instruct the model to avoid introducing invalid newlines or line breaks inside shell command strings, plus adding test assertions in `packages/core/src/prompts/promptProvider.test.ts`."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#25884",
+    "summary": {
+      "problem": "The CLI agent occasionally introduces unnecessary whitespaces or unexpected newlines within single command strings in its markdown responses, leading to Zsh parse errors when users copy and paste the commands.",
+      "root_cause": "The system prompt's formatting guidelines in `snippets.ts` and `snippets.legacy.ts` do not explicitly instruct the model to preserve single-line formatting for terminal commands or use valid shell line continuation syntax when outputting commands.",
+      "context": "When commands with output redirection or background execution (e.g. `nohup ... > /dev/null 2>&1 &`) are split across lines without backslashes, shells like Zsh fail with syntax errors such as `zsh: parse error near \\n`."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/prompts/snippets.ts",
+        "packages/core/src/prompts/snippets.legacy.ts"
+      ],
+      "steps": [
+        "Update the Formatting guidelines under Tone and Style in `packages/core/src/prompts/snippets.ts` to explicitly state that terminal and shell commands must not contain arbitrary line breaks or unexpected newlines within a single command string.",
+        "Apply the equivalent prompt update to `packages/core/src/prompts/snippets.legacy.ts` to maintain parity across model configurations.",
+        "Ensure the instructions specify that multi-line commands must use proper shell line continuation characters (e.g. backslashes `\\`) if line breaks are required."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/prompts/promptProvider.test.ts",
+      "expected_behavior": "The generated system prompt includes formatting directives instructing the agent to keep terminal command strings contiguous or properly line-continued.",
+      "verification_steps": [
+        "Add unit test cases in `packages/core/src/prompts/promptProvider.test.ts` verifying that the generated core system prompt includes instructions against introducing invalid line breaks or unexpected newlines in terminal commands.",
+        "Run Vitest test suite on `packages/core/src/prompts/promptProvider.test.ts` to confirm all assertions pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:32Z",
+  "execution_time_seconds": 86.34
+}

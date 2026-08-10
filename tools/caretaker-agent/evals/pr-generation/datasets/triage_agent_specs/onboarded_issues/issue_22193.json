@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22193,
+  "title": "Gemini CLI doesn't maintain keyboard focus when VS Code extension closes a diff",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, reproducible description of a bug in the VS Code companion extension where approving or closing a diff preview causes the active terminal running Gemini CLI to lose keyboard focus.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The fix involves modifying the VS Code IDE companion extension to refocus the terminal after closing a diff editor tab, and requires testing cross-environment VS Code API interactions."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#22193",
+    "summary": {
+      "problem": "When approving or closing a diff preview in the VS Code extension, the Gemini CLI running in the terminal loses keyboard focus, forcing the user to manually click on the terminal pane before each interaction.",
+      "root_cause": "In `closeDiffEditor` within `DiffManager`, after closing the diff tab via `vscode.window.tabGroups.close(tab)`, focus automatically defaults back to the active editor pane rather than returning focus to the terminal.",
+      "context": "The `vscode.window.tabGroups.close(tab)` method closes the tab without transferring focus back to the terminal. Executing `workbench.action.terminal.focus` after tab closure restores terminal focus."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/vscode-ide-companion/src/diff-manager.ts"],
+      "steps": [
+        "In `packages/vscode-ide-companion/src/diff-manager.ts`, locate the `closeDiffEditor` method.",
+        "After closing the diff tab using `vscode.window.tabGroups.close(tab)`, call `await vscode.commands.executeCommand('workbench.action.terminal.focus')` to refocus the active terminal.",
+        "Ensure any error during the terminal focus command is handled gracefully so that diff closure is not interrupted."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/vscode-ide-companion/src/extension.test.ts",
+      "expected_behavior": "When a diff view is closed, `workbench.action.terminal.focus` is executed to maintain focus on the active terminal.",
+      "verification_steps": [
+        "Add unit test mocking `vscode.commands.executeCommand` to assert that 'workbench.action.terminal.focus' is invoked upon closing a diff tab."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:44:33Z",
+  "execution_time_seconds": 36.3
+}

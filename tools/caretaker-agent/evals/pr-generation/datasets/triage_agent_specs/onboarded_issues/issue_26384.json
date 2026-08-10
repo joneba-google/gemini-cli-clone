@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 26384,
+  "title": "Too many open files in system error (126) and forkpty(3) failure during high-volume shell command execution.",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed bug report describing system file descriptor and process limit exhaustion ('Too many open files' Exit Code 126 and 'forkpty(3) failed') during high-volume shell command and sub-agent execution, along with complete environment and version information.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "Addressing pseudo-terminal (PTY) file descriptor leaks and process limit exhaustion during high-volume shell executions involves node-pty process lifecycle management, signal/stream cleanup, and process group handling in ShellExecutionService. According to the effort estimation guidelines, platform-specific issues involving node-pty, child_process.spawn, and pseudo-terminal exhaustion are classified as LARGE effort."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26384",
+    "summary": {
+      "problem": "High-volume shell command and sub-agent task execution exhausts system file descriptors and pseudo-terminals, resulting in Exit Code 126 ('Too many open files in system') and subsequent 'forkpty(3) failed' errors.",
+      "root_cause": "During rapid or high-volume shell tool executions, master/slave file descriptors from node-pty instances and write streams for background logs are not aggressively closed or garbage collected upon process completion or abortion, accumulating open descriptors until OS EMFILE/ENFILE limits are hit.",
+      "context": "Executing batch operations or parallel sub-agent workflows in large workspaces creates a heavy stream of shell tool invocations. Without strict cleanup and descriptor release in ShellExecutionService, the process reaches its open file descriptor limit."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/shellExecutionService.ts"
+      ],
+      "steps": [
+        "Ensure destroyPtyProcess and cleanupPtyEntry are called reliably on all exit, error, and abort paths in executeWithPty.",
+        "Ensure background log streams and file descriptors in backgroundLogStreams are promptly closed and removed when processes terminate or are cleaned up.",
+        "Add error handling for EMFILE/ENFILE errors during PTY spawning to gracefully fall back to child_process or surface actionable diagnostic error messages."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/shellExecutionService.test.ts",
+      "expected_behavior": "Executing high volumes of shell commands in rapid succession closes all associated file descriptors and PTY processes without triggering descriptor leaks or forkpty failures.",
+      "verification_steps": [
+        "Add a test in shellExecutionService.test.ts that executes a rapid sequence of shell commands using PTY execution.",
+        "Verify that activePtys, activeChildProcesses, and backgroundLogStreams are completely cleared and all streams closed after completion.",
+        "Verify that process aborts clean up PTY descriptors immediately without orphan leaks."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:42:20Z",
+  "execution_time_seconds": 84.53
+}

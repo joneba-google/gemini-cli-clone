@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 23433,
+  "title": "Vulnerability: HITL Bypass via UI Truncation (Vertical Newline Injection) in Command Confirmations",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed, actionable report of a Human-in-the-Loop bypass vulnerability caused by UI truncation with clear reproduction steps, expected vs actual behavior, and affected components.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to React/Ink UI components in `packages/cli` (`ToolConfirmationMessage` and `MaxSizedBox`), requiring linking truncation state to confirmation option visibility and adding corresponding unit test coverage."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#23433",
+    "summary": {
+      "problem": "Command execution confirmation prompts permit user approval even when command content is visually truncated by MaxSizedBox due to vertical newline injection, potentially hiding malicious payloads.",
+      "root_cause": "ToolConfirmationMessage does not check or react to whether its child MaxSizedBox component is currently visually truncating content, keeping 'Allow' options active even when critical parts of the command are hidden from view.",
+      "context": "An attacker or malicious prompt output can pad shell commands with vertical newlines to push malicious payloads out of the visible terminal viewport while leaving HITL confirmation options actionable."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/components/shared/MaxSizedBox.tsx",
+        "packages/cli/src/ui/components/messages/ToolConfirmationMessage.tsx"
+      ],
+      "steps": [
+        "Add an `onTruncatedChange` callback prop to `MaxSizedBox` to notify parent components when `totalHiddenLines > 0`.",
+        "In `ToolConfirmationMessage`, maintain state for whether the displayed content in `MaxSizedBox` is truncated.",
+        "When `isTruncated` is true, restrict or replace standard 'Allow' options with a safety message prompting the user to expand the view (e.g. with Ctrl+O) before confirmation can proceed."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/messages/ToolConfirmationMessage.test.tsx",
+      "expected_behavior": "When command text exceeds max height and is truncated in ToolConfirmationMessage, approval options are hidden or replaced with an expansion warning until the user expands the view.",
+      "verification_steps": [
+        "Render `ToolConfirmationMessage` with a padded multi-line command that exceeds available terminal height.",
+        "Verify that standard approval options ('Allow once', 'Allow for this session') are replaced with an expansion warning message.",
+        "Simulate expanding the view and verify that approval options become visible and selectable."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:45:47Z",
+  "execution_time_seconds": 177.22
+}

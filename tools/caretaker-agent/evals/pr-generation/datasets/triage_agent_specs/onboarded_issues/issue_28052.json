@@ -1,0 +1,39 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28052,
+  "title": "Bug: Trailing '.' in antigravity.google URL in error message causes link to not load",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear and actionable bug report describing a trailing period in an error message URL when Google sign-in fails. Reproduction steps, expected behavior, and environment details are all provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "This is a localized string formatting bug fix in a single utility function (getErrorMessage in packages/core/src/utils/errors.ts) requiring regex or string sanitization to strip trailing periods from URLs in error messages."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28052",
+    "summary": {
+      "problem": "Error messages containing URLs (e.g., https://antigravity.google.) retain sentence-ending trailing periods attached to the URL, rendering the link invalid and failing to load in web browsers.",
+      "root_cause": "When error messages ending in a URL use standard sentence punctuation (a period), the period is preserved as part of the URL string. getErrorMessage does not strip or sanitize trailing periods from URLs before returning error text.",
+      "context": "During Google authentication failures or tier deprecation notices, the CLI displays an error message referencing https://antigravity.google. with a trailing period."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/utils/errors.ts"],
+      "steps": [
+        "In packages/core/src/utils/errors.ts, update getErrorMessage to sanitize the error message string by removing trailing periods attached to URLs."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/errors.test.ts",
+      "expected_behavior": "getErrorMessage strips trailing periods from URLs in error messages so that links like https://antigravity.google. become valid URLs like https://antigravity.google.",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/utils/errors.test.ts testing getErrorMessage with an error message containing a URL ending in a period, verifying that the trailing period is removed from the URL."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:36:51Z",
+  "execution_time_seconds": 96.2
+}

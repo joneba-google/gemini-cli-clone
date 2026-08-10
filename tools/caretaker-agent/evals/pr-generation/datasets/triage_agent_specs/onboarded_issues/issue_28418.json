@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28418,
+  "title": "Security: $VAR/${VAR} variable expansion bypass in detectBashSubstitution and detectPowerShellSubstitution (GHSA-wpqr-6v78-jr5g)",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear, actionable security bug report regarding variable expansion ($VAR/${VAR}) bypassing command substitution detection functions in packages/core/src/utils/shell-utils.ts.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires updating the command substitution detection logic in a single file (packages/core/src/utils/shell-utils.ts) to handle variable expansion patterns ($VAR/${VAR}) and adding corresponding unit tests in packages/core/src/utils/shell-utils.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28418",
+    "summary": {
+      "problem": "The shell command detection functions detectBashSubstitution and detectPowerShellSubstitution in packages/core/src/utils/shell-utils.ts contain incomplete checks that allow variable expansion patterns ($VAR/${VAR}) to bypass security detection.",
+      "root_cause": "The detection logic in detectBashSubstitution and detectPowerShellSubstitution does not account for variable expansion syntaxes such as $VAR or ${VAR}, allowing command execution bypasses around security gates.",
+      "context": "This is a follow-up security issue related to GHSA-wpqr-6v78-jr5g, affecting both bash and PowerShell shell execution detection paths."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/utils/shell-utils.ts"],
+      "steps": [
+        "Inspect detectBashSubstitution in packages/core/src/utils/shell-utils.ts and enhance detection logic to handle $VAR and ${VAR} variable expansion patterns.",
+        "Inspect detectPowerShellSubstitution in packages/core/src/utils/shell-utils.ts and enhance detection logic for variable expansions on PowerShell commands.",
+        "Implement safe variable allowlisting or comprehensive detection checks to ensure variable expansion bypasses are prevented."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/shell-utils.test.ts",
+      "expected_behavior": "detectCommandSubstitution accurately identifies $VAR and ${VAR} variable expansion patterns in bash and PowerShell command strings and flags them appropriately.",
+      "verification_steps": [
+        "Add unit test cases in packages/core/src/utils/shell-utils.test.ts testing bash command inputs containing $VAR and ${VAR} expansions.",
+        "Add unit test cases testing PowerShell command inputs containing variable expansion patterns.",
+        "Run tests using Vitest to verify that all shell utility substitution tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:34:07Z",
+  "execution_time_seconds": 117.94
+}

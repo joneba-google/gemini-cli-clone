@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 19936,
+  "title": "Stuck in loop of verification",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes an actionable defect where completing the browser account verification flow and pressing Enter in the CLI results in an endless verification prompt loop.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The root cause is localized to stale OAuth credentials/tokens not being refreshed before retrying the API request after user verification completes. Updating the verification retry handling in setup.ts and retry.ts to refresh tokens is a straightforward fix."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#19936",
+    "summary": {
+      "problem": "Users become trapped in an endless verification prompt loop when attempting to verify their Pro account.",
+      "root_cause": "When account validation is completed in the browser and the validation handler returns intent 'verify', the retry loop re-executes the API call using the old cached OAuth access token without refreshing credentials. Consequently, the backend continues to return ValidationRequiredError on every retry attempt.",
+      "context": "403 VALIDATION_REQUIRED errors trigger the validation handler in packages/core/src/code_assist/setup.ts and packages/core/src/utils/retry.ts, which prompts the user in the CLI via ValidationDialog.tsx."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/code_assist/setup.ts",
+        "packages/core/src/utils/retry.ts"
+      ],
+      "steps": [
+        "In packages/core/src/code_assist/setup.ts, update the retry branch when validationHandler returns 'verify' to refresh or clear cached OAuth access tokens on the AuthClient before re-calling loadCodeAssist.",
+        "In packages/core/src/utils/retry.ts, update the onValidationRequired logic when intent === 'verify' to force a refresh of the authentication token prior to retrying the request."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/code_assist/setup.test.ts",
+      "expected_behavior": "When account validation is required and user confirmation ('verify') is received, the client refreshes its authentication token and successfully completes subsequent requests without re-triggering the validation prompt.",
+      "verification_steps": [
+        "Add a unit test in setup.test.ts mocking a ValidationRequiredError followed by a 'verify' intent response from validationHandler.",
+        "Verify that credential/token refresh is called before making the subsequent loadCodeAssist API call.",
+        "Verify that the retry loop terminates successfully once valid credentials are provided."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:47:16Z",
+  "execution_time_seconds": 99.62
+}

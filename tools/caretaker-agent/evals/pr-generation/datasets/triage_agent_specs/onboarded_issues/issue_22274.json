@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 22274,
+  "title": "Bug: image paste fails in WSL2 when clipboard exposes image/bmp and XDG_SESSION_TYPE is unset",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed and actionable bug report regarding image paste failure under WSL2 Ubuntu. It includes complete system environment context, steps to reproduce, root cause analysis (XDG_SESSION_TYPE being unset and clipboard exposing image/bmp), and verification details.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Addressing this issue requires modifying Linux display server detection fallbacks (handling WAYLAND_DISPLAY and DISPLAY when XDG_SESSION_TYPE is unset) and supporting image/bmp MIME type retrieval in clipboardUtils.ts. Per the effort guidelines, platform-specific bugs requiring cross-environment setup (Linux clipboard/WSL2) must be rated as MEDIUM rather than SMALL."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#22274",
+    "summary": {
+      "problem": "Image pasting via Alt+V fails in WSL2 environments when XDG_SESSION_TYPE is unset and the clipboard exposes image/bmp.",
+      "root_cause": "getUserLinuxClipboardTool in clipboardUtils.ts relies exclusively on process.env['XDG_SESSION_TYPE'] to select between wl-paste and xclip, failing when XDG_SESSION_TYPE is missing. Additionally, saveFileWithWlPaste and saveFileWithXclip hardcode request for image/png MIME type, failing when the clipboard only offers image/bmp.",
+      "context": "In WSL2 Ubuntu on Windows hosts, XDG_SESSION_TYPE is commonly unset while WAYLAND_DISPLAY or DISPLAY is set. When copying images on Windows, the Linux clipboard bridge presents image data as image/bmp rather than image/png."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/utils/clipboardUtils.ts"],
+      "steps": [
+        "In packages/cli/src/ui/utils/clipboardUtils.ts, update getUserLinuxClipboardTool to check process.env['WAYLAND_DISPLAY'] and process.env['DISPLAY'] as fallback environment variables when process.env['XDG_SESSION_TYPE'] is unset.",
+        "Update saveFileWithWlPaste and saveFileWithXclip in packages/cli/src/ui/utils/clipboardUtils.ts to support image/bmp alongside image/png when querying/saving clipboard content.",
+        "Add .bmp to IMAGE_EXTENSIONS in packages/cli/src/ui/utils/clipboardUtils.ts so that saved BMP clipboard images are properly recognized and cleaned up."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/utils/clipboardUtils.test.ts",
+      "expected_behavior": "Clipboard image detection and saving succeeds in WSL2 environments where XDG_SESSION_TYPE is unset but WAYLAND_DISPLAY or DISPLAY is present, and correctly handles image/bmp clipboard formats.",
+      "verification_steps": [
+        "Add test cases in clipboardUtils.test.ts verifying getUserLinuxClipboardTool detects wl-paste when XDG_SESSION_TYPE is unset but WAYLAND_DISPLAY is set.",
+        "Add test cases in clipboardUtils.test.ts verifying getUserLinuxClipboardTool detects xclip when XDG_SESSION_TYPE is unset but DISPLAY is set.",
+        "Add test cases in clipboardUtils.test.ts verifying saveClipboardImage succeeds when clipboard content is provided as image/bmp."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:44:45Z",
+  "execution_time_seconds": 51.86
+}

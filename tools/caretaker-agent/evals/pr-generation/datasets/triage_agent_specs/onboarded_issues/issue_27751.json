@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27751,
+  "title": "Improve shell guidance for Windows hosts",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear, actionable bug report requesting platform-aware shell guidance in system prompts on Windows hosts, preferring commands like findstr, Get-Content -Tail, and Select-String.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The change involves updating prompt generation options and templates in packages/core/src/prompts/snippets.ts and packages/core/src/prompts/promptProvider.ts to conditionally format Windows-specific commands, alongside updating unit tests in packages/core/src/core/prompts.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27751",
+    "summary": {
+      "problem": "System prompt shell-efficiency guidance is not platform-aware for Windows hosts, leading agents to suggest Unix-centric commands instead of Windows-native alternatives.",
+      "root_cause": "In packages/core/src/prompts/snippets.ts, OperationalGuidelinesOptions and renderOperationalGuidelines lack platform-specific shell efficiency instructions for process.platform === 'win32'.",
+      "context": "Related to PR #27603. Inspecting large command output on Windows should prefer targeted Windows/PowerShell commands such as findstr, Get-Content -Tail, and Select-String over full-output dumps or Unix tools."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/prompts/snippets.ts",
+        "packages/core/src/prompts/promptProvider.ts"
+      ],
+      "steps": [
+        "Update OperationalGuidelinesOptions in packages/core/src/prompts/snippets.ts to include enableShellEfficiency?: boolean.",
+        "In packages/core/src/prompts/snippets.ts, update renderOperationalGuidelines to include shell efficiency guidelines when enabled.",
+        "Condition the shell efficiency command examples on process.platform === 'win32' to recommend findstr, Get-Content -Tail, and Select-String on Windows hosts.",
+        "Ensure packages/core/src/prompts/promptProvider.ts correctly passes enableShellEfficiency into operationalGuidelines options in getCoreSystemPrompt."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/core/prompts.test.ts",
+      "expected_behavior": "System prompt generation on win32 includes recommendations for findstr, Get-Content -Tail, and Select-String, while non-Windows platforms receive Unix shell guidance.",
+      "verification_steps": [
+        "Run unit tests using Vitest in packages/core/src/core/prompts.test.ts.",
+        "Verify that mocking process.platform to win32 includes findstr, Get-Content -Tail, and Select-String in the operational guidelines prompt.",
+        "Verify that non-Windows platform execution renders standard Unix command guidance."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:28Z",
+  "execution_time_seconds": 84.24
+}

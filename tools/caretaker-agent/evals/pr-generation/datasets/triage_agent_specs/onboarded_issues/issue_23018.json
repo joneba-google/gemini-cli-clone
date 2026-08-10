@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 23018,
+  "title": "ACP: Execute tool call title field contains conversational text.",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides clear reproduction steps, actual vs expected behavior, and ACP transport logs demonstrating that conversational text or raw JSON stringification is placed into the toolCall.title field when executing terminal commands via ACP in JetBrains IDE.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The fix spans packages/cli (acpSession.ts) and packages/core (mcp-tool.ts) to properly separate raw executable command strings for ACP tool call titles from conversational explanations in content blocks, and requires validating IDE integration expectations."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#23018",
+    "summary": {
+      "problem": "The ACP `session/request_permission` payload's `toolCall.title` field contains conversational text or raw JSON objects mixed with terminal commands, breaking syntax highlighting in JetBrains IDE.",
+      "root_cause": "`acpSession.ts` and `DiscoveredMCPToolInvocation` fall back to `getDescription()` or include raw JSON/conversational text in `title` rather than isolating strictly the raw executable command string for `title` and placing explanations into `content`.",
+      "context": "JetBrains IDE relies on `toolCall.title` containing strictly raw shell command strings (e.g. `./gradlew build` or `date`) to apply terminal syntax highlighting during user permission prompts."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/tools/mcp-tool.ts",
+        "packages/cli/src/acp/acpSession.ts"
+      ],
+      "steps": [
+        "In `packages/core/src/tools/mcp-tool.ts`, update `DiscoveredMCPToolInvocation.getDisplayTitle()` to strictly return the raw command string when present in tool parameters, and ensure fallbacks do not return raw stringified JSON objects.",
+        "In `packages/cli/src/acp/acpSession.ts`, ensure `toolCall.title` receives the clean raw command string from `invocation.getDisplayTitle()` while any conversational text or explanation is routed into `toolCall.content`."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/acp/acpSession.test.ts",
+      "expected_behavior": "When requesting execution permissions over ACP, `toolCall.title` strictly contains only the raw executable command string, and explanations are stored in `toolCall.content`.",
+      "verification_steps": [
+        "Add a unit test in `packages/cli/src/acp/acpSession.test.ts` for ACP `requestPermission` calls verifying that `toolCall.title` equals the raw executable command without conversational text or JSON strings.",
+        "Run `vitest packages/cli/src/acp/acpSession.test.ts` to confirm test execution succeeds."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:44:34Z",
+  "execution_time_seconds": 71.66
+}

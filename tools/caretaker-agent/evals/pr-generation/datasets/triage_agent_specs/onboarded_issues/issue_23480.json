@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 23480,
+  "title": "Bug: Background git fetch for private extensions hijacks stdin, causing terminal freeze",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear, actionable bug report detailing steps to reproduce, expected vs actual behavior, and environment information regarding background git operations hijacking terminal stdin.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is localized to setting GIT_TERMINAL_PROMPT: '0' in the environment configuration for simpleGit within packages/cli/src/config/extensions/github.ts to prevent background git operations from prompting on stdin during credential authentication. This requires minor code changes and a unit test update."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#23480",
+    "summary": {
+      "problem": "Background git operations (such as git fetch and git list-remote) executed for private extensions attempt interactive authentication via terminal stdin, hanging the background process and hijacking terminal stdin from the user.",
+      "root_cause": "In packages/cli/src/config/extensions/github.ts, simpleGit instances initialized for git operations do not configure environment variables like GIT_TERMINAL_PROMPT=0. As a result, git prompts for credentials on standard input when interacting with private repositories.",
+      "context": "When gemini-cli checks for extension updates or clones repositories, simpleGit spawns background git processes. Setting GIT_TERMINAL_PROMPT: '0' in simpleGit's environment ensures git operations fail non-interactively if authentication fails, preventing stdin hijacking."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/config/extensions/github.ts"],
+      "steps": [
+        "In packages/cli/src/config/extensions/github.ts, configure simpleGit instances in cloneFromGit and checkForExtensionUpdate to pass environment variables containing GIT_TERMINAL_PROMPT: '0'.",
+        "Ensure simpleGit options/env merge with process.env while overriding GIT_TERMINAL_PROMPT to '0' so background git commands operate non-interactively."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/config/extensions/github.test.ts",
+      "expected_behavior": "Background git commands configured via simpleGit include GIT_TERMINAL_PROMPT: '0' in their environment and fail gracefully without requesting credentials on stdin when attempting to fetch or clone private repositories.",
+      "verification_steps": [
+        "Update existing unit tests in packages/cli/src/config/extensions/github.test.ts to verify that simpleGit is initialized with environment options setting GIT_TERMINAL_PROMPT: '0'.",
+        "Run vitest on packages/cli/src/config/extensions/github.test.ts to confirm all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:50Z",
+  "execution_time_seconds": 64.73
+}

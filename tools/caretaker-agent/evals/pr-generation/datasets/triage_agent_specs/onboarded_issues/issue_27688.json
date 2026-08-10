@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27688,
+  "title": "Unable to use gemini-3.5-flash via VertexAI after v0.45.1",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear report of a regression in v0.45.1 where using gemini-3.5-flash with Vertex AI authentication fails. Sufficient environment and reproduction details are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix is a localized logic update in packages/core/src/config/config.ts to ensure Vertex AI authentication maps gemini-3.5-flash to SECONDARY_GEMINI_3_5_FLASH_MODEL ('gemini-3-flash') in hasGemini35FlashGAAccess()."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27688",
+    "summary": {
+      "problem": "Using model gemini-3.5-flash via Vertex AI auth method fails after v0.45.1.",
+      "root_cause": "In hasGemini35FlashGAAccess() within packages/core/src/config/config.ts, authType is checked for USE_GEMINI, but non-GEMINI auth types fall back to setting flash models to 'gemini-3.5-flash'. Vertex AI backends require 'gemini-3-flash' (SECONDARY_GEMINI_3_5_FLASH_MODEL) instead of 'gemini-3.5-flash'.",
+      "context": "Vertex AI backend endpoints do not expect the string 'gemini-3.5-flash' and instead expect 'gemini-3-flash' as represented by SECONDARY_GEMINI_3_5_FLASH_MODEL."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/config/config.ts"],
+      "steps": [
+        "Import SECONDARY_GEMINI_3_5_FLASH_MODEL from ./models.js in packages/core/src/config/config.ts.",
+        "In hasGemini35FlashGAAccess(), add a branch for authType === AuthType.USE_VERTEX_AI to call setFlashModels(SECONDARY_GEMINI_3_5_FLASH_MODEL, SECONDARY_GEMINI_3_5_FLASH_MODEL) when hasAccess is true."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/config/config.test.ts",
+      "expected_behavior": "When hasGemini35FlashGAAccess() is called with authType === AuthType.USE_VERTEX_AI, DEFAULT_GEMINI_FLASH_MODEL and PREVIEW_GEMINI_FLASH_MODEL are set to SECONDARY_GEMINI_3_5_FLASH_MODEL ('gemini-3-flash').",
+      "verification_steps": [
+        "Add a unit test in packages/core/src/config/config.test.ts verifying that when authType is AuthType.USE_VERTEX_AI and hasGemini35FlashGAAccess() returns true, DEFAULT_GEMINI_FLASH_MODEL and PREVIEW_GEMINI_FLASH_MODEL are set to 'gemini-3-flash'."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:39:28Z",
+  "execution_time_seconds": 87.47
+}

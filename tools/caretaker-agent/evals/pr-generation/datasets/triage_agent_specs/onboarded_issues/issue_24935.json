@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 24935,
+  "title": "Corruption after exiting external editors in terminalBuffer mode",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly reports terminal screen corruption upon exiting an external editor while in terminalBuffer mode and identifies the technical need to force a full screen refresh on the Ink side.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue requires a localized fix in packages/cli/src/ui/AppContainer.tsx by updating handleEditorClose to call app.rerender() when terminalBuffer mode (config.getUseTerminalBuffer()) is enabled."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#24935",
+    "summary": {
+      "problem": "Terminal screen corruption occurs after exiting an external editor when operating in terminalBuffer mode.",
+      "root_cause": "In packages/cli/src/ui/AppContainer.tsx, handleEditorClose handles CoreEvent.ExternalEditorClosed but only calls app.rerender() when shouldUseAlternateScreen is true. In terminalBuffer mode (config.getUseTerminalBuffer()), shouldUseAlternateScreen is false and refreshStatic() does nothing, leaving Ink without a trigger to perform a full screen refresh after returning from the external editor.",
+      "context": "External editors take over terminal standard I/O and leave raw screen artifacts upon closing. Ink needs to re-render the view buffer when the editor closes."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/AppContainer.tsx"],
+      "steps": [
+        "Open packages/cli/src/ui/AppContainer.tsx and locate handleEditorClose.",
+        "Update handleEditorClose to call app.rerender() when config.getUseTerminalBuffer() returns true.",
+        "Ensure config is added to the useCallback dependency array for handleEditorClose."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/AppContainer.test.tsx",
+      "expected_behavior": "When CoreEvent.ExternalEditorClosed fires while running in terminalBuffer mode, Ink's app.rerender() is invoked to refresh the screen.",
+      "verification_steps": [
+        "Add a unit test in packages/cli/src/ui/AppContainer.test.tsx where config.getUseTerminalBuffer() is mocked to return true.",
+        "Emit CoreEvent.ExternalEditorClosed and assert that app.rerender() was called."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:13Z",
+  "execution_time_seconds": 60.11
+}

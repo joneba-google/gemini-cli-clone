@@ -1,0 +1,44 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 21331,
+  "title": "IDE companion extension fails to connect with gVisor (runsc) sandbox",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a specific problem when using the VSCode IDE companion extension with gVisor (runsc) sandboxing, identifies the underlying communication root cause (HTTP over TCP restrictions in gVisor), and provides actionable steps for resolution and documentation.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Resolving IDE companion connectivity under gVisor (runsc) sandboxing involves cross-environment testing and debugging transport mechanisms between the IDE extension and containerized CLI processes."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#21331",
+    "summary": {
+      "problem": "The VSCode IDE companion extension fails to connect when using GEMINI_SANDBOX=runsc (gVisor), preventing IDE integration features from functioning.",
+      "root_cause": "The IDE companion relies on HTTP over TCP for communication between the sandbox container and host VSCode instance, which is restricted by gVisor process isolation.",
+      "context": "gVisor isolation limits host TCP network access. Sandbox capabilities and connection settings must be properly handled and documented in the sandbox documentation."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "docs/cli/sandbox.md",
+        "packages/cli/src/utils/sandbox.ts"
+      ],
+      "steps": [
+        "Update docs/cli/sandbox.md to document sandbox capabilities and IDE companion limitations when running under gVisor (runsc).",
+        "Update packages/cli/src/utils/sandbox.ts to ensure container invocation arguments under runsc properly handle host network resolution."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/utils/sandbox.test.ts",
+      "expected_behavior": "gVisor sandbox options are configured correctly and sandbox capabilities are clearly documented.",
+      "verification_steps": [
+        "Run Vitest suite on packages/cli/src/utils/sandbox.test.ts to verify sandbox startup argument generation for runsc.",
+        "Execute npm test on packages/cli to ensure no regressions in sandbox configuration."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:46:31Z",
+  "execution_time_seconds": 68.25
+}

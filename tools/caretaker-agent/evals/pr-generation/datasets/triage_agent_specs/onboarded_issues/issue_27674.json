@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27674,
+  "title": "Files and folders specified in .gitignore are passed to session_context",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a clear and actionable bug report regarding gitignored files and directories being passed into session_context. Sufficient context and environment details are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix involves a localized change in packages/core/src/utils/getFolderStructure.ts to ensure directories ignored by .gitignore / fileService are omitted rather than formatted as ignored stubs, along with updating test assertions in packages/core/src/utils/getFolderStructure.test.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27674",
+    "summary": {
+      "problem": "Directories specified in .gitignore are included in the session_context directory structure representation with a '...' suffix rather than being completely omitted.",
+      "root_cause": "In getFolderStructure.ts, readFullStructure checks fileService.shouldIgnoreDirectory for subdirectories. When a directory is flagged as ignored, it creates an ignoredSubFolder entry with isIgnored: true and includes it in subFoldersInCurrentDir, causing gitignored folders to appear in the directory context string.",
+      "context": "The directory structure in session_context is generated via getDirectoryContextString in environmentContext.ts, which calls getFolderStructure. While ignored files are filtered out, ignored directories are formatted as folderName/..."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/utils/getFolderStructure.ts"],
+      "steps": [
+        "Update readFullStructure in packages/core/src/utils/getFolderStructure.ts when processing subdirectories.",
+        "Differentiate between default explicitly ignored folders and directories ignored via fileService (.gitignore / .geminiignore).",
+        "Completely skip and omit subdirectories ignored by fileService from subFoldersInCurrentDir rather than adding them with isIgnored: true."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/utils/getFolderStructure.test.ts",
+      "expected_behavior": "Directories ignored by .gitignore or .geminiignore will be completely excluded from the formatted directory structure in getFolderStructure and session_context.",
+      "verification_steps": [
+        "Update unit tests in packages/core/src/utils/getFolderStructure.test.ts to verify that directories listed in .gitignore are omitted from the directory structure output.",
+        "Run Vitest tests for getFolderStructure to ensure all tests pass cleanly."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:39:03Z",
+  "execution_time_seconds": 58.98
+}

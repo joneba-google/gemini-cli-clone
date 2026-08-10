@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 26140,
+  "title": "Link in /auth instructions is broken",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a valid and actionable bug report detailing a broken documentation anchor link in the CLI authentication error message.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Updating the documentation link anchor in `packages/core/src/code_assist/setup.ts` and updating corresponding unit test assertions is a localized string fix requiring minimal effort."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#26140",
+    "summary": {
+      "problem": "The documentation link anchor '#workspace-gca' in the error message for ProjectIdRequiredError results in a 404 / broken link anchor on redirection.",
+      "root_cause": "The documentation anchor for setting up a Google Cloud project in 'docs/get-started/authentication.mdx' is '#set-gcp', but 'ProjectIdRequiredError' in 'packages/core/src/code_assist/setup.ts' still references the outdated '#workspace-gca' anchor.",
+      "context": "When users authenticate with a Workspace account or Gemini Code Assist license without setting GOOGLE_CLOUD_PROJECT, the CLI directs them to 'https://goo.gle/gemini-cli-auth-docs#workspace-gca'."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/code_assist/setup.ts",
+        "docs/get-started/authentication.mdx"
+      ],
+      "steps": [
+        "In 'packages/core/src/code_assist/setup.ts', update the error message in ProjectIdRequiredError to reference 'https://goo.gle/gemini-cli-auth-docs#set-gcp' or add 'workspace-gca' as an HTML anchor alias in 'docs/get-started/authentication.mdx'.",
+        "Verify that error strings and documentation anchors align on '#set-gcp'."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/core/auth.test.ts",
+      "expected_behavior": "ProjectIdRequiredError outputs the correct documentation URL anchor, and tests assert against the updated error message.",
+      "verification_steps": [
+        "Update the expected error message string in 'packages/cli/src/core/auth.test.ts' to match the updated URL anchor.",
+        "Update the expected error message string in 'packages/cli/src/ui/auth/useAuth.test.tsx' to match the updated URL anchor.",
+        "Run Vitest on the affected test files to confirm all tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:41Z",
+  "execution_time_seconds": 41.79
+}

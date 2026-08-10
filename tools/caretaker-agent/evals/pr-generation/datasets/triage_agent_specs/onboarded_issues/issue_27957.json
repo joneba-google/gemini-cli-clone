@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27957,
+  "title": "Checkout git branch not reflected in CLI UI",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue report provides a clear, actionable bug report describing how git checkout commands in WSL or Gemini CLI do not update the Branch UI textbox, along with environment and client version details.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The bug involves React/Ink state synchronization driven by platform-specific filesystem event watching (WSL / Linux fs.watch on git metadata files). Verifying and testing filesystem watcher behaviors across OS environments requires medium effort."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27957",
+    "summary": {
+      "problem": "Executing git checkout in WSL or via Gemini CLI shell commands does not update the Branch UI textbox in the CLI UI.",
+      "root_cause": "The useGitBranchName hook watches the .git directory using fs.watch and strictly checks if filename === 'HEAD'. On WSL and Linux platforms during git checkout, git creates and renames HEAD.lock, resulting in fs.watch events with filenames such as HEAD.lock, which fail the strict string check and prevent fetchBranchName from re-fetching the current branch name.",
+      "context": "The useGitBranchName custom React hook monitors the repository git directory using Node.js fs.watch to update the displayed branch dynamically. Strictly matching filename === 'HEAD' misses lock file operations and OS-specific watcher event payloads."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/cli/src/ui/hooks/useGitBranchName.ts"],
+      "steps": [
+        "In packages/cli/src/ui/hooks/useGitBranchName.ts, update the fs.watch event handler check to accept filenames that include or start with 'HEAD' (e.g. checking !filename || filename.includes('HEAD') || filename.startsWith('HEAD')).",
+        "Ensure the debounced fetchBranchName function call is properly scheduled whenever a HEAD or HEAD lock file change event is received."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/hooks/useGitBranchName.test.tsx",
+      "expected_behavior": "The Branch UI textbox updates to reflect the new git branch name after a checkout, even when fs.watch emits filenames like 'HEAD.lock'.",
+      "verification_steps": [
+        "Add unit test cases in packages/cli/src/ui/hooks/useGitBranchName.test.tsx that trigger the watchCallback with filenames like 'HEAD.lock'.",
+        "Verify that fetchBranchName is executed and the branch name state is updated accordingly."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:37:22Z",
+  "execution_time_seconds": 68.69
+}

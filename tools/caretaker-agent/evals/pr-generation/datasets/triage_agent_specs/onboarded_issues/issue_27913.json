@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27913,
+  "title": "ACP `session/load` resolves but does not restore conversation memory (advertises `loadSession: true`)",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a detailed, actionable bug report regarding ACP session/load failing to rehydrate conversation memory and stream full session updates. It includes clear steps to reproduce, version information, expected vs actual behavior, and evidence indicating where in the flow the problem occurs.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "The fix requires addressing session rehydration and conversation history restoration in ACP mode, coordinating across packages/cli/src/acp (acpSessionManager.ts, acpSession.ts) and packages/core (GeminiClient, GeminiChat). Handling asynchronous history streaming and model chat context sync across package boundaries falls under MEDIUM effort."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27913",
+    "summary": {
+      "problem": "Calling ACP session/load in gemini --acp resolves but fails to rehydrate the previous conversation memory into the Gemini model context, streaming back only a single message chunk instead of full conversation turns.",
+      "root_cause": "During ACP session loading in AcpSessionManager.loadSession, when convertSessionToClientHistory processes persisted conversation records, history conversion or chat session initialization in GeminiClient does not properly synchronize the converted prior turns with the active GeminiChat instance and session update stream.",
+      "context": "ACP protocol requires agents to replay the full conversation history via session/update notifications when loadSession is invoked and to restore model context so subsequent prompts retain prior memory."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/acp/acpSessionManager.ts",
+        "packages/cli/src/acp/acpSession.ts"
+      ],
+      "steps": [
+        "In AcpSessionManager.loadSession, ensure convertSessionToClientHistory accurately converts all recorded user turns, model thoughts, text responses, and tool calls into client history turns.",
+        "In AcpSessionManager.loadSession, verify that geminiClient.resumeChat receives the fully populated history and attaches it to the active GeminiChat session instance.",
+        "In Session.streamHistory, update the stream loop to correctly stream all user messages, agent thoughts, agent response chunks, and completed/failed tool calls as sessionUpdate events to the ACP client.",
+        "Ensure that when subsequent prompt calls occur on a loaded session, GeminiClient retrieves and sends the rehydrated conversation history to the model."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/acp/acpResume.test.ts",
+      "expected_behavior": "Calling loadSession in ACP mode replays all past conversation turns (user chunks, thoughts, agent text, tool calls) via sessionUpdate notifications and restores prior conversation context in the underlying Gemini model so follow-up prompts retain memory.",
+      "verification_steps": [
+        "In packages/cli/src/acp/acpResume.test.ts, load an existing session containing user messages, model thoughts, text chunks, and tool calls.",
+        "Verify that all sessionUpdate events (user_message_chunk, agent_thought_chunk, agent_message_chunk, and tool_call) are emitted via the connection.",
+        "Issue a follow-up prompt to the loaded session and assert that the prior conversation context is included in the request sent to the model."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:01Z",
+  "execution_time_seconds": 94.46
+}

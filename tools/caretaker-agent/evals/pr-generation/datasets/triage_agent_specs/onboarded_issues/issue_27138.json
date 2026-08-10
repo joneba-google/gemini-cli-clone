@@ -1,0 +1,42 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27138,
+  "title": "Bug: OAuth Not Authorized  Error during  Sign in with Google\" (v0.42.0)",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue is a valid, actionable bug report detailing an OAuth authorization failure during Google sign-in with full reproduction steps, environment details, CLI version, and exact error messages.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "Investigating and handling OAuth web login flow failures, token exchange errors, and proxy/network edge cases in packages/core/src/code_assist/oauth2.ts requires asynchronous flow debugging and error handling across authentication modules."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27138",
+    "summary": {
+      "problem": "Sign in with Google fails during OAuth authentication in gemini-cli v0.42.0 with an 'OAuth Not Authorized' error in the browser and token exchange failure in the terminal.",
+      "root_cause": "The OAuth callback server in `oauth2.ts` encounters an error when exchanging the authorization code for tokens via `client.getToken`, or receiving an authorization error response from Google's OAuth consent server.",
+      "context": "The user reported a clean installation of gemini-cli v0.42.0 where selecting '1. Sign in with Google' resulted in a browser OAuth authorization error and subsequent token exchange failure in the terminal session."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/code_assist/oauth2.ts"],
+      "steps": [
+        "Inspect `authWithWeb` and `authWithUserCode` in `packages/core/src/code_assist/oauth2.ts` to identify where token exchange or OAuth server callback handling fails.",
+        "Enhance error handling and logging during `client.getToken` calls to handle network redirects or unauthorized application responses gracefully.",
+        "Ensure appropriate `FatalAuthenticationError` exceptions are thrown with detailed, actionable error messages when OAuth authentication fails."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/code_assist/oauth2.test.ts",
+      "expected_behavior": "OAuth web authentication flow handles token exchange failures cleanly and throws a descriptive `FatalAuthenticationError` without crashing or hanging the session.",
+      "verification_steps": [
+        "Add unit tests in `packages/core/src/code_assist/oauth2.test.ts` simulating a failed `client.getToken` exchange during web OAuth callback.",
+        "Verify that `getOauthClient` rejects with `FatalAuthenticationError` containing the expected failure message."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:41:04Z",
+  "execution_time_seconds": 53.49
+}

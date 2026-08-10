@@ -119,19 +119,38 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
     """Worker process function executing a single evaluation test case."""
     file_path, doc_dict, run_dir, max_attempts, keep_env = args_tuple
 
+    import warnings
+    warnings.filterwarnings("ignore")
+
+    devnull = open(os.devnull, "w")
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    sys.stdout = devnull
+    sys.stderr = devnull
+
     file_base = os.path.splitext(os.path.basename(file_path))[0]
     github_meta = doc_dict.get("github_metadata", {})
     issue_num = github_meta.get("issue_number") or doc_dict.get("issue_number", "0")
     test_id = file_base if str(issue_num) in file_base else f"{file_base}_{issue_num}"
 
     VALID_QUALITIES = {"OK", "FEATURE", "NEEDS_INFO", "SPAM_EMPTY"}
-    expected_quality = doc_dict.get("expected_quality", "OK")
+    raw_quality = doc_dict.get("expected_quality")
     workable_spec = doc_dict.get("workable_spec")
 
-    # If issue quality is not OK ("FEATURE", "NEEDS_INFO", "SPAM_EMPTY") or workable_spec is missing/empty, skip PR generation and mark as PASS
-    if expected_quality != "OK" or not workable_spec:
-        quality_label = expected_quality if expected_quality in VALID_QUALITIES else (expected_quality or "UNKNOWN")
-        print(f"[EVAL] Skipping PR generation for test case {test_id} (Quality: {quality_label})")
+    if raw_quality in VALID_QUALITIES:
+        quality_label = raw_quality
+    elif raw_quality:
+        quality_label = str(raw_quality)
+    elif not workable_spec:
+        quality_label = "NO_SPEC"
+    else:
+        quality_label = "OK"
+
+    # If issue quality is not OK ("FEATURE", "NEEDS_INFO", "SPAM_EMPTY", "NO_SPEC") or workable_spec is missing/empty, skip PR generation and mark as PASS
+    if quality_label != "OK" or not workable_spec:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        devnull.close()
         return {
             "success": True,
             "status": "SKIPPED_NON_OK",
@@ -181,11 +200,6 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
     fh = logging.FileHandler(log_file_txt, mode="w", encoding="utf-8")
     fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
     logger.addHandler(fh)
-
-    sh = logging.StreamHandler(sys.stdout)
-    sh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-    sh.addFilter(TestProgressFilter())
-    logger.addHandler(sh)
 
     logger.info("Starting local evaluation for test case: %s", test_id)
 
@@ -250,10 +264,12 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
                 logger.warning("Failed to clean up env dir %s: %s", env_dir, err)
 
         # Remove and close logging handlers cleanly
-        logger.removeHandler(sh)
         logger.removeHandler(fh)
-        sh.close()
         fh.close()
+
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        devnull.close()
 
     return result
 
@@ -281,27 +297,92 @@ def main():
         print(f"Error: No valid test message JSON files found at '{args.input_path}'.")
         sys.exit(1)
 
+    total_count = len(test_files)
     print("==========================================================")
     print(f" Starting Local Evaluation Suite Run: {args.run_name}")
     print(f" Input Target:  {args.input_path}")
-    print(f" Test Cases:    {len(test_files)}")
+    print(f" Test Cases:    {total_count}")
     print(f" Max Workers:   {args.max_workers}")
     print(f" Output Folder: {run_dir}")
     print("==========================================================\n")
 
+    print(f"Test cases starting ({total_count} total)...\n")
+
     start_time = time.time()
-    results = []
+    results_map = {}
+    completed_count = 0
+    passed_count = 0
+    failed_count = 0
 
     tasks = [
         (file_path, doc_dict, run_dir, args.max_attempts, args.keep_env)
         for file_path, doc_dict in test_files
     ]
 
+    from concurrent.futures import as_completed, ProcessPoolExecutor
+
     if args.max_workers > 1:
         with ProcessPoolExecutor(max_workers=args.max_workers) as executor:
-            results = list(executor.map(run_single_test, tasks, chunksize=1))
+            future_to_test = {
+                executor.submit(run_single_test, t): t
+                for t in tasks
+            }
+            for future in as_completed(future_to_test):
+                completed_count += 1
+                res = future.result()
+                results_map[res["test_id"]] = res
+
+                is_success = res.get("success", False)
+                if is_success:
+                    passed_count += 1
+                else:
+                    failed_count += 1
+
+                test_id = res.get("test_id", "unknown")
+                if res.get("status") == "SKIPPED_NON_OK":
+                    status_str = f"SKIPPED ({res.get('expected_quality', 'NON_OK')})"
+                elif is_success:
+                    status_str = "PASSED"
+                else:
+                    status_str = f"FAILED ({res.get('status', 'FAILED')})"
+
+                print(
+                    f"Completed {test_id}: {status_str} | "
+                    f"Completed: {completed_count}/{total_count} (Passed: {passed_count}, Failed: {failed_count})"
+                )
     else:
-        results = [run_single_test(t) for t in tasks]
+        for t in tasks:
+            res = run_single_test(t)
+            completed_count += 1
+            results_map[res["test_id"]] = res
+
+            is_success = res.get("success", False)
+            if is_success:
+                passed_count += 1
+            else:
+                failed_count += 1
+
+            test_id = res.get("test_id", "unknown")
+            if res.get("status") == "SKIPPED_NON_OK":
+                status_str = f"SKIPPED ({res.get('expected_quality', 'NON_OK')})"
+            elif is_success:
+                status_str = "PASSED"
+            else:
+                status_str = f"FAILED ({res.get('status', 'FAILED')})"
+
+            print(
+                f"Completed {test_id}: {status_str} | "
+                f"Completed: {completed_count}/{total_count} (Passed: {passed_count}, Failed: {failed_count})"
+            )
+
+    results = []
+    for file_path, doc_dict in test_files:
+        file_base = os.path.splitext(os.path.basename(file_path))[0]
+        github_meta = doc_dict.get("github_metadata", {})
+        issue_num = github_meta.get("issue_number") or doc_dict.get("issue_number", "0")
+        test_id = file_base if str(issue_num) in file_base else f"{file_base}_{issue_num}"
+        if test_id in results_map:
+            results.append(results_map[test_id])
 
     elapsed = time.time() - start_time
     passed_count = sum(1 for r in results if r.get("success"))

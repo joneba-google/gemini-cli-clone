@@ -1,0 +1,41 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28649,
+  "title": "bug: malformed SDK tool arguments abort sendStream",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue describes a systemic defect in `packages/sdk/src/session.ts` where unhandled `JSON.parse` exceptions on malformed tool call arguments abort the SDK stream. Reproduction steps and exact source locations are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix involves adding safe parsing and object validation for tool call arguments in `packages/sdk/src/session.ts` along with adding unit test coverage in `packages/sdk/src/session.test.ts`."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28649",
+    "summary": {
+      "problem": "The SDK agent loop performs an unguarded `JSON.parse()` on string-valued tool arguments in `packages/sdk/src/session.ts`. When a model generates malformed JSON arguments, the `sendStream()` generator throws an unhandled `SyntaxError` and aborts the session.",
+      "root_cause": "`GeminiCliSession.sendStream()` directly calls `JSON.parse(args)` when `typeof args === 'string'` without catching parsing errors or verifying that the result is a valid non-null object.",
+      "context": "Tool arguments are model output and should be safely handled as untrusted input. The core local executor (`packages/core/src/agents/local-executor.ts`) safely handles argument parsing via a helper function, but the SDK path lacks this protection."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/sdk/src/session.ts"],
+      "steps": [
+        "In `packages/sdk/src/session.ts`, safely parse tool argument strings inside a `try/catch` block within `sendStream()`.",
+        "Validate that parsed arguments are non-null objects and not arrays; fall back to an empty object or structured error if parsing fails or yields an invalid shape."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/sdk/src/session.test.ts",
+      "expected_behavior": "When `sendMessageStream()` yields a `ToolCallRequest` with malformed JSON in `args`, `sendStream()` should not crash with a raw `SyntaxError` and should safely handle or recover from the argument parsing failure.",
+      "verification_steps": [
+        "Add a unit test in `packages/sdk/src/session.test.ts` that mocks `GeminiClient.sendMessageStream()` yielding a `ToolCallRequest` with malformed JSON in `args` (e.g. '{\"unterminated\":').",
+        "Verify that invoking `sendStream()` handles the malformed JSON argument safely without throwing an unhandled `SyntaxError`."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:33:57Z",
+  "execution_time_seconds": 185.91
+}

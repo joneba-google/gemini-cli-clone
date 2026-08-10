@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27386,
+  "title": "Critical issue: Unicode text replacement",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The user provided a detailed bug report with clear reproduction examples showing multi-byte Unicode string corruption (e.g., '\u0110\u1ed3ng' -> '\u00c4\u2018\u00e1\u00bb\u201cng') during file edits on Windows in VS Code, along with client environment details.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": "This issue is platform-specific (Windows/win32) and involves file encoding handling, text buffer decoding, or string transport between the CLI and VS Code interface during file modification."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27386",
+    "summary": {
+      "problem": "Unicode text gets corrupted into Mojibake (e.g., '\u0110\u1ed3ng' becoming '\u00c4\u2018\u00e1\u00bb\u201cng') when Gemini edits files on Windows.",
+      "root_cause": "File read/write operations or text replacement handling on Windows mishandle UTF-8 encoding conversions, causing multi-byte UTF-8 character bytes to be interpreted as Latin-1/Windows-1252 bytes and double-encoded.",
+      "context": "On Windows when using VS Code integration, string replacements and file writing operations must enforce explicit UTF-8 encoding across all stream reads, writes, and buffer transformations."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/services/fileSystemService.ts",
+        "packages/core/src/tools/edit.ts",
+        "packages/core/src/tools/write-file.ts"
+      ],
+      "steps": [
+        "Ensure all file reading and writing utilities explicitly enforce UTF-8 string encoding during file operations.",
+        "Audit StandardFileSystemService and tool implementations in edit.ts and write-file.ts to prevent double-encoding of multi-byte Unicode strings.",
+        "Verify string replacement operations preserve multi-byte UTF-8 string integrity."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/tools/edit.test.ts",
+      "expected_behavior": "File edit operations preserve multi-byte Unicode characters (e.g., Vietnamese, Samoan currency strings) without character corruption.",
+      "verification_steps": [
+        "Add unit tests to packages/core/src/tools/edit.test.ts that perform file edits containing multi-byte Unicode strings such as '\u0110\u1ed3ng' and 'Samoan t\u0101l\u0101'.",
+        "Verify that modified file contents preserve exact Unicode characters."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:19Z",
+  "execution_time_seconds": 58.56
+}

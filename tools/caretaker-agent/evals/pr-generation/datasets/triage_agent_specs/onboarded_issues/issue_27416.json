@@ -1,0 +1,47 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27416,
+  "title": "bug while trying to connect to canva mcp server",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue reports an unhandled promise rejection ('CRITICAL: Unhandled Promise Rejection! Reason: Error: OAuth callback timeout') occurring when connecting to an MCP server via OAuth. The user provides full debug logs, environment details, CLI version, and stack trace showing the exact error. This is a clear, actionable bug report.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The issue is an unhandled promise rejection with a provided stack trace pointing directly to the OAuth callback timeout in oauth-flow.ts. The fix is localized to managing the lifecycle of the callback server and clearing the timeout timer on error/cancellation in oauth-provider.ts and oauth-flow.ts."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#27416",
+    "summary": {
+      "problem": "An unhandled promise rejection ('Error: OAuth callback timeout') occurs when connecting to an MCP server via OAuth if authentication is cancelled by the user or fails before completion.",
+      "root_cause": "startCallbackServer in oauth-flow.ts initializes an HTTP server and a 5-minute timeout timer that aborts and rejects callbackServer.response if no callback is received. When user consent is denied or an error occurs during authentication in MCPOAuthProvider, callbackServer is not closed and its response promise is left unhandled. When the timeout eventually triggers 5 minutes later, the unhandled rejection causes a critical error crash.",
+      "context": "When connecting to an MCP server requiring OAuth (such as Canva), the local callback server is started before asking for user consent or completing dynamic registration. Cancelling authentication or encountering an error leaves the callback server running and its response promise unhandled until the timeout fires."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/core/src/utils/oauth-flow.ts",
+        "packages/core/src/mcp/oauth-provider.ts",
+        "packages/core/src/agents/auth-provider/oauth2-provider.ts"
+      ],
+      "steps": [
+        "Update startCallbackServer in packages/core/src/utils/oauth-flow.ts to return a close() method that clears the timeout timer, closes the HTTP server, and prevents unhandled promise rejections on the response promise.",
+        "Ensure responsePromise in startCallbackServer handles cancellation or closure gracefully without throwing unhandled rejections when closed early.",
+        "In MCPOAuthProvider.authenticate (packages/core/src/mcp/oauth-provider.ts), wrap the authentication logic following callback server startup in try...finally or try...catch blocks to invoke callbackServer.close() if authentication fails, is cancelled by the user, or completes.",
+        "In OAuth2AuthProvider.authenticateInteractively (packages/core/src/agents/auth-provider/oauth2-provider.ts), similarly ensure callbackServer.close() is called on error or cancellation."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/mcp/oauth-provider.test.ts",
+      "expected_behavior": "When OAuth authentication is cancelled by the user or encounters an error, the callback server is immediately closed, the timeout timer is cleared, and no unhandled promise rejection occurs.",
+      "verification_steps": [
+        "Add a test case in packages/core/src/mcp/oauth-provider.test.ts simulating user cancellation during getConsentForOauth.",
+        "Verify that MCPOAuthProvider.authenticate throws a FatalCancellationError, closes the callback server, and does not produce an unhandled promise rejection when the timeout fires."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:40:10Z",
+  "execution_time_seconds": 62.76
+}

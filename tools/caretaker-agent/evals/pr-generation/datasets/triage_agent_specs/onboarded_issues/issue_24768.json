@@ -1,0 +1,43 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 24768,
+  "title": "Rendering glitch with nested scrollbars and wrapped lines",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear description of a rendering glitch where wrapped output inside scrollable bordered tool boxes breaks out of the right border when vertical scrollbars are present. Environment and client details are provided.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "This is a localized UI layout fix in Ink components (ToolResultDisplay) where child width calculation needs to account for scrollbar padding in Scrollable."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#24768",
+    "summary": {
+      "problem": "Output rendered inside bounded tool call boxes breaks out of the right box border when content wraps and scrollbars are active.",
+      "root_cause": "ToolResultDisplay passes childWidth (calculated as terminalWidth - 4) to child renderers like MarkdownDisplay before enclosing them in Scrollable. Scrollable applies an inner right padding of 1 unit for the scrollbar gutter, reducing available inner content width to childWidth - 1. Because children are formatted for childWidth, wrapped lines and code blocks overflow the inner container by 1 column and breach the right border.",
+      "context": "When running in alternate buffer mode (ASB), tool results are rendered wrapped in a Scrollable container. Scrollable uses an inner Box with paddingRight={1} to reserve space for the vertical scrollbar."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/components/messages/ToolResultDisplay.tsx"
+      ],
+      "steps": [
+        "Adjust width calculation for child content in ToolResultDisplay when wrapped in Scrollable to subtract scrollbar padding (1 character).",
+        "Pass the adjusted content width to MarkdownDisplay, DiffRenderer, SubagentProgressDisplay, and other child renderers to ensure text wrapping and block widths align with Scrollable inner bounds."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/messages/ToolResultDisplay.test.tsx",
+      "expected_behavior": "Tool output rendered inside Scrollable containers stays strictly within the right border of the containing box without breaking out.",
+      "verification_steps": [
+        "Add a unit test in ToolResultDisplay.test.tsx that renders long wrapping markdown content in alternate buffer mode inside a constrained width.",
+        "Verify that rendered output lines fit within the expected content width and do not exceed the box boundary."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:43:22Z",
+  "execution_time_seconds": 66.03
+}

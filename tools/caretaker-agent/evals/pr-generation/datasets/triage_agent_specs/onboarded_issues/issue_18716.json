@@ -1,0 +1,46 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 18716,
+  "title": "Severe IME candidate window misalignment when typing CJK characters on Windows @C:\\Users\\PC5080\\.gemini\\tmp\\822e8215b009f46a641a99493e982cd82aecee13f183db24d50a086dbced0857\\images\\clipboard-1770708344776.png",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue reports a clear, reproducible UI rendering bug where typing CJK (Chinese, Japanese, Korean) characters on Windows causes severe IME candidate window misalignment. The report includes version, OS, environment details, and visual screenshots.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "Localized UI fix across 3 input components (InputPrompt.tsx, TextInput.tsx, BaseSettingsDialog.tsx). The fix replaces cpIndexToOffset(...) with getCachedStringWidth(cpSlice(...)) for terminalCursorPosition calculations."
+  },
+  "workable_spec": {
+    "issue_id": "google/gemini-cli#18716",
+    "summary": {
+      "problem": "IME candidate window misaligns when typing CJK characters in CLI input fields on Windows.",
+      "root_cause": "terminalCursorPosition passed to Ink's <Text> component is calculated using cpIndexToOffset (UTF-16 code unit offset) rather than visual string width (getCachedStringWidth). Single-code-unit CJK characters in the BMP have a visual width of 2, leading to underestimated cursor column positions in terminal coordinates.",
+      "context": "Ink uses terminalCursorPosition to emit ANSI cursor position sequences that Windows Terminal and IME popups use to anchor candidate selection windows."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/ui/components/InputPrompt.tsx",
+        "packages/cli/src/ui/components/shared/TextInput.tsx",
+        "packages/cli/src/ui/components/shared/BaseSettingsDialog.tsx"
+      ],
+      "steps": [
+        "In packages/cli/src/ui/components/InputPrompt.tsx, update terminalCursorPosition calculation from cpIndexToOffset(lineText, cursorVisualColAbsolute) to getCachedStringWidth(cpSlice(lineText, 0, cursorVisualColAbsolute)).",
+        "In packages/cli/src/ui/components/shared/TextInput.tsx, update terminalCursorPosition calculation from cpIndexToOffset(lineText, cursorVisualColAbsolute) to getCachedStringWidth(cpSlice(lineText, 0, cursorVisualColAbsolute)).",
+        "In packages/cli/src/ui/components/shared/BaseSettingsDialog.tsx, update terminalCursorPosition calculation from cpIndexToOffset(editBuffer, editCursorPos) to getCachedStringWidth(cpSlice(editBuffer, 0, editCursorPos))."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/ui/components/InputPrompt.test.tsx",
+      "expected_behavior": "terminalCursorPosition correctly reflects the visual width of CJK characters (2 columns per character) so the terminal cursor and IME candidate window align with the typing position.",
+      "verification_steps": [
+        "Add a unit test in InputPrompt.test.tsx with CJK characters to assert terminalCursorPosition equals visual string width (4 for 2 CJK characters) instead of code unit count (2).",
+        "Run vitest on InputPrompt.test.tsx and TextInput.test.tsx to verify all cursor positioning tests pass."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:47:57Z",
+  "execution_time_seconds": 96.04
+}

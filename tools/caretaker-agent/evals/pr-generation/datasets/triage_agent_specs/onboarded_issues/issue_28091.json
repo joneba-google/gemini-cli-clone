@@ -1,0 +1,45 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 28091,
+  "title": "Gemini CLI executes a tool side effect after SIGINT cancellation",
+  "status": "OK",
+  "effort": "LARGE",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue provides a clear and actionable bug report regarding SIGINT cancellation handling and delayed tool execution side effects, complete with reproduction steps, environment details, and expected versus actual behavior.",
+    "comment": "",
+    "effort_estimate": "LARGE",
+    "effort_reasoning": "The issue involves POSIX signal handling (SIGINT) and cancellation mechanics during streaming and tool side-effect execution across packages/cli and packages/core, requiring careful handling of AbortSignal cancellation and process signals without leaving lingering tool call executions."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#28091",
+    "summary": {
+      "problem": "Gemini CLI executes local tool side effects and submits results for delayed provider tool calls received after a SIGINT cancellation signal has been issued.",
+      "root_cause": "When a SIGINT interrupt signal is received during a response stream, stream loops and tool scheduling routines may continue to process incoming or queued tool call requests if the abort signal state is not checked immediately prior to tool execution or if stream event iteration continues after cancellation.",
+      "context": "In non-interactive CLI and agent sessions, SIGINT triggers abortController.abort(). However, delayed provider chunks arriving after cancellation can still push tool call requests into execution arrays unless cancellation checks prevent tool invocation."
+    },
+    "implementation_plan": {
+      "files_to_modify": [
+        "packages/cli/src/nonInteractiveCli.ts",
+        "packages/core/src/agent/legacy-agent-session.ts"
+      ],
+      "steps": [
+        "Check abortController.signal.aborted immediately when processing stream events and before queuing or executing tool call requests.",
+        "Terminate stream event iteration and trigger cancellation immediately if the abort signal is set.",
+        "Ensure the scheduler checks abort signal status before executing any tool call side effects."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/cli/src/nonInteractiveCli.test.ts",
+      "expected_behavior": "Upon SIGINT cancellation or abort signal, Gemini CLI terminates stream processing immediately without executing any delayed tool calls or side effects.",
+      "verification_steps": [
+        "Add a test case in nonInteractiveCli.test.ts where an abort signal is triggered during stream consumption prior to a delayed ToolCallRequest event.",
+        "Verify that tool execution is skipped and handleCancellationError is called without invoking scheduler.schedule."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:39:07Z",
+  "execution_time_seconds": 245.26
+}

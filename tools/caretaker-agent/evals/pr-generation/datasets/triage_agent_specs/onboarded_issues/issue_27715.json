@@ -1,0 +1,40 @@
+{
+  "owner": "google-gemini",
+  "repo": "gemini-cli",
+  "issue_number": 27715,
+  "title": "bug: Auto is not listed in /model when dynamicModelConfiguration is enabled",
+  "status": "OK",
+  "effort": "SMALL",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The issue clearly describes a bug where the 'Auto' model is not listed in the `/model` dialog when `dynamicModelConfiguration` is enabled, and provides client environment details and reproduction context.",
+    "comment": "",
+    "effort_estimate": "SMALL",
+    "effort_reasoning": "The fix requires updating `isPreview: true` to `isPreview: false` for the `auto` model definition in `packages/core/src/config/defaultModelConfigs.ts` and adding a corresponding unit test."
+  },
+  "workable_spec": {
+    "issue_id": "google-gemini/gemini-cli#27715",
+    "summary": {
+      "problem": "The 'Auto' model option is missing from the `/model` dialog when `experimental.dynamicModelConfiguration` is enabled.",
+      "root_cause": "In `packages/core/src/config/defaultModelConfigs.ts`, the model definition for `auto` sets `isPreview: true`. When `dynamicModelConfiguration` is enabled, `ModelConfigService.getAvailableModelOptions` filters out any options with `isPreview: true` when `hasAccessToPreview` is false. Because 'Auto' is the default model option rather than a preview model, setting `isPreview: true` incorrectly hides it from users who do not have preview models enabled.",
+      "context": "Overriding `modelDefinitions.auto.isPreview` to `false` restores the 'Auto' option in the model picker."
+    },
+    "implementation_plan": {
+      "files_to_modify": ["packages/core/src/config/defaultModelConfigs.ts"],
+      "steps": [
+        "In `packages/core/src/config/defaultModelConfigs.ts`, locate the `auto` object inside `modelDefinitions`.",
+        "Change `isPreview: true` to `isPreview: false` for the `auto` model definition."
+      ]
+    },
+    "testing_strategy": {
+      "test_file": "packages/core/src/services/modelConfigService.test.ts",
+      "expected_behavior": "When `getAvailableModelOptions` is called with `hasAccessToPreview: false`, the returned options include the 'auto' model.",
+      "verification_steps": [
+        "In `packages/core/src/services/modelConfigService.test.ts`, add a test case under `getAvailableModelOptions` asserting that the 'auto' model is included in returned options when `hasAccessToPreview` is false."
+      ],
+      "framework": "Vitest"
+    }
+  },
+  "processed_at": "2026-08-06T17:38:31Z",
+  "execution_time_seconds": 49.52
+}
