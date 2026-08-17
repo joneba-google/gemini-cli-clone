@@ -77,7 +77,7 @@ You will have access to:
 ### Phase 3: Dynamic Verification & Regression Testing
 
 1. **Run Target Test Suite Only**:
-    - Execute ONLY the specific target test file directly using your `run_command` tool with `WaitMsBeforeAsync: 10000` (e.g., `npx vitest run <path/to/test_file>`).
+    - Execute ONLY the specific target test file directly using your `run_command` tool with `WaitMsBeforeAsync: 10000` (e.g., `npx vitest run <path/to/test_file> --no-coverage`).
     - NEVER run full package test suites (e.g. `npm test -w packages/core` or `npm test`).
     - Set `WaitMsBeforeAsync: 10000` (10 seconds) on `run_command` calls so test results return synchronously.
     - Do NOT output text messages like "Please wait while tests run..." without calling a tool.

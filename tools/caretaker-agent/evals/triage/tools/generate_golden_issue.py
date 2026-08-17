@@ -59,45 +59,36 @@ def generate_golden_issue(
     expected_quality_default = "OK" if pr_number else ""
     target_ver = resolve_target_version(owner, repo, issue_data, pr_data)
 
-    if pr_gen:
-        template = {
-            "status": "TRIAGED" if workable_spec else "UNTRIAGED",
-            "triage_attempts": 1 if workable_spec else 0,
-            "generation_attempts": 0,
-            "workable_spec": workable_spec,
-            "expected_quality": expected_quality_default,
-            "expected_effort": effort_from_labels or "SMALL",
-            "github_metadata": {
-                "owner": owner,
-                "repo": repo,
-                "issue_number": issue_number,
-                "title": issue_data.get("title", ""),
-                "target_version": target_ver,
-                "pr_number": pr_number or 0,
-            },
-            "notes": f"Created at {issue_data.get('createdAt', '')} by automated generate_golden_issue.py",
-            "golden_spec_rationale": golden_spec_rationale,
-            "lock": {
-                "holder": None,
-                "expires_at": None,
-            },
-            "error": "",
-        }
-    else:
-        template = {
+    quality_val = expected_quality_default or "OK"
+    effort_val = effort_from_labels or "SMALL"
+
+    template = {
+        "owner": owner,
+        "repo": repo,
+        "issue_number": issue_number,
+        "title": issue_data.get("title", ""),
+        "body": issue_data.get("body", ""),
+        "status": quality_val,
+        "effort": effort_val,
+        "triage_metadata": {
+            "quality": quality_val,
+            "reasoning": golden_spec_rationale,
+            "comment": "",
+            "effort_estimate": effort_val,
+            "effort_reasoning": ""
+        },
+        "workable_spec": workable_spec,
+        "github_metadata": {
             "owner": owner,
             "repo": repo,
             "issue_number": issue_number,
-            "issue_title": issue_data.get("title", ""),
-            "issue_body": issue_data.get("body", ""),
-            "pr_number": pr_number or 0,
+            "title": issue_data.get("title", ""),
             "target_version": target_ver,
-            "expected_quality": expected_quality_default,
-            "expected_effort": effort_from_labels,
-            "notes": f"Created at {issue_data.get('createdAt', '')} by automated generate_golden_issue.py",
-            "golden_spec_rationale": golden_spec_rationale,
-            "expected_workable_spec": workable_spec,
-        }
+            "pr_number": pr_number or 0,
+        },
+        "notes": f"Created at {issue_data.get('createdAt', '')} by automated generate_golden_issue.py",
+        "golden_spec_rationale": golden_spec_rationale,
+    }
 
     target_dir = Path(output_dir) if output_dir else OUTPUT_DIR
     target_dir.mkdir(parents=True, exist_ok=True)

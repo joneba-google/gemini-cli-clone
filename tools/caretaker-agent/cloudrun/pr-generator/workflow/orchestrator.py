@@ -651,26 +651,121 @@ class Orchestrator:
             except IOError as io_err:
                 logging.error("Failed to write empty ESLint output: %s", io_err)
 
+    def _get_modified_files(self) -> list[str]:
+        """Retrieves list of modified and added relative file paths in eval workspace."""
+        modified: set[str] = set()
+        try:
+            diff_cmd = f"git diff --name-only {self.base_ref}...HEAD"
+            out = CommandExecutor.run(diff_cmd, self.config.eval_repo_path).strip()
+            for line in out.splitlines():
+                clean = sanitize_relative_path(line)
+                if clean:
+                    modified.add(clean)
+        except Exception as e:
+            logging.warning("git diff error resolving modified files: %s", e)
+
+        try:
+            status_cmd = "git status --porcelain"
+            out = CommandExecutor.run(status_cmd, self.config.eval_repo_path).strip()
+            for line in out.splitlines():
+                if len(line) > 3:
+                    file_path = line[3:].strip()
+                    if " -> " in file_path:
+                        file_path = file_path.split(" -> ")[1].strip()
+                    clean = sanitize_relative_path(file_path)
+                    if clean:
+                        modified.add(clean)
+        except Exception as e:
+            logging.warning("git status error resolving modified files: %s", e)
+
+        return sorted(list(modified))
+
+    def _resolve_affected_workspaces(self, modified_files: list[str]) -> list[str]:
+        """Dynamically identifies directly modified workspaces and all downstream consumers."""
+        packages_dir = os.path.join(self.config.eval_repo_path, "packages")
+        if not os.path.exists(packages_dir):
+            return []
+
+        directly_modified: set[str] = set()
+        pkg_names: set[str] = set()
+        downstream_map: dict[str, set[str]] = {}
+
+        for entry in os.listdir(packages_dir):
+            pkg_json_path = os.path.join(packages_dir, entry, "package.json")
+            if os.path.isfile(pkg_json_path):
+                try:
+                    with open(pkg_json_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    name = data.get("name")
+                    if name:
+                        pkg_names.add(name)
+                        prefix = f"packages/{entry}/"
+                        if any(f.startswith(prefix) for f in modified_files):
+                            directly_modified.add(name)
+
+                        deps: set[str] = set()
+                        for dep_field in ("dependencies", "devDependencies", "peerDependencies"):
+                            deps.update(data.get(dep_field, {}).keys())
+                        for dep in deps:
+                            downstream_map.setdefault(dep, set()).add(name)
+                except Exception as e:
+                    logging.warning("Error reading %s: %s", pkg_json_path, e)
+
+        affected: set[str] = set(directly_modified)
+        queue: list[str] = list(directly_modified)
+
+        while queue:
+            curr = queue.pop(0)
+            for downstream in downstream_map.get(curr, []):
+                if downstream in pkg_names and downstream not in affected:
+                    affected.add(downstream)
+                    queue.append(downstream)
+
+        return sorted(list(affected))
+
     async def _run_regression_checks(self) -> bool:
-        """Runs deterministic E2E regression check pipeline.
+        """Runs deterministic E2E regression check pipeline with dynamically scoped package testing.
 
         Returns:
             True if all checks pass or bypass is approved, False otherwise.
         """
         logging.info("Executing E2E regression check pipeline...")
+        ci_commands = [
+            "npm run clean",
+            'NODE_OPTIONS="--max-old-space-size=4096" npm ci --no-audit --no-fund',
+            "npm run format",
+            "npm run build",
+            "npm run lint:ci",
+            "npm run typecheck",
+        ]
+
+        # Dynamically determine minimum affected packages to test
+        modified_files = self._get_modified_files()
+        affected_workspaces = self._resolve_affected_workspaces(modified_files)
+
+        if affected_workspaces:
+            logging.info("Dynamically testing affected workspaces (including downstream dependents): %s", affected_workspaces)
+            for ws in affected_workspaces:
+                ci_commands.append(f"npm test -w {ws} -- --no-coverage")
+        else:
+            logging.info("No package workspace code modified in PR changes. Skipping workspace unit tests.")
+
+        # If build/bundling scripts were modified, run scripts tests
+        if any(f.startswith("scripts/") or f == "esbuild.config.js" or f.startswith("sea/") for f in modified_files):
+            ci_commands.append("npm run test:scripts")
+
         try:
-            CommandExecutor.run("npm run clean", self.config.eval_repo_path)
-            CommandExecutor.run("npm ci --no-audit --no-fund", self.config.eval_repo_path)
-            
-            # Regression steps such as npm run build, npm run typecheck, and npm run test:ci are bypassed.
-            # To run them: CommandExecutor.run("npm run test:ci", self.config.eval_repo_path)
-            logging.info("Deterministic preflight regression checks bypassed.")
+            for cmd in ci_commands:
+                logging.info("Running CI check: %s", cmd)
+                CommandExecutor.run(cmd, self.config.eval_repo_path)
+
+            logging.info("All CI regression checks passed successfully.")
             return True
         except CommandExecutionError as preflight_error:
-            logging.warning("Regression checks failed: %s", preflight_error)
+            logging.warning("Regression checks failed on '%s': %s", preflight_error.cmd, preflight_error)
             
             # Match bypass rule filter
-            if "test:ci" in preflight_error.cmd and PreflightFilter.should_ignore_preflight_failure(
+            if any(k in preflight_error.cmd for k in ("npm test", "test:ci", "vitest")) and PreflightFilter.should_ignore_preflight_failure(
                 preflight_error.stdout, preflight_error.stderr
             ):
                 logging.info("Bypassing regression failure due to privilege-bypass allowed list rules.")

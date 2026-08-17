@@ -45,19 +45,19 @@ def evaluate_categorization(predicted: Dict[str, Any], expected: Dict[str, Any])
               If expected quality is non-OK (SPAM, NEEDS_INFO, FEATURE), predicted effort must be empty ("").
     """
     pred_quality = predicted.get("quality")
-    exp_quality = expected.get("expected_quality")
+    exp_quality = expected.get("status") or expected.get("expected_quality") or expected.get("triage_metadata", {}).get("quality")
     
     # 1. Quality match check
     quality_match = (pred_quality == exp_quality)
 
     # 2. Effort match check
     pred_effort = predicted.get("effort_estimate")
-    exp_effort = expected.get("expected_effort")
+    exp_effort = expected.get("effort") or expected.get("expected_effort") or expected.get("triage_metadata", {}).get("effort_estimate")
 
     if exp_quality == "OK":
         effort_match = (pred_effort == exp_effort)
     else:
-        effort_match = (pred_effort == "")
+        effort_match = (pred_effort == "" or pred_effort is None)
 
     return {
         "quality_match": quality_match,

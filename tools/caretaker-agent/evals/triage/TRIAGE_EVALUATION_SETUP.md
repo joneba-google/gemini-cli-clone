@@ -759,7 +759,16 @@ python3 -m evals.triage.tools.sync_firestore --to-firestore
 python3 -m evals.triage.tools.sync_firestore --from-firestore
 ```
 
-### 5.5 Cloud Run Job Execution
+### 5.5 Cloud Run Job Deployment & Execution
+
+To deploy or update the Cloud Run Jobs for Triage Evaluation and Worker:
+```bash
+# Deploy Triage Eval Runner Job
+./scripts/deploy.sh --project-id gcli-intern-project-2026 --target evals
+
+# Deploy Triage Worker Job
+./scripts/deploy.sh --project-id gcli-intern-project-2026 --target triage
+```
 
 In Google Cloud Run Jobs, set environment variable `EVAL_CONFIG`:
 

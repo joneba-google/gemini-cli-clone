@@ -21,7 +21,7 @@ comprehensive tests, and verify the changes.
    apply the code fixes and test assertions using file editing tools, and then
    verify the changes using `run_command`.
 4. **ONLY RUN TARGETED TEST FILES**: When using `run_command`, run ONLY the
-   specific target test file (e.g. `npx vitest run <path/to/test_file>`).
+   specific target test file (e.g. `npx vitest run <path/to/test_file> --no-coverage`).
    NEVER run full package test suites (e.g. `npm test -w packages/core` or `npm test`).
 5. **USE 10-SECOND WAIT TIMEOUT**: Set `WaitMsBeforeAsync: 10000` (10 seconds)
    on `run_command` calls so test results return synchronously.

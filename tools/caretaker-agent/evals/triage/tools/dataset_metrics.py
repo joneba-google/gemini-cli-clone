@@ -22,10 +22,9 @@ def _validate_spec_integrity(issues) -> bool:
     """
     errors = []
     for data in issues:
-        issue_num = data.get("issue_number", 0)
-        quality = data.get("expected_quality", "")
-        effort = data.get("expected_effort", "")
-        spec = data.get("expected_workable_spec", {})
+        quality = data.get("status") or data.get("expected_quality") or data.get("triage_metadata", {}).get("quality", "")
+        effort = data.get("effort") or data.get("expected_effort") or data.get("triage_metadata", {}).get("effort_estimate", "")
+        spec = data.get("workable_spec") or data.get("expected_workable_spec", {})
         has_spec = bool(spec and isinstance(spec, dict) and len(spec) > 0)
 
         # 1. Quality validity check
@@ -69,8 +68,8 @@ def compute_metrics() -> bool:
     ok_efforts = Counter()
 
     for data in issues:
-        quality = data.get("expected_quality", "")
-        effort = data.get("expected_effort", "")
+        quality = data.get("status") or data.get("expected_quality") or data.get("triage_metadata", {}).get("quality", "")
+        effort = data.get("effort") or data.get("expected_effort") or data.get("triage_metadata", {}).get("effort_estimate", "")
 
         qualities[quality] += 1
         if quality == "OK":

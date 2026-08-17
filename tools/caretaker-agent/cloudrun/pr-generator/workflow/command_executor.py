@@ -96,6 +96,8 @@ class CommandExecutor:
         """
         active_cwd = cwd or os.getcwd()
         exec_env = os.environ.copy()
+        exec_env.setdefault("GEMINI_CLI_TRUST_WORKSPACE", "true")
+        exec_env.setdefault("GEMINI_CLI_WORKSPACE_TRUSTED", "true")
         if env:
             exec_env.update(env)
 

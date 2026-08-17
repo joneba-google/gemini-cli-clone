@@ -205,3 +205,44 @@ async def test_run_loop_max_attempts_exceeded(mock_sync, mock_setup, mock_cmd_ru
         await orc.run()
 
     mock_release_lock.assert_called_once()
+
+
+def test_resolve_affected_workspaces_direct_and_downstream(mock_config, tmp_path):
+    """Tests that modifying a foundational package identifies both direct and downstream packages."""
+    mock_config.eval_repo_path = str(tmp_path)
+    packages_dir = tmp_path / "packages"
+    packages_dir.mkdir()
+
+    # Setup core package
+    core_dir = packages_dir / "core"
+    core_dir.mkdir()
+    (core_dir / "package.json").write_text(json.dumps({"name": "@google/gemini-cli-core", "dependencies": {}}))
+
+    # Setup cli package depending on core
+    cli_dir = packages_dir / "cli"
+    cli_dir.mkdir()
+    (cli_dir / "package.json").write_text(json.dumps({
+        "name": "@google/gemini-cli",
+        "dependencies": {"@google/gemini-cli-core": "file:../core"}
+    }))
+
+    # Setup standalone a2a package
+    a2a_dir = packages_dir / "a2a"
+    a2a_dir.mkdir()
+    (a2a_dir / "package.json").write_text(json.dumps({"name": "@google/gemini-cli-a2a", "dependencies": {}}))
+
+    orc = Orchestrator(mock_config)
+
+    # 1. Core modification triggers core + downstream cli
+    affected = orc._resolve_affected_workspaces(["packages/core/src/index.ts"])
+    assert "@google/gemini-cli-core" in affected
+    assert "@google/gemini-cli" in affected
+    assert "@google/gemini-cli-a2a" not in affected
+
+    # 2. Leaf modification triggers only cli
+    affected_leaf = orc._resolve_affected_workspaces(["packages/cli/src/main.ts"])
+    assert affected_leaf == ["@google/gemini-cli"]
+
+    # 3. Non-workspace files trigger empty list
+    affected_docs = orc._resolve_affected_workspaces(["docs/reference/commands.md"])
+    assert affected_docs == []

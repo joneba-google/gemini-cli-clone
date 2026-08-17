@@ -4,11 +4,19 @@
 
 FROM python:3.11-slim
 
-# 1. Install system utilities (git is required for repository operations)
+# 1. Install system utilities and pre-install external linters
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
+    curl \
+    file \
+    procps \
+    shellcheck \
+    xz-utils \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && curl -sSLo /tmp/actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz" \
+    && tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin actionlint \
+    && chmod +x /usr/local/bin/actionlint \
+    && rm -rf /tmp/actionlint.tar.gz /var/lib/apt/lists/*
 
 # Copy Node.js 20 and npm directly from the official node:20-slim image
 COPY --from=node:20-slim /usr/local/bin/node /usr/local/bin/node

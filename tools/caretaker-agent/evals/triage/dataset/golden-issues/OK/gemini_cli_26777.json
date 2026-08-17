@@ -2,13 +2,18 @@
   "owner": "google-gemini",
   "repo": "gemini-cli",
   "issue_number": 26777,
-  "issue_title": "Title: getRipgrepPath() never falls back to system PATH \u2014 ripgrep unavailable despite being installed",
-  "issue_body": "**Environment:**\n  gemini --version  \n# \u2192 0.41.1 (git e1a54496d)                                                                                                 \n  rg --version      \n# \u2192 ripgrep 15.1.0 \u2713                    \n  OS: Windows 11, win32\n  - Install method: npm install -g @google/gemini-cli\n  - ripgrep: installed via winget install BurntSushi.ripgrep.MSVC (in system PATH, rg --version works)\n\n  Bug:\n  getRipgrepPath() in bundle/chunk-NET4RIEQ.js only checks two paths relative to its own bundle dir:\n  vendor/ripgrep/rg-win32-x64.exe\n  ../../vendor/ripgrep/rg-win32-x64.exe\n  Neither path contains the bundled binary after a standard npm install -g. System PATH is never consulted. Result: \"Ripgrep is not available.\n  Falling back to GrepTool.\" even when rg is installed and functional.\n\n  Repro:\n  npm install -g @google/gemini-cli\n  winget install BurntSushi.ripgrep.MSVC\n  gemini -p \"test\"\n  # \u2192 \"Ripgrep is not available. Falling back to GrepTool.\"\n  rg --version\n  # \u2192 ripgrep 15.1.0 \u2713\n\n  Expected: Fall back to where rg (Windows) / which rg (Unix) when bundled binary not found.\n\n  Suggested fix:\n  async function getRipgrepPath() {\n    // ... existing candidate paths ...\n    for (const candidate of candidatePaths) {\n      if (await fileExists(candidate)) return candidate;\n    }\n    // Fallback: check system PATH\n    try {\n      const { execFileSync } = require('child_process');\n      const found = process.platform === 'win32'\n        ? execFileSync('where', ['rg'], { encoding: 'utf8' }).split('\\n')[0].trim()\n        : execFileSync('which', ['rg'], { encoding: 'utf8' }).trim();\n      if (found && await fileExists(found)) return found;\n    } catch (_) {}\n    return null;\n  }\n\n  Workaround: Copy system rg to bundle/vendor/ripgrep/rg-win32-x64.exe inside the Gemini CLI install dir.",
-  "pr_number": 26868,
-  "expected_quality": "OK",
-  "expected_effort": "MEDIUM",
-  "notes": "Use this issue with CAUTION: a more complicated PR with size=large. The actual issue was labeled with effort/small but the PR was much larger so I put expected effort to MEDIUM.",
-  "expected_workable_spec": {
+  "title": "Title: getRipgrepPath() never falls back to system PATH \u2014 ripgrep unavailable despite being installed",
+  "body": "**Environment:**\n  gemini --version  \n# \u2192 0.41.1 (git e1a54496d)                                                                                                 \n  rg --version      \n# \u2192 ripgrep 15.1.0 \u2713                    \n  OS: Windows 11, win32\n  - Install method: npm install -g @google/gemini-cli\n  - ripgrep: installed via winget install BurntSushi.ripgrep.MSVC (in system PATH, rg --version works)\n\n  Bug:\n  getRipgrepPath() in bundle/chunk-NET4RIEQ.js only checks two paths relative to its own bundle dir:\n  vendor/ripgrep/rg-win32-x64.exe\n  ../../vendor/ripgrep/rg-win32-x64.exe\n  Neither path contains the bundled binary after a standard npm install -g. System PATH is never consulted. Result: \"Ripgrep is not available.\n  Falling back to GrepTool.\" even when rg is installed and functional.\n\n  Repro:\n  npm install -g @google/gemini-cli\n  winget install BurntSushi.ripgrep.MSVC\n  gemini -p \"test\"\n  # \u2192 \"Ripgrep is not available. Falling back to GrepTool.\"\n  rg --version\n  # \u2192 ripgrep 15.1.0 \u2713\n\n  Expected: Fall back to where rg (Windows) / which rg (Unix) when bundled binary not found.\n\n  Suggested fix:\n  async function getRipgrepPath() {\n    // ... existing candidate paths ...\n    for (const candidate of candidatePaths) {\n      if (await fileExists(candidate)) return candidate;\n    }\n    // Fallback: check system PATH\n    try {\n      const { execFileSync } = require('child_process');\n      const found = process.platform === 'win32'\n        ? execFileSync('where', ['rg'], { encoding: 'utf8' }).split('\\n')[0].trim()\n        : execFileSync('which', ['rg'], { encoding: 'utf8' }).trim();\n      if (found && await fileExists(found)) return found;\n    } catch (_) {}\n    return null;\n  }\n\n  Workaround: Copy system rg to bundle/vendor/ripgrep/rg-win32-x64.exe inside the Gemini CLI install dir.",
+  "status": "OK",
+  "effort": "MEDIUM",
+  "triage_metadata": {
+    "quality": "OK",
+    "reasoning": "The source files 'packages/core/src/config/config.ts' and 'packages/core/src/sandbox/utils/commandSafety.ts' modified in the PR were pruned from files_to_modify. Redesigning caching inside 'Config' to satisfy global state lint rules and concurrency concerns is an internal architectural cleanup. Decoupling command safety checks for absolute system paths in 'commandSafety.ts' is a secondary sandbox security alignment. Only 'packages/core/src/tools/ripGrep.ts' is strictly required to implement the fallback search for ripgrep in the system PATH.",
+    "comment": "",
+    "effort_estimate": "MEDIUM",
+    "effort_reasoning": ""
+  },
+  "workable_spec": {
     "issue_id": "google-gemini/gemini-cli#26777",
     "summary": {
       "problem": "getRipgrepPath() does not consult the system PATH when looking for a ripgrep executable, causing it to fail to find 'rg' and fall back to GrepTool even when 'rg' is installed on the user's system.",
@@ -41,6 +46,14 @@
       "framework": "Vitest"
     }
   },
-  "target_version": "c987b99394a318e55095a18b8c1066a66edd91c7",
+  "github_metadata": {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "issue_number": 26777,
+    "title": "Title: getRipgrepPath() never falls back to system PATH \u2014 ripgrep unavailable despite being installed",
+    "target_version": "c987b99394a318e55095a18b8c1066a66edd91c7",
+    "pr_number": 26868
+  },
+  "notes": "Use this issue with CAUTION: a more complicated PR with size=large. The actual issue was labeled with effort/small but the PR was much larger so I put expected effort to MEDIUM.",
   "golden_spec_rationale": "The source files 'packages/core/src/config/config.ts' and 'packages/core/src/sandbox/utils/commandSafety.ts' modified in the PR were pruned from files_to_modify. Redesigning caching inside 'Config' to satisfy global state lint rules and concurrency concerns is an internal architectural cleanup. Decoupling command safety checks for absolute system paths in 'commandSafety.ts' is a secondary sandbox security alignment. Only 'packages/core/src/tools/ripGrep.ts' is strictly required to implement the fallback search for ripgrep in the system PATH."
 }

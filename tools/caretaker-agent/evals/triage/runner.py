@@ -110,12 +110,14 @@ def eval_issue(
             # Mode: --no-judge (Spec Generator)
             # Writes top-level workable_spec and github_metadata complying with production Firestore schema
             spec_doc = {
-                "status": "TRIAGED",
-                "triage_attempts": 1,
-                "generation_attempts": 0,
+                "owner": owner,
+                "repo": repo,
+                "issue_number": issue_num,
+                "title": title,
+                "status": expected_quality,
+                "effort": expected_effort,
+                "triage_metadata": metadata,
                 "workable_spec": predicted_spec,
-                "expected_quality": expected_quality,
-                "expected_effort": expected_effort,
                 "github_metadata": {
                     "owner": owner,
                     "repo": repo,
@@ -124,8 +126,8 @@ def eval_issue(
                     "target_version": actual_version,
                     "pr_number": pr_number,
                 },
-                "lock": {"holder": None, "expires_at": None},
-                "error": "",
+                "processed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "execution_time_seconds": execution_time_seconds,
             }
 
             if output_dir:
@@ -146,9 +148,11 @@ def eval_issue(
         # Mode: --judge (Benchmark Evaluation)
         cat_eval = evaluate_categorization(metadata, golden_issue)
 
-        golden_spec = golden_issue.get("expected_workable_spec", {})
+        golden_spec = golden_issue.get("workable_spec") or golden_issue.get("expected_workable_spec", {})
+        golden_quality = golden_issue.get("status") or golden_issue.get("expected_quality") or golden_issue.get("triage_metadata", {}).get("quality")
+        golden_effort = golden_issue.get("effort") or golden_issue.get("expected_effort") or golden_issue.get("triage_metadata", {}).get("effort_estimate")
         spec_grade = {}
-        if golden_issue.get("expected_quality") == "OK" and golden_spec:
+        if golden_quality == "OK" and golden_spec:
             spec_grade = judge_workable_spec(predicted_spec, golden_spec)
 
         record = {
@@ -160,9 +164,9 @@ def eval_issue(
             "categorization": cat_eval,
             "predicted": {"metadata": metadata, "workable_spec": predicted_spec},
             "expected": {
-                "quality": golden_issue.get("expected_quality"),
-                "effort": golden_issue.get("expected_effort"),
-                "workable_spec": golden_issue.get("expected_workable_spec", {}),
+                "quality": golden_quality,
+                "effort": golden_effort,
+                "workable_spec": golden_spec,
             },
             "judge_evaluation": spec_grade,
         }
@@ -213,6 +217,7 @@ def run_suite(
     save: bool = True,
     judge: bool = True,
     run_name: Optional[str] = None,
+    output_dir: Optional[Path] = None,
 ) -> List[Dict[str, Any]]:
     """Runs evaluation suite or batch spec generation using Git Worktrees."""
     # Resolve target run_name
@@ -254,11 +259,11 @@ def run_suite(
 
     get_repo()
 
-    output_dir = None
     run_dir = None
 
     if not judge:
-        output_dir = TRIAGE_EVAL_DIR / "dataset" / run_name
+        if not output_dir:
+            output_dir = TRIAGE_EVAL_DIR / "dataset" / run_name
         output_dir.mkdir(parents=True, exist_ok=True)
     else:
         run_dir = init_dir(save)

@@ -1391,7 +1391,7 @@ Aggregator).
 | **`eval/cloud_eval_runner.py`**              | Container entrypoint executing single Task Array instances or the Pure GCS Aggregation step (`--aggregate`).                                                          |
 | **`eval/eval_workflow.yaml`**                | Cloud Workflow definition (`pr-gen-eval-workflow`) using `googleapis.run.v2.projects.locations.jobs.run` LRO connector with 7200s timeout.                            |
 | **`eval/eval_job.yaml`**                     | Cloud Run Job specification (`pr-gen-eval-job`) with 4 vCPU, 16Gi RAM, and 7200s timeout per task instance.                                                           |
-| **`eval/update_eval_deployment.sh`**         | Automated deployment script submitting Cloud Build, deploying Cloud Run Job, and deploying Cloud Workflow.                                                            |
+| **`scripts/deploy.sh`**                      | Production GCP deployment entrypoint script supporting targets (`ingestion`, `triage`, `egress`, `evals`, `pr-gen`, `all`) and flags (`--project-id`, `--region`, `--tag`, `--dry-run`, `--skip-build`). |
 | **`eval/setup_eval_permissions.sh`**         | Idempotent IAM setup script creating service accounts, auto-provisioning GCS buckets, and binding `roles/storage.objectUser` for bucket-level overwrite capabilities. |
 | **`evals/triage/generate_triaged_issue.py`** | Unified Triaged Issue Generator dual-writing to Firestore `triaged-issues` and local disk.                                                                            |
 
