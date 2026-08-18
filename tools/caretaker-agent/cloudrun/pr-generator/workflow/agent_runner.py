@@ -1,3 +1,17 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Google Antigravity SDK Agent Runner and Context Management.
 
 Provides execution wrappers for executing Coding and Evaluator AI Agents using
@@ -109,9 +123,10 @@ class AgentRunner:
         Returns:
             The text content if file exists, else None.
         """
-        path = os.path.abspath(os.path.join(self.script_dir, filename))
-        if not path.startswith(os.path.abspath(self.script_dir)):
-            logging.warning("Path traversal attempt detected in prompt loading: %s", filename)
+        script_dir_abs = os.path.abspath(self.script_dir)
+        path = os.path.abspath(os.path.join(script_dir_abs, filename))
+        if os.path.commonpath([path, script_dir_abs]) != script_dir_abs:
+            logger.warning("Path traversal attempt detected in prompt loading: %s", filename)
             return None
 
         if os.path.exists(path):
@@ -119,7 +134,7 @@ class AgentRunner:
                 with open(path, "r", encoding="utf-8") as f:
                     return f.read()
             except IOError as e:
-                logging.warning(
+                logger.warning(
                     "Failed to read prompt file '%s': %s", filename, e
                 )
         return None
@@ -195,8 +210,8 @@ class AgentRunner:
                             "[%s] Sending initial task prompt to conversation loop...",
                             role,
                         )
-                        response = await agent.chat(prompt)
-                        resolved_chunks = await response.resolve()
+                        response = await asyncio.wait_for(agent.chat(prompt), timeout=1800.0)
+                        resolved_chunks = await asyncio.wait_for(response.resolve(), timeout=1800.0)
 
                         for chunk in resolved_chunks:
                             chunk_type = chunk.__class__.__name__
@@ -230,6 +245,9 @@ class AgentRunner:
             logger.info("Agent '%s' execution completed successfully.", role)
             return full_output, resolved_chunks
 
+        except asyncio.TimeoutError as e:
+            logger.error("Agent '%s' execution timed out after 1800 seconds.", role)
+            raise AgentRunnerError(f"Agent '{role}' turn exceeded timeout of 1800s") from e
         except Exception as e:
-            logging.exception("Failed to execute agent loop for role: %s", role)
+            logger.exception("Failed to execute agent loop for role: %s", role)
             raise AgentRunnerError(f"Agent '{role}' execution failed: {e}") from e

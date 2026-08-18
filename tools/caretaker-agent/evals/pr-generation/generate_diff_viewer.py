@@ -13,6 +13,7 @@ Usage:
 
 import argparse
 import glob
+import html
 import json
 import logging
 import os
@@ -125,7 +126,8 @@ def find_diff_file(diffs_dir: Path, test_id: str, issue_num: Optional[int]) -> O
     ]
     if issue_num:
         candidates.extend(diffs_dir.glob(f"issue_{issue_num}_*_diff.diff"))
-        candidates.extend(diffs_dir.glob(f"*{issue_num}*_diff.diff"))
+        candidates.extend(diffs_dir.glob(f"*_issue_{issue_num}_*diff.diff"))
+        candidates.extend(diffs_dir.glob(f"*_{issue_num}_diff.diff"))
 
     for cand in candidates:
         if cand.exists() and cand.stat().st_size > 0:
@@ -135,6 +137,7 @@ def find_diff_file(diffs_dir: Path, test_id: str, issue_num: Optional[int]) -> O
 
 def generate_html_report(run_name: str, test_cases: List[Dict[str, Any]]) -> str:
     """Generates a rich, interactive HTML report with diff2html and syntax highlighting."""
+    safe_run_name = html.escape(run_name, quote=True)
     # Securely escape HTML syntax and line separators to prevent script injection and XSS
     json_data = (
         json.dumps(test_cases)
@@ -145,12 +148,12 @@ def generate_html_report(run_name: str, test_cases: List[Dict[str, Any]]) -> str
         .replace("\u2029", "\\u2029")
     )
     
-    html = f"""<!DOCTYPE html>
+    html_output = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SSR Code Generator Diff Viewer - {run_name}</title>
+    <title>SSR Code Generator Diff Viewer - {safe_run_name}</title>
     
     <!-- diff2html CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css">
@@ -415,7 +418,7 @@ def generate_html_report(run_name: str, test_cases: List[Dict[str, Any]]) -> str
 
     <div id="sidebar">
         <div class="sidebar-header">
-            <h2>{run_name} Evaluation Run</h2>
+            <h2>{safe_run_name} Evaluation Run</h2>
             <div class="stats-summary" id="stats-summary">Loading...</div>
         </div>
         <div class="test-list" id="test-list"></div>
@@ -535,10 +538,11 @@ def generate_html_report(run_name: str, test_cases: List[Dict[str, Any]]) -> str
             if (filePaths.length === 0) {{
                 origContainer.innerHTML = '<pre><code class="javascript">// Original file content unavailable.</code></pre>';
             }} else if (filePaths.length === 1) {{
-                origContainer.innerHTML = `<div style="margin-bottom: 8px; font-size: 13px; color: var(--accent-blue);">${{filePaths[0]}}</div><pre><code id="orig-code"></code></pre>`;
-                document.getElementById('orig-code').textContent = filesMap[filePaths[0]];
+                const p = filePaths[0];
+                origContainer.innerHTML = `<div style="margin-bottom: 8px; font-size: 13px; color: var(--accent-blue);">${{escapeHtml(p)}}</div><pre><code id="orig-code"></code></pre>`;
+                document.getElementById('orig-code').textContent = filesMap[p];
             }} else {{
-                let options = filePaths.map(p => `<option value="${{p}}">${{p}}</option>`).join('');
+                let options = filePaths.map(p => `<option value="${{escapeHtml(p)}}">${{escapeHtml(p)}}</option>`).join('');
                 origContainer.innerHTML = `
                     <div style="margin-bottom: 8px;">
                         <label style="font-size: 13px;">Select File: </label>
@@ -613,7 +617,12 @@ def generate_html_report(run_name: str, test_cases: List[Dict[str, Any]]) -> str
         }}
 
         function escapeHtml(str) {{
-            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
         }}
 
         window.onload = init;
@@ -621,7 +630,7 @@ def generate_html_report(run_name: str, test_cases: List[Dict[str, Any]]) -> str
 </body>
 </html>
 """
-    return html
+    return html_output
 
 
 def main() -> None:

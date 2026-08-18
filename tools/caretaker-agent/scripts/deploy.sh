@@ -223,9 +223,9 @@ if should_deploy "pr-gen"; then
       --image="${IMAGE_NAME}" \
       --region="${REGION}" \
       --project="${PROJECT_ID}" \
-      --memory=8Gi \
-      --cpu=2 \
-      --task-timeout=7200 \
+      --memory=16Gi \
+      --cpu=4 \
+      --task-timeout=5400 \
       --max-retries=2 \
       --service-account="${EXEC_SA}" \
       --set-env-vars="GOOGLE_CLOUD_LOCATION=global,MODEL_NAME=gemini-3.5-flash,FIRESTORE_DATABASE=gcli-db,FIRESTORE_COLLECTION=issues,PR_GEN_DEBUG_LOGS_BUCKET=pr_generation_debug_logs" \

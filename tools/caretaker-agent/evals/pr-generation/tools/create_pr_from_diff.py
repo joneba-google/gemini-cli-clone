@@ -23,6 +23,7 @@ modified files, commits with author attribution, pushes branches, and opens PRs.
 """
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -422,15 +423,28 @@ def prepare_target_repo(
     if not target_path.exists():
         print(f"📥 Cloning https://github.com/{owner}/{repo}.git into {target_path}...")
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        clone_url = (
-            f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
-            if token
-            else f"https://github.com/{owner}/{repo}.git"
-        )
-        subprocess.run(["git", "clone", clone_url, str(target_path)], check=True)
+        clean_url = f"https://github.com/{owner}/{repo}.git"
+        if token:
+            auth_bytes = f"x-access-token:{token}".encode("utf-8")
+            auth_b64 = base64.b64encode(auth_bytes).decode("utf-8")
+            subprocess.run(
+                ["git", "-c", f"http.extraHeader=AUTHORIZATION: basic {auth_b64}", "clone", clean_url, str(target_path)],
+                check=True,
+            )
+        else:
+            subprocess.run(["git", "clone", clean_url, str(target_path)], check=True)
     else:
         print(f"🔄 Updating local repository at {target_path}...")
-        subprocess.run(["git", "fetch", "--all"], cwd=target_path, check=True)
+        if token:
+            auth_bytes = f"x-access-token:{token}".encode("utf-8")
+            auth_b64 = base64.b64encode(auth_bytes).decode("utf-8")
+            subprocess.run(
+                ["git", "-c", f"http.extraHeader=AUTHORIZATION: basic {auth_b64}", "fetch", "--all"],
+                cwd=target_path,
+                check=True,
+            )
+        else:
+            subprocess.run(["git", "fetch", "--all"], cwd=target_path, check=True)
 
     # Set user author identity
     subprocess.run(["git", "config", "user.name", author_name], cwd=target_path, check=True)
@@ -458,9 +472,9 @@ def format_modified_files(cwd: Path, files: List[str]) -> None:
         print(f"⚠️ Warning: Prettier auto-format failed: {e}", file=sys.stderr)
 
 
-def ensure_linter_environment(cwd: Path) -> Path:
-    """Auto-provisions the isolated .gemini-linters directory matching GitHub CI specification."""
-    lint_dir = cwd / ".gemini-linters"
+def ensure_linter_environment(_cwd: Path) -> Path:
+    """Auto-provisions the isolated gemini_linters directory matching GitHub CI specification outside the repo tree."""
+    lint_dir = Path(tempfile.gettempdir()) / "gemini_linters"
     lint_dir.mkdir(parents=True, exist_ok=True)
     venv_bin = lint_dir / "python_venv" / "bin"
     venv_bin.mkdir(parents=True, exist_ok=True)
@@ -478,6 +492,8 @@ else
     exit 0
 fi
 """
+    if yamllint_bin.is_symlink() or yamllint_bin.exists():
+        yamllint_bin.unlink(missing_ok=True)
     yamllint_bin.write_text(yamllint_script, encoding="utf-8")
     yamllint_bin.chmod(0o755)
 
@@ -485,6 +501,8 @@ fi
     python_script = f"""#!/usr/bin/env bash
 exec "{py_exe}" "$@"
 """
+    if python_bin.is_symlink() or python_bin.exists():
+        python_bin.unlink(missing_ok=True)
     python_bin.write_text(python_script, encoding="utf-8")
     python_bin.chmod(0o755)
 
@@ -657,9 +675,12 @@ def main() -> None:
         assert target_repo_path is not None
         try:
             # 1. Reset and checkout pristine feature branch from upstream origin
+            subprocess.run(["git", "reset", "--hard"], cwd=target_repo_path, check=False, capture_output=True)
+            subprocess.run(["git", "clean", "-fd"], cwd=target_repo_path, check=False, capture_output=True)
             subprocess.run(["git", "fetch", "origin", args.base_branch], cwd=target_repo_path, check=True, capture_output=True)
             subprocess.run(["git", "checkout", "-B", branch_name, f"origin/{args.base_branch}"], cwd=target_repo_path, check=True, capture_output=True)
             subprocess.run(["git", "reset", "--hard", f"origin/{args.base_branch}"], cwd=target_repo_path, check=True, capture_output=True)
+            subprocess.run(["git", "clean", "-fd"], cwd=target_repo_path, check=True, capture_output=True)
             subprocess.run(["git", "clean", "-fd", "--exclude=node_modules"], cwd=target_repo_path, check=True, capture_output=True)
 
             # 2. Write healed diff to temporary file and apply with 3-way fallback
@@ -727,14 +748,16 @@ def main() -> None:
 
             # 6. Push branch to remote using authenticated URL
             print(f"📤 Pushing branch {branch_name} to {push_owner}/{args.repo}...")
-            push_url = (
-                f"https://x-access-token:{token}@github.com/{push_owner}/{args.repo}.git"
-                if token
-                else f"https://github.com/{push_owner}/{args.repo}.git"
-            )
+            clean_push_url = f"https://github.com/{push_owner}/{args.repo}.git"
+            push_cmd = ["git"]
+            if token:
+                auth_bytes = f"x-access-token:{token}".encode("utf-8")
+                auth_b64 = base64.b64encode(auth_bytes).decode("utf-8")
+                push_cmd.extend(["-c", f"http.extraHeader=AUTHORIZATION: basic {auth_b64}"])
+            push_cmd.extend(["push", "-f", clean_push_url, f"HEAD:refs/heads/{branch_name}"])
 
             push_res = subprocess.run(
-                ["git", "push", "-f", push_url, f"HEAD:refs/heads/{branch_name}"],
+                push_cmd,
                 cwd=target_repo_path,
                 capture_output=True,
                 text=True,
@@ -760,6 +783,11 @@ def main() -> None:
             print(f"✅ Pull Request Ready: {pr_url}")
             results.append({"issue": issue_num, "status": "CREATED", "pr_url": pr_url})
 
+        except subprocess.CalledProcessError as e:
+            err_output = (e.stderr or e.stdout or "").strip()
+            err_msg = f"{e}: {err_output}" if err_output else str(e)
+            print(f"❌ Error processing issue #{issue_num}: {err_msg}", file=sys.stderr)
+            results.append({"issue": issue_num, "status": "FAILED", "details": err_msg})
         except Exception as e:
             print(f"❌ Error processing issue #{issue_num}: {e}", file=sys.stderr)
             results.append({"issue": issue_num, "status": "FAILED", "details": str(e)})

@@ -24,9 +24,9 @@ interface IssueDocument {
     repo?: string;
     issue_number?: number | string;
   };
-  created_at?: any;
-  updated_at?: any;
-  [key: string]: any;
+  created_at?: Timestamp | string | Date;
+  updated_at?: Timestamp | string | Date;
+  [key: string]: unknown;
 }
 
 function getJsonFiles(targetPath: string): string[] {

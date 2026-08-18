@@ -252,7 +252,8 @@ class Orchestrator:
 
             while loop_count < self.config.max_attempts and not approved:
                 loop_count += 1
-                logging.info("=== Starting Iteration %s/%s ===", loop_count, self.config.max_attempts)
+                commit_line_count = 0
+                logger.info("=== Starting Iteration %s/%s ===", loop_count, self.config.max_attempts)
 
                 # --- PHASE 1: CODE GENERATION ---
                 await self._run_code_generation(
@@ -329,24 +330,38 @@ class Orchestrator:
                             issue_number=issue_num,
                         )
                     except Exception as e:
-                        logging.error("Failed to update Firestore status to NEEDS_HUMAN: %s", e)
+                        logger.error("Failed to update Firestore status to NEEDS_HUMAN: %s", e)
                     return
                 else:
                     pr_number = await self._submit_pull_request(issue_num, issue_id, branch_name)
-                    try:
-                        mark_pr_created(
-                            lock_holder=execution_id,
-                            pr_number=pr_number or "",
-                            doc_id=doc_id,
-                            owner=owner,
-                            repo=repo,
-                            issue_number=issue_num,
-                            status=IssueStatus.PR_EVALUATION_PENDING.value,
-                        )
-                    except Exception as e:
-                        logging.error("Failed to update Firestore status to PR_EVALUATION_PENDING: %s", e)
+                    if pr_number:
+                        try:
+                            mark_pr_created(
+                                lock_holder=execution_id,
+                                pr_number=pr_number,
+                                doc_id=doc_id,
+                                owner=owner,
+                                repo=repo,
+                                issue_number=issue_num,
+                                status=IssueStatus.PR_EVALUATION_PENDING.value,
+                            )
+                        except Exception as e:
+                            logger.error("Failed to update Firestore status to PR_EVALUATION_PENDING: %s", e)
+                    else:
+                        logger.warning("PR creation skipped or returned no PR number. Escalating to NEEDS_HUMAN.")
+                        try:
+                            mark_needs_human(
+                                lock_holder=execution_id,
+                                reason="PR creation skipped: GitHub token not configured or PR creation returned no PR number.",
+                                doc_id=doc_id,
+                                owner=owner,
+                                repo=repo,
+                                issue_number=issue_num,
+                            )
+                        except Exception as e:
+                            logger.error("Failed to update Firestore status to NEEDS_HUMAN: %s", e)
             else:
-                logging.error(
+                logger.error(
                     "=== PR REJECTED (Exceeded max loop attempts %s) ===",
                     self.config.max_attempts,
                 )
@@ -762,13 +777,26 @@ class Orchestrator:
             logging.info("All CI regression checks passed successfully.")
             return True
         except CommandExecutionError as preflight_error:
-            logging.warning("Regression checks failed on '%s': %s", preflight_error.cmd, preflight_error)
+            logger.warning("Regression checks failed on '%s': %s", preflight_error.cmd, preflight_error)
             
+            # Check for infrastructure/OOM crashes
+            combined_err = f"{preflight_error.stdout}\n{preflight_error.stderr}"
+            if (
+                "JavaScript heap out of memory" in combined_err
+                or "Allocation failed" in combined_err
+                or preflight_error.returncode in (137, 255)
+            ):
+                logger.error("Regression check encountered fatal container memory/OOM crash: %s", preflight_error.cmd)
+                raise OrchestrationError(
+                    f"Fatal container resource exhaustion (OOM/SIGKILL) during '{preflight_error.cmd}'. "
+                    f"Scale container memory allocation."
+                ) from preflight_error
+
             # Match bypass rule filter
             if any(k in preflight_error.cmd for k in ("npm test", "test:ci", "vitest")) and PreflightFilter.should_ignore_preflight_failure(
                 preflight_error.stdout, preflight_error.stderr
             ):
-                logging.info("Bypassing regression failure due to privilege-bypass allowed list rules.")
+                logger.info("Bypassing regression failure due to privilege-bypass allowed list rules.")
                 return True
 
             # If unapproved regression error, save detailed log report to evaluator feedback

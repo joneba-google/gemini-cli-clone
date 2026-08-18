@@ -253,13 +253,36 @@ def load_test_metrics_for_run(run_dir: str) -> tuple[dict[str, tuple[Any, Any]],
         try:
             with open(results_txt_path, "r", encoding="utf-8") as f:
                 for line in f:
-                    match = re.search(r"\[.*?\]\s+(\S+)\s+completed:\s+(\S+)\s+\(Turns:\s+(\w+)/?(\w+)?(?:,\s+Runtime:\s+([\d.]+s))?\)", line)
+                    match = re.search(
+                        r"\[\d+\]\s+(\S+)\s+\(Turns:\s*(\d+)(?:/(\d+))?,\s*(?:Lines:\s*(\d+),\s*)?Time:\s*([\d.]+)s?\):\s*(\S+)",
+                        line,
+                    )
                     if match:
                         tid = match.group(1)
-                        status = match.group(2)
-                        turns = match.group(3)
-                        max_turns = match.group(4) or "?"
+                        turns = match.group(2)
+                        max_turns = match.group(3) or "?"
+                        line_count = int(match.group(4)) if match.group(4) else None
                         runtime = match.group(5)
+                        status = match.group(6)
+                        turn_map[tid] = (turns, max_turns)
+                        status_map[tid] = status
+                        if line_count is not None:
+                            line_count_map[tid] = line_count
+                        if runtime:
+                            runtime_map[tid] = float(runtime.rstrip("s"))
+                        continue
+
+                    # Fallback pattern for legacy completed: format
+                    match_legacy = re.search(
+                        r"\[.*?\]\s+(\S+)\s+completed:\s+(\S+)\s+\(Turns:\s+(\w+)/?(\w+)?(?:,\s+Runtime:\s+([\d.]+s))?\)",
+                        line,
+                    )
+                    if match_legacy:
+                        tid = match_legacy.group(1)
+                        status = match_legacy.group(2)
+                        turns = match_legacy.group(3)
+                        max_turns = match_legacy.group(4) or "?"
+                        runtime = match_legacy.group(5)
                         turn_map[tid] = (turns, max_turns)
                         status_map[tid] = status
                         if runtime:
@@ -336,7 +359,8 @@ async def evaluate_all_specs(
             ]
             if issue_num and os.path.exists(diffs_dir):
                 candidate_diffs.extend(glob.glob(os.path.join(diffs_dir, f"issue_{issue_num}_*_diff.diff")))
-                candidate_diffs.extend(glob.glob(os.path.join(diffs_dir, f"*{issue_num}*_diff.diff")))
+                candidate_diffs.extend(glob.glob(os.path.join(diffs_dir, f"*_issue_{issue_num}_*diff.diff")))
+                candidate_diffs.extend(glob.glob(os.path.join(diffs_dir, f"*_{issue_num}_diff.diff")))
 
             found_diff_path = None
             for cand in candidate_diffs:

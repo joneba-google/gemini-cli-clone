@@ -20,7 +20,7 @@ class IgnoreRawWsMsgFilter(logging.Filter):
 
 
 def setup_logging() -> None:
-    """Sets up the root logger with WARNING level and dedicated 'ssr' logger at INFO."""
+    """Sets up the root logger with WARNING level and dedicated 'Orchestrator' logger at INFO."""
     logging.getLogger().setLevel(logging.WARNING)
 
     app_logger = logging.getLogger("Orchestrator")
@@ -31,6 +31,7 @@ def setup_logging() -> None:
         app_logger.removeHandler(h)
 
     handler = logging.StreamHandler(sys.stdout)
+    handler.addFilter(IgnoreRawWsMsgFilter())
     handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
     app_logger.addHandler(handler)
 
@@ -38,17 +39,18 @@ def setup_logging() -> None:
 async def main() -> None:
     """Asynchronous process execution entrypoint."""
     setup_logging()
-    logging.info("Starting SSR Agent Orchestration Worker...")
+    logger = logging.getLogger("Orchestrator")
+    logger.info("Starting Agent Orchestration Worker...")
 
     try:
         config = Config()
         orchestrator = Orchestrator(config)
         await orchestrator.run()
     except OrchestrationError as e:
-        logging.critical("Orchestrator encountered a fatal error: %s", e)
+        logger.critical("Orchestrator encountered a fatal error: %s", e)
         sys.exit(1)
     except Exception as e:
-        logging.exception("An unhandled error occurred in the orchestrator.")
+        logger.exception("An unhandled error occurred in the orchestrator.")
         sys.exit(4)
 
 

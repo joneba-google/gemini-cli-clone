@@ -12,8 +12,9 @@
  * pushes branches, and opens Pull Requests via the Octokit REST API.
  */
 
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { execSync, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { Octokit } from '@octokit/rest';
@@ -376,11 +377,13 @@ async function prepareGitRepo(
   if (!fs.existsSync(targetDir)) {
     console.log(`📥 Cloning https://github.com/${owner}/${repo}.git into ${targetDir}...`);
     fs.mkdirSync(path.dirname(targetDir), { recursive: true });
-    const repoUrl = `https://x-access-token:${token}@github.com/${owner}/${repo}.git`;
-    execSync(`git clone ${repoUrl} ${targetDir}`, { stdio: 'inherit' });
+    const authHeader = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
+    const repoUrl = `https://github.com/${owner}/${repo}.git`;
+    execSync(`git -c http.extraHeader="${authHeader}" clone ${repoUrl} ${targetDir}`, { stdio: 'inherit' });
   } else {
     console.log(`🔄 Updating existing local repository at ${targetDir}...`);
-    execSync('git fetch origin', { cwd: targetDir, stdio: 'inherit' });
+    const authHeader = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
+    execSync(`git -c http.extraHeader="${authHeader}" fetch origin`, { cwd: targetDir, stdio: 'inherit' });
   }
 
   // Set bot committer info
@@ -647,8 +650,6 @@ exec python3 "$@"
             GEMINI_LINT_TEMP_DIR: lintDir,
           },
         });
-          },
-        });
 
         if (res.status !== 0) {
           ciPassed = false;
@@ -702,8 +703,9 @@ exec python3 "$@"
       }
 
       // 5. Push branch with token auth
-      const pushUrl = `https://x-access-token:${token}@github.com/${options.owner}/${options.repo}.git`;
-      execSync(`git push -f ${pushUrl} HEAD:refs/heads/${branchName}`, {
+      const authHeader = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
+      const pushUrl = `https://github.com/${options.owner}/${options.repo}.git`;
+      execSync(`git -c http.extraHeader="${authHeader}" push -f ${pushUrl} HEAD:refs/heads/${branchName}`, {
         cwd: gitRepoDir,
         stdio: 'pipe',
       });

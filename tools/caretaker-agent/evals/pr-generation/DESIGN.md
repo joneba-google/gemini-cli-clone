@@ -512,9 +512,10 @@ evaluation subclass:
 | :-------------------------- | :--------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------- |
 | **Firestore State Locking** | Enforces distributed concurrency locks via `acquire_lock` / `release_lock`.              | **Disabled**. Bypasses DB locks; operates on local mock JSON specifications.                             |
 | **PR & Comment Submission** | Pushes branches to remote origin and opens live GitHub Pull Requests via `GitHubClient`. | **Disabled**. Generates local `generated_diff` and `pr_details.md` file artifacts.                       |
-| **Git Revision Baselining** | Hardcoded to evaluate against remote `origin/main`.                                      | **Dynamic**. Checks out historical `target_version` SHA with fallback to `origin/main`.                  |
-| **Dependency Management**   | Assumes pre-configured environment or relies on external setup.                          | **Self-Healing**. Auto-detects missing `node_modules` and executes optimized `npm ci`.                   |
-| **Line Modification Limit** | No hard failure limit on patch line counts (relies on human/LLM review).                 | **Strict Guardrail**. Enforces a hard $\le 500$ line modification limit; overrides approval if exceeded. |
+| **Git Revision Baselining** | Defaults to `origin/main` but supports dynamic tracking.                                 | **Dynamic**. Checks out historical `target_version` SHA with fallback to `origin/main`.                  |
+| **Dependency Management**   | Symlinks `node_modules` from PR workspace to Eval workspace to eliminate redundant `npm ci`. | **Self-Healing**. Auto-detects missing `node_modules` and executes optimized `npm ci`.                   |
+| **Line Modification Limit** | Resets `commit_line_count = 0` per retry attempt to prevent cumulative line bloat.       | **Strict Guardrail**. Enforces a hard $\le 500$ line modification limit; resets count per attempt.       |
+| **Regression Checks**       | Full E2E gate (`clean`, `build`, `lint:ci`, `typecheck`, affected `npm test -w`) with OOM crash detection raising `OrchestrationError`. | Configurable per evaluation harness; bypasses remote logging calls. |
 | **Return Value / Output**   | Async execution returning `None` (side-effects written to GCP/GitHub).                   | Returns a structured dictionary containing `success`, `status`, `diff`, `pr_details`, and `error`.       |
 
 ---

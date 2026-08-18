@@ -46,21 +46,21 @@ class EvalOrchestrator(Orchestrator):
         branch_name = f"eval-agent-issue-{issue_num}"
 
         if not os.path.exists(self.config.pr_repo_path):
-            logging.info("Cloning repository %s to %s", self.config.repo_url, self.config.pr_repo_path)
+            logger.info("Cloning repository %s to %s", self.config.repo_url, self.config.pr_repo_path)
             CommandExecutor.run(f"git clone {self.config.repo_url} {self.config.pr_repo_path}")
 
         if target_version:
-            logging.info("Checking out specified target_version commit SHA: %s", target_version)
+            logger.info("Checking out specified target_version commit SHA: %s", target_version)
             try:
                 CommandExecutor.run("git fetch origin", self.config.pr_repo_path)
                 CommandExecutor.run(f"git checkout -B {branch_name} {target_version}", self.config.pr_repo_path)
                 self.base_ref = target_version
             except Exception as e:
-                logging.warning("Failed to checkout target_version SHA %s, falling back to main: %s", target_version, e)
+                logger.warning("Failed to checkout target_version SHA %s, falling back to main: %s", target_version, e)
                 CommandExecutor.run(f"git checkout -B {branch_name} origin/main", self.config.pr_repo_path)
                 self.base_ref = "origin/main"
         else:
-            logging.info("No target_version commit SHA specified. Checking out origin/main baseline.")
+            logger.info("No target_version commit SHA specified. Checking out origin/main baseline.")
             CommandExecutor.run(f"git checkout -B {branch_name} origin/main", self.config.pr_repo_path)
             self.base_ref = "origin/main"
 
@@ -74,7 +74,7 @@ class EvalOrchestrator(Orchestrator):
                     "changes.diff\nverdict.json\npr_details.md\nlinter_output.txt\n"
                 )
         except Exception as io_err:
-            logging.debug("Failed to configure git exclude file in eval repo: %s", io_err)
+            logger.debug("Failed to configure git exclude file in eval repo: %s", io_err)
 
     async def run(self) -> dict:
         """Executes orchestration pipeline locally without GCP or GitHub calls.
@@ -110,7 +110,7 @@ class EvalOrchestrator(Orchestrator):
         # Install NPM packages inside PR workspace if node_modules is missing
         node_modules_path = os.path.join(self.config.pr_repo_path, "node_modules")
         if not os.path.exists(node_modules_path):
-            logging.info("Installing node dependencies inside PR repository workspace...")
+            logger.info("Installing node dependencies inside PR repository workspace...")
             try:
                 npm_install_cmd = 'NODE_OPTIONS="--max-old-space-size=4096" npm ci --no-audit --no-fund --maxsockets 3'
                 CommandExecutor.run(npm_install_cmd, self.config.pr_repo_path)
@@ -124,7 +124,8 @@ class EvalOrchestrator(Orchestrator):
 
         while loop_count < self.config.max_attempts and not approved:
             loop_count += 1
-            logging.info("=== [LOCAL EVAL] Starting Iteration %s/%s ===", loop_count, self.config.max_attempts)
+            commit_line_count = 0
+            logger.info("=== [LOCAL EVAL] Starting Iteration %s/%s ===", loop_count, self.config.max_attempts)
 
             # Phase 1: Code Generation
             await self._run_code_generation(loop_count, owner=owner, repo=repo, issue_num=issue_num)
@@ -132,7 +133,7 @@ class EvalOrchestrator(Orchestrator):
             # Stage edits and generate diff
             diff_content = self._prepare_iteration_commit(issue_num, loop_count, owner=owner, repo=repo)
             if not diff_content:
-                logging.info("[LOCAL EVAL] No code modifications detected in iteration %s.", loop_count)
+                logger.info("[LOCAL EVAL] No code modifications detected in iteration %s.", loop_count)
                 continue
             self.generated_diff = diff_content
 
@@ -140,13 +141,13 @@ class EvalOrchestrator(Orchestrator):
             verdict = await self._run_evaluation(diff_content, firestore_doc, owner=owner, repo=repo, issue_num=issue_num)
 
             if verdict in ["APPROVED", "PASS"]:
-                logging.info("[LOCAL EVAL] Patch approved by Evaluator. Running regression checks...")
+                logger.info("[LOCAL EVAL] Patch approved by Evaluator. Running regression checks...")
                 approved = await self._run_regression_checks()
 
                 if approved:
                     try:
                         diff_stat = CommandExecutor.run(f"git diff --stat {self.base_ref}", self.config.pr_repo_path)
-                        logging.info("Diff Stat summary:\n%s", diff_stat)
+                        logger.info("Diff Stat summary:\n%s", diff_stat)
                         lines = diff_stat.split("\n")
                         last_line = lines[-1] if lines else ""
                         insertions = re.search(r"(\d+)\s+insertion", last_line)
@@ -156,7 +157,7 @@ class EvalOrchestrator(Orchestrator):
                         if deletions:
                             commit_line_count += int(deletions.group(1))
                     except Exception as e:
-                        logging.warning("Failed to parse modifications line count: %s", e)
+                        logger.warning("Failed to parse modifications line count: %s", e)
 
             if not approved:
                 self._save_feedback_to_coding_workspace()
@@ -172,7 +173,7 @@ class EvalOrchestrator(Orchestrator):
 
         if approved:
             if commit_line_count > 750:
-                logging.error("[LOCAL EVAL] Approved but modifications (%s lines) exceed 750 limit.", commit_line_count)
+                logger.error("[LOCAL EVAL] Approved but modifications (%s lines) exceed 750 limit.", commit_line_count)
                 return {
                     "success": False,
                     "status": "EXCEEDED_LINE_LIMIT",
@@ -183,7 +184,7 @@ class EvalOrchestrator(Orchestrator):
                     "attempts": loop_count,
                     "max_attempts": self.config.max_attempts,
                 }
-            logging.info("=== [LOCAL EVAL] SUCCESS: Patch Approved and Verified ===")
+            logger.info("=== [LOCAL EVAL] SUCCESS: Patch Approved and Verified ===")
             return {
                 "success": True,
                 "status": "APPROVED",
@@ -194,7 +195,7 @@ class EvalOrchestrator(Orchestrator):
                 "max_attempts": self.config.max_attempts,
             }
         else:
-            logging.error("=== [LOCAL EVAL] FAILED: Exceeded Max Attempts without Approval ===")
+            logger.error("=== [LOCAL EVAL] FAILED: Exceeded Max Attempts without Approval ===")
             return {
                 "success": False,
                 "status": "REJECTED",

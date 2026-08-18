@@ -126,6 +126,24 @@ async def test_run_regression_checks_unapproved_failure(mock_cmd_run, mock_prefl
     assert result is False
 
 
+@pytest.mark.asyncio
+@patch("command_executor.CommandExecutor.run")
+async def test_run_regression_checks_oom_fatal_error(mock_cmd_run, mock_config):
+    """Tests that fatal JavaScript OOM crashes raise OrchestrationError."""
+    from orchestrator import OrchestrationError
+    mock_cmd_run.side_effect = CommandExecutionError(
+        cmd="npm run lint:ci",
+        returncode=137,
+        stdout="FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory",
+        stderr="",
+    )
+
+    orc = Orchestrator(mock_config)
+    with pytest.raises(OrchestrationError) as exc_info:
+        await orc._run_regression_checks()
+    assert "Fatal container resource exhaustion (OOM/SIGKILL)" in str(exc_info.value)
+
+
 @patch("shutil.copyfile")
 @patch("os.path.exists")
 def test_save_feedback_to_coding_workspace(mock_exists, mock_copyfile, mock_config):

@@ -128,128 +128,129 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
     sys.stdout = devnull
     sys.stderr = devnull
 
-    file_base = os.path.splitext(os.path.basename(file_path))[0]
-    github_meta = doc_dict.get("github_metadata", {})
-    issue_num = github_meta.get("issue_number") or doc_dict.get("issue_number", "0")
-    test_id = file_base if str(issue_num) in file_base else f"{file_base}_{issue_num}"
+    fh = None
+    env_dir = None
 
-    VALID_QUALITIES = {"OK", "FEATURE", "NEEDS_INFO", "SPAM_EMPTY"}
-    raw_quality = doc_dict.get("expected_quality")
-    workable_spec = doc_dict.get("workable_spec")
-
-    if raw_quality in VALID_QUALITIES:
-        quality_label = raw_quality
-    elif raw_quality:
-        quality_label = str(raw_quality)
-    elif not workable_spec:
-        quality_label = "NO_SPEC"
-    else:
-        quality_label = "OK"
-
-    # If issue quality is not OK ("FEATURE", "NEEDS_INFO", "SPAM_EMPTY", "NO_SPEC") or workable_spec is missing/empty, skip PR generation and mark as PASS
-    if quality_label != "OK" or not workable_spec:
-        sys.stdout = old_stdout
-        sys.stderr = old_stderr
-        devnull.close()
-        return {
-            "success": True,
-            "status": "SKIPPED_NON_OK",
-            "diff": "",
-            "pr_details": f"PR generation skipped: Expected quality is '{quality_label}'.",
-            "error": None,
-            "attempts": 0,
-            "max_attempts": max_attempts,
-            "test_id": test_id,
-            "file_base": file_base,
-            "issue_num": issue_num,
-            "line_count": 0,
-            "runtime_seconds": 0.01,
-            "expected_quality": quality_label,
-        }
-
-    # Setup distinct directories for this run under eval/run_outputs/{run_name}/
-    env_dir = os.path.join(run_dir, "agent_environments", test_id)
-    logs_dir = os.path.join(run_dir, "logs")
-    json_dir = os.path.join(run_dir, "json")
-    diffs_dir = os.path.join(run_dir, "outputs", "diffs")
-    pr_details_dir = os.path.join(run_dir, "outputs", "pr_details")
-
-    os.makedirs(env_dir, exist_ok=True)
-    os.makedirs(logs_dir, exist_ok=True)
-    os.makedirs(json_dir, exist_ok=True)
-    os.makedirs(diffs_dir, exist_ok=True)
-    os.makedirs(pr_details_dir, exist_ok=True)
-
-    os.environ["LOCAL_TRACE_DIR"] = os.path.join(run_dir, "json")
-    worker_ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
-    log_file_txt = os.path.join(logs_dir, f"issue_{issue_num}_{worker_ts}_logs.log")
-
-    # Set root logger level to WARNING to drop SDK transport chatter (RAW WS MSG)
-    root = logging.getLogger()
-    root.setLevel(logging.WARNING)
-    for h in root.handlers:
-        h.addFilter(RootWarningFilter())
-
-    # Configure dedicated application logger for SSR workflow
-    logger = logging.getLogger("Orchestrator")
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    for h in logger.handlers[:]:
-        logger.removeHandler(h)
-
-    fh = logging.FileHandler(log_file_txt, mode="w", encoding="utf-8")
-    fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
-    logger.addHandler(fh)
-
-    logger.info("Starting local evaluation for test case: %s", test_id)
-
-    # Instantiate config (dynamically resolving repo from github_metadata) & orchestrator
-    config = EvalConfig(workspace_root=env_dir, firestore_doc_dict=doc_dict)
-    config.max_attempts = max_attempts
-    orchestrator = EvalOrchestrator(config)
-
-    test_start_time = time.time()
-    # Execute async pipeline
     try:
-        result = asyncio.run(orchestrator.run())
-        result["test_id"] = test_id
-        result["file_base"] = file_base
-        result["issue_num"] = issue_num
-        result["attempts"] = result.get("attempts", max_attempts)
-        result["max_attempts"] = result.get("max_attempts", max_attempts)
-        result["line_count"] = result.get("line_count")
-        result["runtime_seconds"] = round(time.time() - test_start_time, 2)
+        file_base = os.path.splitext(os.path.basename(file_path))[0]
+        github_meta = doc_dict.get("github_metadata", {})
+        issue_num = github_meta.get("issue_number") or doc_dict.get("issue_number", "0")
+        test_id = file_base if str(issue_num) in file_base else f"{file_base}_{issue_num}"
 
-        # Save output artifacts (including generated diff for EXCEEDED_LINE_LIMIT)
-        if result.get("diff"):
-            diff_path = os.path.join(diffs_dir, f"{test_id}_diff.diff")
-            with open(diff_path, "w", encoding="utf-8") as f:
-                f.write(result["diff"])
-        if result.get("success") and result.get("pr_details"):
-            pr_path = os.path.join(pr_details_dir, f"{test_id}_pr_details.md")
-            with open(pr_path, "w", encoding="utf-8") as f:
-                f.write(result["pr_details"])
+        VALID_QUALITIES = {"OK", "FEATURE", "NEEDS_INFO", "SPAM_EMPTY"}
+        raw_quality = doc_dict.get("expected_quality")
+        workable_spec = doc_dict.get("workable_spec")
 
-        status_str = "PASSED" if result.get("success") else f"FAILED ({result.get('status', 'FAILED')})"
-        logger.info("Test case %s completed: %s (Turns: %s/%s, Runtime: %.2fs)", test_id, status_str, result.get("attempts", "?"), max_attempts, result["runtime_seconds"])
+        if raw_quality in VALID_QUALITIES:
+            quality_label = raw_quality
+        elif raw_quality:
+            quality_label = str(raw_quality)
+        elif not workable_spec:
+            quality_label = "NO_SPEC"
+        else:
+            quality_label = "OK"
 
-    except Exception as e:
-        logger.exception("Unhandled exception during test execution: %s", e)
-        result = {
-            "test_id": test_id,
-            "file_base": file_base,
-            "issue_num": issue_num,
-            "success": False,
-            "status": "CRASHED",
-            "error": str(e),
-            "attempts": 0,
-            "max_attempts": max_attempts,
-            "runtime_seconds": round(time.time() - test_start_time, 2),
-        }
-        logger.error("Test case %s completed: FAILED (CRASHED: %s)", test_id, e)
+        # If issue quality is not OK ("FEATURE", "NEEDS_INFO", "SPAM_EMPTY", "NO_SPEC") or workable_spec is missing/empty, skip PR generation and mark as PASS
+        if quality_label != "OK" or not workable_spec:
+            return {
+                "success": True,
+                "status": "SKIPPED_NON_OK",
+                "diff": "",
+                "pr_details": f"PR generation skipped: Expected quality is '{quality_label}'.",
+                "error": None,
+                "attempts": 0,
+                "max_attempts": max_attempts,
+                "test_id": test_id,
+                "file_base": file_base,
+                "issue_num": issue_num,
+                "line_count": 0,
+                "runtime_seconds": 0.01,
+                "expected_quality": quality_label,
+            }
+
+        # Setup distinct directories for this run under eval/run_outputs/{run_name}/
+        env_dir = os.path.join(run_dir, "agent_environments", test_id)
+        logs_dir = os.path.join(run_dir, "logs")
+        json_dir = os.path.join(run_dir, "json")
+        diffs_dir = os.path.join(run_dir, "outputs", "diffs")
+        pr_details_dir = os.path.join(run_dir, "outputs", "pr_details")
+
+        os.makedirs(env_dir, exist_ok=True)
+        os.makedirs(logs_dir, exist_ok=True)
+        os.makedirs(json_dir, exist_ok=True)
+        os.makedirs(diffs_dir, exist_ok=True)
+        os.makedirs(pr_details_dir, exist_ok=True)
+
+        os.environ["LOCAL_TRACE_DIR"] = os.path.join(run_dir, "json")
+        worker_ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
+        log_file_txt = os.path.join(logs_dir, f"issue_{issue_num}_{worker_ts}_logs.log")
+
+        # Set root logger level to WARNING to drop SDK transport chatter (RAW WS MSG)
+        root = logging.getLogger()
+        root.setLevel(logging.WARNING)
+        for h in root.handlers:
+            h.addFilter(RootWarningFilter())
+
+        # Configure dedicated application logger for workflow
+        logger = logging.getLogger("Orchestrator")
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+        for h in logger.handlers[:]:
+            logger.removeHandler(h)
+
+        fh = logging.FileHandler(log_file_txt, mode="w", encoding="utf-8")
+        fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+        logger.addHandler(fh)
+
+        logger.info("Starting local evaluation for test case: %s", test_id)
+
+        # Instantiate config (dynamically resolving repo from github_metadata) & orchestrator
+        config = EvalConfig(workspace_root=env_dir, firestore_doc_dict=doc_dict)
+        config.max_attempts = max_attempts
+        orchestrator = EvalOrchestrator(config)
+
+        test_start_time = time.time()
+        # Execute async pipeline
+        try:
+            result = asyncio.run(orchestrator.run())
+            result["test_id"] = test_id
+            result["file_base"] = file_base
+            result["issue_num"] = issue_num
+            result["attempts"] = result.get("attempts", max_attempts)
+            result["max_attempts"] = result.get("max_attempts", max_attempts)
+            result["line_count"] = result.get("line_count")
+            result["runtime_seconds"] = round(time.time() - test_start_time, 2)
+
+            # Save output artifacts (including generated diff for EXCEEDED_LINE_LIMIT)
+            if result.get("diff"):
+                diff_path = os.path.join(diffs_dir, f"{test_id}_diff.diff")
+                with open(diff_path, "w", encoding="utf-8") as f:
+                    f.write(result["diff"])
+            if result.get("success") and result.get("pr_details"):
+                pr_path = os.path.join(pr_details_dir, f"{test_id}_pr_details.md")
+                with open(pr_path, "w", encoding="utf-8") as f:
+                    f.write(result["pr_details"])
+
+            status_str = "PASSED" if result.get("success") else f"FAILED ({result.get('status', 'FAILED')})"
+            logger.info("Test case %s completed: %s (Turns: %s/%s, Runtime: %.2fs)", test_id, status_str, result.get("attempts", "?"), max_attempts, result["runtime_seconds"])
+
+        except Exception as e:
+            logger.exception("Unhandled exception during test execution: %s", e)
+            result = {
+                "test_id": test_id,
+                "file_base": file_base,
+                "issue_num": issue_num,
+                "success": False,
+                "status": "CRASHED",
+                "error": str(e),
+                "attempts": 0,
+                "max_attempts": max_attempts,
+                "runtime_seconds": round(time.time() - test_start_time, 2),
+            }
+            logger.error("Test case %s completed: FAILED (CRASHED: %s)", test_id, e)
     finally:
         # Cleanup temporary environment folder unless keep_env is specified
-        if not keep_env and os.path.exists(env_dir):
+        if env_dir and not keep_env and os.path.exists(env_dir):
             try:
                 logger.info("[Cleanup] Deleting temporary agent environment: %s", env_dir)
                 def _handle_remove_readonly(func, path, _):
@@ -261,15 +262,18 @@ def run_single_test(args_tuple: tuple) -> dict[str, Any]:
                         pass
                 shutil.rmtree(env_dir, onerror=_handle_remove_readonly)
             except OSError as err:
-                logger.warning("Failed to clean up env dir %s: %s", env_dir, err)
+                if logger:
+                    logger.warning("Failed to clean up env dir %s: %s", env_dir, err)
 
         # Remove and close logging handlers cleanly
-        logger.removeHandler(fh)
-        fh.close()
+        if fh is not None:
+            logger.removeHandler(fh)
+            fh.close()
 
         sys.stdout = old_stdout
         sys.stderr = old_stderr
-        devnull.close()
+        if devnull is not None and not devnull.closed:
+            devnull.close()
 
     return result
 

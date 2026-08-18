@@ -36,7 +36,6 @@ from triage.helpers.github_api import (
     resolve_target_version,
 )
 from triage.helpers.generate_golden_spec import generate_golden_spec
-from triage_orchestrator import process_issue_triage
 
 # Ground truth & triage agent output base directories
 GROUND_TRUTH_DIR = EVAL_DIR / "datasets" / "ground_truth_specs"
@@ -197,8 +196,11 @@ def main() -> None:
             print(f"❌ Error generating golden issue #{issue_num}: {e}")
             return (issue_num, False, str(e))
 
+    failed = []
     if len(pairs) == 1:
-        _worker(pairs[0])
+        res = _worker(pairs[0])
+        if not res[1]:
+            failed.append(res)
     else:
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -211,7 +213,13 @@ def main() -> None:
         with ThreadPoolExecutor(max_workers=min(args.max_workers, len(pairs))) as executor:
             futures = [executor.submit(_worker, pair) for pair in pairs]
             for future in as_completed(futures):
-                future.result()
+                res = future.result()
+                if not res[1]:
+                    failed.append(res)
+
+    if failed:
+        print(f"\n❌ Golden issue generation failed for {len(failed)} issues: {[f[0] for f in failed]}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

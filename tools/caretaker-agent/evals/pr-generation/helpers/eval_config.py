@@ -50,7 +50,7 @@ class EvalConfig(Config):
         """
         super().__init__()
         self.firestore_doc_dict = firestore_doc_dict if isinstance(firestore_doc_dict, dict) else {}
-        os.environ["DISABLE_GCS_LOGGING"] = "true"
+        os.environ.setdefault("DISABLE_GCS_LOGGING", "true")
 
         # Defensively target repository metadata, preventing AttributeError on null/malformed JSON
         raw_meta = self.firestore_doc_dict.get("github_metadata")
